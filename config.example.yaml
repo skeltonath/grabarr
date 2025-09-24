@@ -1,0 +1,60 @@
+server:
+  port: 8080
+  host: "0.0.0.0"
+  shutdown_timeout: "30s"
+
+rclone:
+  remote_name: "seedbox"
+  remote_path: "downloads/completed/"
+  local_path: "/data/media/downloads"
+  config_file: "/config/rclone.conf"
+  bandwidth_limit: "50M"  # Leave headroom for seeding
+  transfer_timeout: "6h"   # Max time for a single transfer
+  additional_args: []      # Extra rclone args if needed
+
+resources:
+  bandwidth:
+    max_usage_percent: 70  # Max % of 1Gbps for downloads
+    check_interval: "30s"
+    seedbox_total_bandwidth: "1000M"
+  disk:
+    cache_drive_path: "/data"
+    cache_drive_min_free: "100GB"
+    array_min_free: "500GB"
+    check_interval: "60s"
+
+jobs:
+  max_concurrent: 2
+  max_retries: 3
+  retry_backoff_base: "5m"  # Base backoff time (exponential)
+  retry_backoff_max: "1h"   # Max backoff time
+  cleanup_completed_after: "7d"  # Clean completed jobs after 7 days
+  cleanup_failed_after: "30d"    # Keep failed jobs longer for troubleshooting
+
+database:
+  path: "/data/grabarr.db"
+  max_connections: 10
+  connection_max_lifetime: "1h"
+  backup_interval: "24h"   # Backup database daily
+
+notifications:
+  pushover:
+    token: "${PUSHOVER_TOKEN}"
+    user: "${PUSHOVER_USER}"
+    enabled: true
+    priority: 0              # -2 to 2, 0 is normal
+    retry_interval: "60s"    # For priority 2 messages
+    expire_time: "3600s"     # For priority 2 messages
+
+logging:
+  level: "info"              # debug, info, warn, error
+  format: "json"             # json or text
+  file: ""                   # Empty = stdout only
+  max_size: "100MB"          # Max log file size
+  max_backups: 5             # Number of old log files to keep
+  max_age: "30d"             # Max age of log files
+
+monitoring:
+  metrics_enabled: true
+  health_check_timeout: "10s"
+  resource_check_interval: "30s"

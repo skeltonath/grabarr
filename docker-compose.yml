@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  grabarr:
+    build: .
+    container_name: grabarr
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Configuration
+      - ./config.yaml:/config/config.yaml:ro
+      - ./rclone.conf:/config/rclone.conf:ro
+
+      # Data persistence
+      - ./data:/data
+
+      # Mount points for Unraid
+      # Adjust these paths based on your Unraid setup
+      - /mnt/user:/data:rw  # Main array access
+      - /mnt/cache:/cache:rw  # Cache drive access
+
+    environment:
+      # Pushover credentials (set these in your environment or .env file)
+      - PUSHOVER_TOKEN=${PUSHOVER_TOKEN}
+      - PUSHOVER_USER=${PUSHOVER_USER}
+
+      # Timezone
+      - TZ=America/New_York  # Adjust to your timezone
+
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          memory: 256M
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
