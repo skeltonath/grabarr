@@ -34,13 +34,14 @@ type ServerConfig struct {
 }
 
 type RcloneConfig struct {
-	RemoteName       string        `yaml:"remote_name"`
-	RemotePath       string        `yaml:"remote_path"`
-	LocalPath        string        `yaml:"local_path"`
-	ConfigFile       string        `yaml:"config_file"`
-	BandwidthLimit   string        `yaml:"bandwidth_limit"`
-	TransferTimeout  time.Duration `yaml:"transfer_timeout"`
-	AdditionalArgs   []string      `yaml:"additional_args"`
+	RemoteName            string        `yaml:"remote_name"`
+	RemotePath            string        `yaml:"remote_path"`
+	LocalPath             string        `yaml:"local_path"`
+	ConfigFile            string        `yaml:"config_file"`
+	BandwidthLimit        string        `yaml:"bandwidth_limit"`
+	TransferTimeout       time.Duration `yaml:"transfer_timeout"`
+	AdditionalArgs        []string      `yaml:"additional_args"`
+	FilenameSanitization  bool          `yaml:"filename_sanitization"`
 }
 
 type ResourcesConfig struct {

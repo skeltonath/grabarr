@@ -17,6 +17,7 @@ import (
 	"grabarr/internal/config"
 	"grabarr/internal/models"
 	"grabarr/internal/queue"
+	"grabarr/internal/sanitizer"
 )
 
 type RCloneExecutor struct {
@@ -36,11 +37,18 @@ func NewRCloneExecutor(cfg *config.Config, monitor queue.ResourceChecker) *RClon
 func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
 	slog.Info("starting rclone execution", "job_id", job.ID, "name", job.Name)
 
-	// Prepare rclone command
-	cmd, err := r.prepareCommand(job)
+	// Prepare rclone command (may create symlink)
+	cmd, symlinkPath, err := r.prepareCommand(job)
 	if err != nil {
 		return fmt.Errorf("failed to prepare rclone command: %w", err)
 	}
+
+	// Ensure symlink cleanup happens regardless of outcome
+	defer func() {
+		if symlinkPath != "" {
+			r.removeSymlink(symlinkPath)
+		}
+	}()
 
 	// Set up progress monitoring
 	stdout, err := cmd.StdoutPipe()
@@ -93,11 +101,34 @@ func (r *RCloneExecutor) CanExecute() bool {
 	return r.monitor.CanScheduleJob()
 }
 
-func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, error) {
+func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, string, error) {
 	rcloneConfig := r.config.GetRClone()
 
-	// Build source and destination paths
-	sourcePath := fmt.Sprintf("%s:%s%s", rcloneConfig.RemoteName, rcloneConfig.RemotePath, job.RemotePath)
+	var symlinkPath string // Track symlink for cleanup
+	actualRemotePath := job.RemotePath
+
+	// Handle filename sanitization if enabled
+	if rcloneConfig.FilenameSanitization && sanitizer.NeedsSanitization(job.RemotePath) {
+		cleanPath, _ := sanitizer.SanitizeForSymlink(job.RemotePath)
+		symlinkPath = cleanPath
+
+		slog.Info("path needs sanitization",
+			"job_id", job.ID,
+			"original", job.RemotePath,
+			"cleaned", cleanPath)
+
+		// Create symlink on remote host
+		originalPath := job.RemotePath
+		if err := r.createSymlink(originalPath, symlinkPath); err != nil {
+			return nil, "", fmt.Errorf("failed to create symlink: %w", err)
+		}
+
+		// Use the clean symlink path for download
+		actualRemotePath = symlinkPath
+	}
+
+	// Build source path using the actual remote path (original or symlink)
+	sourcePath := fmt.Sprintf("%s:%s%s", rcloneConfig.RemoteName, rcloneConfig.RemotePath, actualRemotePath)
 
 	var destPath string
 	if job.LocalPath != "" {
@@ -109,7 +140,7 @@ func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, error) {
 
 	// Ensure destination directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create destination directory: %w", err)
+		return nil, "", fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
 	// Build rclone arguments
@@ -121,6 +152,8 @@ func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, error) {
 		"--progress", // Enable progress output
 		"--stats", "1s", // Update stats every second
 		"--stats-one-line", // One line stats for easier parsing
+		"--create-empty-src-dirs", // Create empty source directories
+		"--transfers", "4", // Use multiple transfers for better performance
 	}
 
 	// Add bandwidth limit if configured
@@ -152,9 +185,10 @@ func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, error) {
 		"source", sourcePath,
 		"dest", destPath,
 		"args", args,
+		"symlink_path", symlinkPath,
 	)
 
-	return cmd, nil
+	return cmd, symlinkPath, nil
 }
 
 func (r *RCloneExecutor) monitorProgress(ctx context.Context, stdout io.ReadCloser, job *models.Job) {
@@ -338,4 +372,72 @@ func (r *RCloneExecutor) parseDurationString(durationStr string) time.Duration {
 // GetProgressChannel returns a channel for receiving progress updates
 func (r *RCloneExecutor) GetProgressChannel() <-chan models.JobProgress {
 	return r.progressChan
+}
+
+// createSymlink creates a symlink on the remote host via SSH
+func (r *RCloneExecutor) createSymlink(originalPath, symlinkPath string) error {
+	// Get SSH credentials from environment (same as rclone config)
+	host := os.Getenv("RCLONE_SEEDBOX_HOST")
+	user := os.Getenv("RCLONE_SEEDBOX_USER")
+	pass := os.Getenv("RCLONE_SEEDBOX_PASS")
+
+	if host == "" || user == "" || pass == "" {
+		return fmt.Errorf("missing SSH credentials for symlink creation")
+	}
+
+	// Create symlink command: ln -s "original path" "symlink path"
+	sshCmd := fmt.Sprintf("ln -s %q %q", originalPath, symlinkPath)
+
+	// Execute via sshpass
+	cmd := exec.Command("sshpass", "-p", pass, "ssh",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		fmt.Sprintf("%s@%s", user, host),
+		sshCmd)
+
+	slog.Debug("creating symlink", "original", originalPath, "symlink", symlinkPath)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create symlink: %w, output: %s", err, output)
+	}
+
+	slog.Info("symlink created successfully", "original", originalPath, "symlink", symlinkPath)
+	return nil
+}
+
+// removeSymlink removes a symlink on the remote host via SSH
+func (r *RCloneExecutor) removeSymlink(symlinkPath string) error {
+	// Get SSH credentials from environment (same as rclone config)
+	host := os.Getenv("RCLONE_SEEDBOX_HOST")
+	user := os.Getenv("RCLONE_SEEDBOX_USER")
+	pass := os.Getenv("RCLONE_SEEDBOX_PASS")
+
+	if host == "" || user == "" || pass == "" {
+		return fmt.Errorf("missing SSH credentials for symlink removal")
+	}
+
+	// Remove symlink command
+	sshCmd := fmt.Sprintf("rm %q", symlinkPath)
+
+	// Execute via sshpass
+	cmd := exec.Command("sshpass", "-p", pass, "ssh",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		fmt.Sprintf("%s@%s", user, host),
+		sshCmd)
+
+	slog.Debug("removing symlink", "path", symlinkPath)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Warn("failed to remove symlink (non-critical)", "path", symlinkPath, "error", err, "output", string(output))
+		// Don't return error - cleanup is best-effort
+	} else {
+		slog.Info("symlink removed successfully", "path", symlinkPath)
+	}
+
+	return nil
 }

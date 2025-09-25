@@ -1,0 +1,9 @@
+# RClone configuration using environment variables
+# This template will be processed to use values from .env file
+
+[seedbox]
+type = sftp
+host = ${RCLONE_SEEDBOX_HOST}
+user = ${RCLONE_SEEDBOX_USER}
+pass = ${RCLONE_SEEDBOX_PASS}
+disable_hashcheck = true

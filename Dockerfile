@@ -2,7 +2,7 @@
 FROM golang:1.21-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
 
 # Set working directory
 WORKDIR /app
@@ -27,16 +27,15 @@ RUN apk --no-cache add \
     ca-certificates \
     tzdata \
     rclone \
+    sshpass \
+    openssh-client \
     curl \
     && rm -rf /var/cache/apk/*
 
-# Create non-root user
-RUN addgroup -g 1000 grabarr && \
-    adduser -D -s /bin/sh -u 1000 -G grabarr grabarr
-
-# Create necessary directories
-RUN mkdir -p /data /config /app && \
-    chown -R grabarr:grabarr /data /config /app
+# Create user for UID 99 (Unraid nobody) and necessary directories
+RUN echo "unraid:x:99:100:unraid:/home/unraid:/bin/sh" >> /etc/passwd && \
+    mkdir -p /data /config /app /home/unraid && \
+    chmod 755 /data /config /app
 
 # Set working directory
 WORKDIR /app
@@ -44,14 +43,14 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/grabarr .
 
-# Copy configuration template
+# Copy configuration template and setup script
 COPY config.example.yaml /config/config.example.yaml
+COPY scripts/setup-rclone.sh /setup-rclone.sh
 
 # Set permissions
-RUN chmod +x grabarr
+RUN chmod +x grabarr /setup-rclone.sh
 
-# Switch to non-root user
-USER grabarr
+# Note: User will be set to 99:100 by docker-compose override
 
 # Expose port
 EXPOSE 8080
@@ -60,5 +59,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
-# Run the application
-CMD ["./grabarr"]
+# Run setup script then the application
+CMD ["/setup-rclone.sh", "./grabarr"]

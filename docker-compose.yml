@@ -7,35 +7,34 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    user: "99:100"  # Use Unraid nobody user
     volumes:
-      # Configuration
+      # Configuration files
       - ./config.yaml:/config/config.yaml:ro
       - ./rclone.conf:/config/rclone.conf:ro
 
-      # Data persistence
+      # Data persistence (local to container directory)
       - ./data:/data
 
-      # Mount points for Unraid
-      # Adjust these paths based on your Unraid setup
-      - /mnt/user:/data:rw  # Main array access
-      - /mnt/cache:/cache:rw  # Cache drive access
+      # Unraid mount points
+      - /mnt/user:/unraid/user:rw        # Main array access
+      - /mnt/cache:/unraid/cache:rw      # Cache drive access
+
+    env_file:
+      - .env  # Load environment variables from .env file
 
     environment:
-      # Pushover credentials (set these in your environment or .env file)
-      - PUSHOVER_TOKEN=${PUSHOVER_TOKEN}
-      - PUSHOVER_USER=${PUSHOVER_USER}
+      # These will be overridden by .env file if present
+      - PUSHOVER_TOKEN=${PUSHOVER_TOKEN:-}
+      - PUSHOVER_USER=${PUSHOVER_USER:-}
+      - TZ=${TZ:-America/New_York}
 
-      # Timezone
-      - TZ=America/New_York  # Adjust to your timezone
+      # RClone credentials
+      - RCLONE_SEEDBOX_HOST=${RCLONE_SEEDBOX_HOST:-}
+      - RCLONE_SEEDBOX_USER=${RCLONE_SEEDBOX_USER:-}
+      - RCLONE_SEEDBOX_PASS=${RCLONE_SEEDBOX_PASS:-}
 
-    # Resource limits (optional)
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 1G
-        reservations:
-          memory: 256M
+    # No resource limits to prevent killing large transfers
 
     # Logging
     logging:
@@ -51,3 +50,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+    networks:
+      - proxynet
+
+networks:
+  proxynet:
+    external: true
