@@ -43,12 +43,16 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/grabarr .
 
+# Copy web UI files
+COPY web/ ./web/
+
 # Copy configuration template and setup script
 COPY config.example.yaml /config/config.example.yaml
 COPY scripts/setup-rclone.sh /setup-rclone.sh
 
-# Set permissions
-RUN chmod +x grabarr /setup-rclone.sh
+# Set permissions for all files and change ownership to user 99
+RUN chmod +x grabarr /setup-rclone.sh && \
+    chown -R 99:100 /app
 
 # Note: User will be set to 99:100 by docker-compose override
 
