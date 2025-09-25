@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -48,6 +50,9 @@ func NewHandlers(jobQueue queue.JobQueue, monitor ResourceMonitor) *Handlers {
 }
 
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
+	// Web UI routes (serve before API to avoid conflicts)
+	h.registerWebRoutes(r)
+
 	api := r.PathPrefix("/api/v1").Subrouter()
 
 	// Job management endpoints
@@ -371,4 +376,56 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// registerWebRoutes sets up static file serving for the web UI
+func (h *Handlers) registerWebRoutes(r *mux.Router) {
+	// Determine web directory path
+	webDir := "web/static"
+	if _, err := os.Stat(webDir); os.IsNotExist(err) {
+		// Try relative to binary location
+		if execPath, err := os.Executable(); err == nil {
+			webDir = filepath.Join(filepath.Dir(execPath), "web", "static")
+		}
+	}
+
+	// Serve static files (CSS, JS, images)
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir(webDir)))
+	r.PathPrefix("/static/").Handler(staticHandler)
+
+	// Serve main dashboard at root
+	r.HandleFunc("/", h.serveDashboard).Methods("GET")
+}
+
+// serveDashboard serves the main dashboard HTML page
+func (h *Handlers) serveDashboard(w http.ResponseWriter, r *http.Request) {
+	webDir := "web/static"
+	if _, err := os.Stat(webDir); os.IsNotExist(err) {
+		// Try relative to binary location
+		if execPath, err := os.Executable(); err == nil {
+			webDir = filepath.Join(filepath.Dir(execPath), "web", "static")
+		}
+	}
+
+	indexPath := filepath.Join(webDir, "index.html")
+	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		// If index.html doesn't exist, show a simple message
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grabarr</title>
+</head>
+<body>
+    <h1>Grabarr Web UI</h1>
+    <p>Web interface is being developed. Use the API at <a href="/api/v1/health">/api/v1/</a> for now.</p>
+</body>
+</html>
+		`))
+		return
+	}
+
+	http.ServeFile(w, r, indexPath)
 }

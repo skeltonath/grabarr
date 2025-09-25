@@ -23,7 +23,7 @@ NC=\033[0m # No Color
 
 .PHONY: help build run dev clean test test-verbose test-coverage test-sanitizer fmt vet lint deps
 .PHONY: docker-build docker-run docker-stop docker-logs docker-shell
-.PHONY: deploy deploy-logs deploy-restart setup-config
+.PHONY: deploy deploy-logs deploy-restart setup-config web-check
 
 # Default target
 all: fmt vet test build
@@ -175,6 +175,26 @@ setup-config: ## Copy example configs to working configs
 	else \
 		echo "$(YELLOW)→ rclone.conf already exists$(NC)"; \
 	fi
+
+web-check: ## Verify web UI files are present
+	@echo "$(GREEN)Checking web UI files...$(NC)"
+	@if [ ! -d web/static ]; then \
+		echo "$(RED)✗ web/static directory not found$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -f web/static/index.html ]; then \
+		echo "$(RED)✗ web/static/index.html not found$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -f web/static/css/style.css ]; then \
+		echo "$(RED)✗ web/static/css/style.css not found$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -f web/static/js/app.js ]; then \
+		echo "$(RED)✗ web/static/js/app.js not found$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✓ All web UI files are present$(NC)"
 
 ## Help
 

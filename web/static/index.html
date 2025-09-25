@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grabarr Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">Grabarr</h1>
+            <div class="header-info">
+                <div class="system-status" id="system-status">
+                    <span class="status-indicator" id="status-indicator"></span>
+                    <span id="status-text">Connecting...</span>
+                </div>
+                <div class="last-updated">
+                    Last updated: <span id="last-updated">-</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <!-- System Overview -->
+            <div class="dashboard-grid">
+                <div class="card overview-card">
+                    <h2>System Overview</h2>
+                    <div class="overview-stats">
+                        <div class="stat">
+                            <div class="stat-value" id="jobs-queued">-</div>
+                            <div class="stat-label">Queued</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="jobs-running">-</div>
+                            <div class="stat-label">Running</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="jobs-completed">-</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="jobs-failed">-</div>
+                            <div class="stat-label">Failed</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="card controls-card">
+                    <h2>Controls</h2>
+                    <div class="controls">
+                        <button class="btn btn-primary" id="refresh-btn">Refresh Now</button>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="auto-refresh" checked>
+                            Auto-refresh
+                        </label>
+                        <select id="status-filter" class="filter-select">
+                            <option value="">All Jobs</option>
+                            <option value="queued">Queued</option>
+                            <option value="running">Running</option>
+                            <option value="completed">Completed</option>
+                            <option value="failed">Failed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Jobs Table -->
+            <div class="card jobs-card">
+                <div class="card-header">
+                    <h2>Jobs</h2>
+                    <div class="search-box">
+                        <input type="text" id="search-input" placeholder="Search jobs..." class="search-input">
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="jobs-table" id="jobs-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Speed</th>
+                                <th>ETA</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jobs-tbody">
+                            <tr class="loading-row">
+                                <td colspan="8">Loading jobs...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Job Detail Modal -->
+    <div class="modal" id="job-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Job Details</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Job details will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-close-btn">Close</button>
+                <button class="btn btn-danger" id="modal-cancel-btn" style="display: none;">Cancel Job</button>
+                <button class="btn btn-danger" id="modal-delete-btn" style="display: none;">Delete Job</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Processing...</div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
