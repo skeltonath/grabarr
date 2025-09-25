@@ -11,6 +11,9 @@ services:
       - ./config.yaml:/config/config.yaml:ro
       - ./rclone.conf:/config/rclone.conf:ro
 
+      # Web UI files (temporary volume mount solution)
+      - ./web/static:/app/web/static:ro
+
       # Data persistence (local to container directory)
       - ./data:/data
 

@@ -43,8 +43,14 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/grabarr .
 
-# Copy web UI files
-COPY web/ ./web/
+# Create web directory structure for volume mount fallback
+RUN mkdir -p ./web/static/css ./web/static/js
+
+# Try to copy web files (will fail silently if not in build context)
+# These files will be provided via volume mount if build context fails
+COPY web/static/index.html ./web/static/index.html || true
+COPY web/static/css/style.css ./web/static/css/style.css || true
+COPY web/static/js/app.js ./web/static/js/app.js || true
 
 # Copy configuration template and setup script
 COPY config.example.yaml /config/config.example.yaml
