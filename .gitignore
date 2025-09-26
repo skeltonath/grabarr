@@ -48,8 +48,9 @@ Thumbs.db
 
 # Docker
 .dockerignore
+*.tar.gz
 
-# Configuration files with secrets (use config.example.yaml instead)
+# Configuration files with secrets
 config.yaml
 rclone.conf
 
