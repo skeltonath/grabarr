@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"grabarr/internal/config"
 	"grabarr/internal/models"
 	"grabarr/internal/queue"
 
@@ -19,6 +20,7 @@ import (
 type Handlers struct {
 	queue    queue.JobQueue
 	monitor  ResourceMonitor
+	config   *config.Config
 }
 
 type ResourceMonitor interface {
@@ -43,10 +45,11 @@ type CreateJobRequest struct {
 	Metadata      models.JobMetadata `json:"metadata,omitempty"`
 }
 
-func NewHandlers(jobQueue queue.JobQueue, monitor ResourceMonitor) *Handlers {
+func NewHandlers(jobQueue queue.JobQueue, monitor ResourceMonitor, cfg *config.Config) *Handlers {
 	return &Handlers{
 		queue:   jobQueue,
 		monitor: monitor,
+		config:  cfg,
 	}
 }
 
@@ -92,11 +95,29 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check category filtering
+	downloadsConfig := h.config.GetDownloads()
+	if len(downloadsConfig.AllowedCategories) > 0 {
+		category := req.Metadata.Category
+		if category == "" || !contains(downloadsConfig.AllowedCategories, category) {
+			h.writeError(w, http.StatusBadRequest,
+				fmt.Sprintf("category '%s' not allowed. Allowed categories: %v",
+					category, downloadsConfig.AllowedCategories), nil)
+			return
+		}
+	}
+
+	// Determine local path - use configured path if not provided
+	localPath := req.LocalPath
+	if localPath == "" {
+		localPath = downloadsConfig.LocalPath
+	}
+
 	// Create job model
 	job := &models.Job{
 		Name:          req.Name,
 		RemotePath:    req.RemotePath,
-		LocalPath:     req.LocalPath,
+		LocalPath:     localPath,
 		Priority:      req.Priority,
 		MaxRetries:    req.MaxRetries,
 		EstimatedSize: req.EstimatedSize,
@@ -451,4 +472,14 @@ func (h *Handlers) serveDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.ServeFile(w, r, indexPath)
+}
+
+// Helper function to check if a slice contains a string
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }

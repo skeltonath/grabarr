@@ -138,6 +138,19 @@ func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, string, err
 		destPath = filepath.Join(rcloneConfig.LocalPath, job.Name)
 	}
 
+	// Check if remote path is a directory and preserve structure
+	if r.isRemoteDirectory(actualRemotePath) {
+		dirName := filepath.Base(actualRemotePath)
+		// If destPath doesn't already end with the directory name, add it
+		if filepath.Base(destPath) != dirName {
+			destPath = filepath.Join(destPath, dirName)
+		}
+		slog.Info("preserving directory structure",
+			"job_id", job.ID,
+			"remote_directory", actualRemotePath,
+			"local_directory", destPath)
+	}
+
 	// Ensure destination directory exists
 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 		return nil, "", fmt.Errorf("failed to create destination directory: %w", err)
@@ -195,9 +208,10 @@ func (r *RCloneExecutor) monitorProgress(ctx context.Context, stdout io.ReadClos
 	scanner := bufio.NewScanner(stdout)
 
 	// Regular expressions for parsing rclone output
-	transferredRe := regexp.MustCompile(`Transferred:\s+([0-9.]+\s*[KMGT]?B)\s*/\s*([0-9.]+\s*[KMGT]?B),\s*([0-9]+)%`)
-	speedRe := regexp.MustCompile(`([0-9.]+\s*[KMGT]?B/s)`)
-	etaRe := regexp.MustCompile(`ETA\s+([0-9hms]+)`)
+	// Match format: "46 MiB / 5.250 GiB, 1%, 6.346 MiB/s, ETA 13m59s"
+	transferredRe := regexp.MustCompile(`([0-9.]+\s*[KMGT]?i?B)\s*/\s*([0-9.]+\s*[KMGT]?i?B),\s*([0-9]+)%`)
+	speedRe := regexp.MustCompile(`([0-9.]+\s*[KMGT]?i?B/s)`)
+	etaRe := regexp.MustCompile(`ETA\s+([0-9hms-]+)`)
 	filesRe := regexp.MustCompile(`Transferred:\s+([0-9]+)\s*/\s*([0-9]+),\s*([0-9]+)%`)
 
 	for scanner.Scan() {
@@ -208,7 +222,7 @@ func (r *RCloneExecutor) monitorProgress(ctx context.Context, stdout io.ReadClos
 		}
 
 		line := scanner.Text()
-		slog.Debug("rclone output", "job_id", job.ID, "line", line)
+		slog.Info("rclone output", "job_id", job.ID, "line", line)
 
 		// Parse progress information
 		progress := r.parseProgressLine(line, transferredRe, speedRe, etaRe, filesRe)
@@ -313,8 +327,8 @@ func (r *RCloneExecutor) parseSizeString(sizeStr string) int64 {
 	// Extract number and unit
 	parts := strings.Fields(sizeStr)
 	if len(parts) != 2 {
-		// Try parsing as single string like "1.5GB"
-		re := regexp.MustCompile(`([0-9.]+)\s*([KMGT]?B)`)
+		// Try parsing as single string like "1.5GB" or "5.250GiB"
+		re := regexp.MustCompile(`([0-9.]+)\s*([KMGT]?i?B)`)
 		if matches := re.FindStringSubmatch(sizeStr); len(matches) == 3 {
 			parts = []string{matches[1], matches[2]}
 		} else {
@@ -331,13 +345,13 @@ func (r *RCloneExecutor) parseSizeString(sizeStr string) int64 {
 	switch unit {
 	case "B":
 		return int64(value)
-	case "KB":
+	case "KB", "KIB":
 		return int64(value * 1024)
-	case "MB":
+	case "MB", "MIB":
 		return int64(value * 1024 * 1024)
-	case "GB":
+	case "GB", "GIB":
 		return int64(value * 1024 * 1024 * 1024)
-	case "TB":
+	case "TB", "TIB":
 		return int64(value * 1024 * 1024 * 1024 * 1024)
 	default:
 		return int64(value) // Assume bytes
@@ -440,4 +454,25 @@ func (r *RCloneExecutor) removeSymlink(symlinkPath string) error {
 	}
 
 	return nil
+}
+
+// isRemoteDirectory checks if the remote path is a directory using rclone lsf --dirs-only
+func (r *RCloneExecutor) isRemoteDirectory(remotePath string) bool {
+	rcloneConfig := r.config.GetRClone()
+
+	// Build full remote path
+	fullRemotePath := fmt.Sprintf("%s:%s%s", rcloneConfig.RemoteName, rcloneConfig.RemotePath, remotePath)
+
+	// Use rclone lsf --dirs-only to check if path is a directory
+	cmd := exec.Command("rclone", "lsf", "--dirs-only", fullRemotePath, "--config", rcloneConfig.ConfigFile)
+
+	// If the command succeeds and returns output, it's a directory
+	output, err := cmd.Output()
+	if err != nil {
+		// If lsf fails, assume it's a file
+		return false
+	}
+
+	// If there's any output, the remote path contains directories (meaning it is a directory)
+	return len(strings.TrimSpace(string(output))) > 0
 }

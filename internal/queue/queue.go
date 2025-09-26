@@ -215,8 +215,9 @@ func (q *queue) GetSummary() (*models.JobSummary, error) {
 }
 
 func (q *queue) loadExistingJobs() error {
+	// Load jobs that need to be recovered: queued, pending, and running
 	jobs, err := q.repo.GetJobs(models.JobFilter{
-		Status: []models.JobStatus{models.JobStatusQueued, models.JobStatusPending},
+		Status: []models.JobStatus{models.JobStatusQueued, models.JobStatusPending, models.JobStatusRunning},
 		SortBy: "priority",
 		SortOrder: "DESC",
 	})
@@ -225,13 +226,15 @@ func (q *queue) loadExistingJobs() error {
 	}
 
 	for _, job := range jobs {
-		// Reset pending jobs to queued
-		if job.Status == models.JobStatusPending {
+		// Reset pending and running jobs to queued for recovery
+		if job.Status == models.JobStatusPending || job.Status == models.JobStatusRunning {
+			oldStatus := job.Status
 			job.Status = models.JobStatusQueued
 			if err := q.repo.UpdateJob(job); err != nil {
-				slog.Error("failed to reset pending job to queued", "job_id", job.ID, "error", err)
+				slog.Error("failed to reset job to queued", "job_id", job.ID, "old_status", oldStatus, "error", err)
 				continue
 			}
+			slog.Info("recovered interrupted job", "job_id", job.ID, "name", job.Name, "previous_status", oldStatus)
 		}
 
 		select {

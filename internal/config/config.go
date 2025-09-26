@@ -15,6 +15,7 @@ import (
 
 type Config struct {
 	Server        ServerConfig        `yaml:"server"`
+	Downloads     DownloadsConfig     `yaml:"downloads"`
 	Rclone        RcloneConfig        `yaml:"rclone"`
 	Resources     ResourcesConfig     `yaml:"resources"`
 	Jobs          JobsConfig          `yaml:"jobs"`
@@ -31,6 +32,11 @@ type ServerConfig struct {
 	Port            int           `yaml:"port"`
 	Host            string        `yaml:"host"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+}
+
+type DownloadsConfig struct {
+	LocalPath         string   `yaml:"local_path"`
+	AllowedCategories []string `yaml:"allowed_categories"`
 }
 
 type RcloneConfig struct {
@@ -312,6 +318,13 @@ func (c *Config) GetServer() ServerConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Server
+}
+
+// GetDownloads returns a copy of the downloads configuration
+func (c *Config) GetDownloads() DownloadsConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Downloads
 }
 
 // GetResources returns a copy of the resources configuration
