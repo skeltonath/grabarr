@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -17,7 +16,6 @@ import (
 	"grabarr/internal/config"
 	"grabarr/internal/models"
 	"grabarr/internal/queue"
-	"grabarr/internal/sanitizer"
 )
 
 type RCloneExecutor struct {
@@ -37,19 +35,16 @@ func NewRCloneExecutor(cfg *config.Config, monitor queue.ResourceChecker) *RClon
 func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
 	slog.Info("starting rclone execution", "job_id", job.ID, "name", job.Name)
 
-	// Prepare rclone command (may create symlink)
-	cmd, symlinkPath, err := r.prepareCommand(job)
+	// Prepare rclone command
+	cmd, err := r.prepareCommand(job)
 	if err != nil {
 		return fmt.Errorf("failed to prepare rclone command: %w", err)
 	}
 
-	// Ensure symlink cleanup happens regardless of outcome
-	defer func() {
-		if symlinkPath != "" {
-			r.removeSymlink(symlinkPath)
-		}
-	}()
+	return r.executeCommand(ctx, cmd, job)
+}
 
+func (r *RCloneExecutor) executeCommand(ctx context.Context, cmd *exec.Cmd, job *models.Job) error {
 	// Set up progress monitoring
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -81,92 +76,52 @@ func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
 
 	select {
 	case <-ctx.Done():
-		slog.Info("rclone execution cancelled", "job_id", job.ID)
-		// Kill the process
-		if cmd.Process != nil {
-			cmd.Process.Kill()
-		}
-		return fmt.Errorf("execution cancelled")
+		cmd.Process.Kill()
+		return ctx.Err()
 	case err := <-done:
 		if err != nil {
 			return fmt.Errorf("rclone execution failed: %w", err)
 		}
+		return nil
 	}
-
-	slog.Info("rclone execution completed", "job_id", job.ID)
-	return nil
 }
 
-func (r *RCloneExecutor) CanExecute() bool {
-	return r.monitor.CanScheduleJob()
-}
-
-func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, string, error) {
+func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, error) {
 	rcloneConfig := r.config.GetRClone()
 
-	var symlinkPath string // Track symlink for cleanup
-	actualRemotePath := job.RemotePath
+	// Build source path
+	sourcePath := fmt.Sprintf("%s:%s", rcloneConfig.RemoteName, job.RemotePath)
 
-	// Handle filename sanitization if enabled
-	if rcloneConfig.FilenameSanitization && sanitizer.NeedsSanitization(job.RemotePath) {
-		cleanPath, _ := sanitizer.SanitizeForSymlink(job.RemotePath)
-		symlinkPath = cleanPath
+	// Use the local path from the job
+	basePath := job.LocalPath
 
-		slog.Info("path needs sanitization",
-			"job_id", job.ID,
-			"original", job.RemotePath,
-			"cleaned", cleanPath)
+	// Build destination path
+	destPath := filepath.Join(basePath, filepath.Base(job.RemotePath))
 
-		// Create symlink on remote host
-		originalPath := job.RemotePath
-		if err := r.createSymlink(originalPath, symlinkPath); err != nil {
-			return nil, "", fmt.Errorf("failed to create symlink: %w", err)
-		}
-
-		// Use the clean symlink path for download
-		actualRemotePath = symlinkPath
-	}
-
-	// Build source path using the actual remote path (original or symlink)
-	sourcePath := fmt.Sprintf("%s:%s%s", rcloneConfig.RemoteName, rcloneConfig.RemotePath, actualRemotePath)
-
-	var destPath string
-	if job.LocalPath != "" {
-		destPath = job.LocalPath
+	// Determine command based on whether source is directory or file
+	var command string
+	if r.isRemoteDirectory(job.RemotePath) {
+		command = "copy"
 	} else {
-		// Use configured downloads local path + job name
-		destPath = filepath.Join(r.config.GetDownloads().LocalPath, job.Name)
+		command = "copyto"
 	}
 
-	// Check if remote path is a directory and preserve structure
-	if r.isRemoteDirectory(actualRemotePath) {
-		dirName := filepath.Base(actualRemotePath)
-		// If destPath doesn't already end with the directory name, add it
-		if filepath.Base(destPath) != dirName {
-			destPath = filepath.Join(destPath, dirName)
-		}
-		slog.Info("preserving directory structure",
-			"job_id", job.ID,
-			"remote_directory", actualRemotePath,
-			"local_directory", destPath)
-	}
-
-	// Ensure destination directory exists
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-		return nil, "", fmt.Errorf("failed to create destination directory: %w", err)
-	}
-
-	// Build rclone arguments
+	// Build base rclone arguments
 	args := []string{
-		"copy", // Use copy instead of sync for individual files/directories
+		command,
 		sourcePath,
 		destPath,
 		"--config", rcloneConfig.ConfigFile,
-		"--progress", // Enable progress output
-		"--stats", "1s", // Update stats every second
-		"--stats-one-line", // One line stats for easier parsing
-		"--create-empty-src-dirs", // Create empty source directories
-		"--transfers", "4", // Use multiple transfers for better performance
+		"--progress",
+		"--stats", "1s",
+		"--stats-one-line",
+		"--transfers", "4",
+		"--ignore-existing",
+	}
+
+	// Add directory-specific flags
+	if command == "copy" {
+		args = append(args, "--create-empty-src-dirs")
 	}
 
 	// Add bandwidth limit if configured
@@ -189,19 +144,16 @@ func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, string, err
 		args = append(args, rcloneConfig.AdditionalArgs...)
 	}
 
-	// Create command
 	cmd := exec.Command("rclone", args...)
-	cmd.Env = os.Environ()
 
 	slog.Info("prepared rclone command",
 		"job_id", job.ID,
+		"command", command,
 		"source", sourcePath,
 		"dest", destPath,
-		"args", args,
-		"symlink_path", symlinkPath,
-	)
+		"args", args)
 
-	return cmd, symlinkPath, nil
+	return cmd, nil
 }
 
 func (r *RCloneExecutor) monitorProgress(ctx context.Context, stdout io.ReadCloser, job *models.Job) {
@@ -256,15 +208,7 @@ func (r *RCloneExecutor) monitorErrors(ctx context.Context, stderr io.ReadCloser
 		}
 
 		line := scanner.Text()
-
-		// Log errors and warnings
-		if strings.Contains(line, "ERROR") {
-			slog.Error("rclone error", "job_id", job.ID, "error", line)
-		} else if strings.Contains(line, "WARN") {
-			slog.Warn("rclone warning", "job_id", job.ID, "warning", line)
-		} else {
-			slog.Debug("rclone stderr", "job_id", job.ID, "line", line)
-		}
+		slog.Info("rclone output", "job_id", job.ID, "line", line)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -274,205 +218,105 @@ func (r *RCloneExecutor) monitorErrors(ctx context.Context, stderr io.ReadCloser
 
 func (r *RCloneExecutor) parseProgressLine(line string, transferredRe, speedRe, etaRe, filesRe *regexp.Regexp) *models.JobProgress {
 	progress := &models.JobProgress{}
-	found := false
+	hasProgress := false
 
 	// Parse transferred bytes and percentage
-	if matches := transferredRe.FindStringSubmatch(line); matches != nil {
-		transferred := r.parseSizeString(matches[1])
-		total := r.parseSizeString(matches[2])
-		percentage, _ := strconv.ParseFloat(matches[3], 64)
+	if matches := transferredRe.FindStringSubmatch(line); len(matches) >= 4 {
+		transferred := r.parseBytes(matches[1])
+		total := r.parseBytes(matches[2])
+		percentage, _ := strconv.Atoi(matches[3])
 
 		progress.TransferredBytes = transferred
 		progress.TotalBytes = total
-		progress.Percentage = percentage
-		found = true
+		progress.Percentage = float64(percentage)
+		hasProgress = true
 	}
 
 	// Parse transfer speed
-	if matches := speedRe.FindStringSubmatch(line); matches != nil {
-		speed := r.parseSpeedString(matches[1])
+	if matches := speedRe.FindStringSubmatch(line); len(matches) >= 2 {
+		speed := r.parseBytes(matches[1])
 		progress.TransferSpeed = speed
-		found = true
-	}
-
-	// Parse ETA
-	if matches := etaRe.FindStringSubmatch(line); matches != nil {
-		if eta := r.parseDurationString(matches[1]); eta > 0 {
-			duration := models.Duration{Duration: eta}
-			progress.ETA = &duration
-			found = true
-		}
+		hasProgress = true
 	}
 
 	// Parse file counts
-	if matches := filesRe.FindStringSubmatch(line); matches != nil {
+	if matches := filesRe.FindStringSubmatch(line); len(matches) >= 4 {
 		completed, _ := strconv.Atoi(matches[1])
 		total, _ := strconv.Atoi(matches[2])
 
 		progress.FilesCompleted = completed
 		progress.FilesTotal = total
-		found = true
+		hasProgress = true
 	}
 
-	if found {
+	if hasProgress {
 		return progress
 	}
-
 	return nil
 }
 
-func (r *RCloneExecutor) parseSizeString(sizeStr string) int64 {
-	sizeStr = strings.TrimSpace(sizeStr)
+func (r *RCloneExecutor) parseBytes(s string) int64 {
+	s = strings.TrimSpace(s)
 
-	// Extract number and unit
-	parts := strings.Fields(sizeStr)
-	if len(parts) != 2 {
-		// Try parsing as single string like "1.5GB" or "5.250GiB"
-		re := regexp.MustCompile(`([0-9.]+)\s*([KMGT]?i?B)`)
-		if matches := re.FindStringSubmatch(sizeStr); len(matches) == 3 {
-			parts = []string{matches[1], matches[2]}
-		} else {
-			return 0
-		}
+	// Handle different units
+	multiplier := int64(1)
+	if strings.HasSuffix(s, "KiB") || strings.HasSuffix(s, "KB") {
+		multiplier = 1024
+		s = strings.TrimSuffix(strings.TrimSuffix(s, "KiB"), "KB")
+	} else if strings.HasSuffix(s, "MiB") || strings.HasSuffix(s, "MB") {
+		multiplier = 1024 * 1024
+		s = strings.TrimSuffix(strings.TrimSuffix(s, "MiB"), "MB")
+	} else if strings.HasSuffix(s, "GiB") || strings.HasSuffix(s, "GB") {
+		multiplier = 1024 * 1024 * 1024
+		s = strings.TrimSuffix(strings.TrimSuffix(s, "GiB"), "GB")
+	} else if strings.HasSuffix(s, "TiB") || strings.HasSuffix(s, "TB") {
+		multiplier = 1024 * 1024 * 1024 * 1024
+		s = strings.TrimSuffix(strings.TrimSuffix(s, "TiB"), "TB")
+	} else if strings.HasSuffix(s, "B") {
+		s = strings.TrimSuffix(s, "B")
 	}
 
-	value, err := strconv.ParseFloat(parts[0], 64)
+	value, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return 0
 	}
 
-	unit := strings.ToUpper(parts[1])
-	switch unit {
-	case "B":
-		return int64(value)
-	case "KB", "KIB":
-		return int64(value * 1024)
-	case "MB", "MIB":
-		return int64(value * 1024 * 1024)
-	case "GB", "GIB":
-		return int64(value * 1024 * 1024 * 1024)
-	case "TB", "TIB":
-		return int64(value * 1024 * 1024 * 1024 * 1024)
-	default:
-		return int64(value) // Assume bytes
-	}
+	return int64(value * float64(multiplier))
 }
 
-func (r *RCloneExecutor) parseSpeedString(speedStr string) int64 {
-	// Remove "/s" suffix and parse as size
-	speedStr = strings.Replace(speedStr, "/s", "", 1)
-	return r.parseSizeString(speedStr)
-}
-
-func (r *RCloneExecutor) parseDurationString(durationStr string) time.Duration {
-	// Simple duration parser for formats like "1h23m45s", "23m45s", "45s"
-	durationStr = strings.TrimSpace(durationStr)
-
-	// Add zero values for missing units to make it parseable by time.ParseDuration
-	if !strings.Contains(durationStr, "h") && !strings.Contains(durationStr, "m") && !strings.Contains(durationStr, "s") {
-		// Assume seconds if no unit
-		durationStr += "s"
-	}
-
-	duration, err := time.ParseDuration(durationStr)
-	if err != nil {
-		slog.Debug("failed to parse duration", "duration", durationStr, "error", err)
-		return 0
-	}
-
-	return duration
-}
-
-// GetProgressChannel returns a channel for receiving progress updates
 func (r *RCloneExecutor) GetProgressChannel() <-chan models.JobProgress {
 	return r.progressChan
 }
 
-// createSymlink creates a symlink on the remote host via SSH
-func (r *RCloneExecutor) createSymlink(originalPath, symlinkPath string) error {
-	// Get SSH credentials from environment
-	host := os.Getenv("SEEDBOX_HOST")
-	user := os.Getenv("SEEDBOX_USER")
-	pass := os.Getenv("SEEDBOX_PASS")
-
-	if host == "" || user == "" || pass == "" {
-		return fmt.Errorf("missing SSH credentials for symlink creation")
-	}
-
-	// Create symlink command: ln -s "original path" "symlink path"
-	sshCmd := fmt.Sprintf("ln -s %q %q", originalPath, symlinkPath)
-
-	// Execute via sshpass
-	cmd := exec.Command("sshpass", "-p", pass, "ssh",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "LogLevel=ERROR",
-		fmt.Sprintf("%s@%s", user, host),
-		sshCmd)
-
-	slog.Debug("creating symlink", "original", originalPath, "symlink", symlinkPath)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to create symlink: %w, output: %s", err, output)
-	}
-
-	slog.Info("symlink created successfully", "original", originalPath, "symlink", symlinkPath)
-	return nil
+func (r *RCloneExecutor) CanExecute() bool {
+	// Check if we have available resources
+	return r.monitor.CanScheduleJob()
 }
 
-// removeSymlink removes a symlink on the remote host via SSH
-func (r *RCloneExecutor) removeSymlink(symlinkPath string) error {
-	// Get SSH credentials from environment
-	host := os.Getenv("SEEDBOX_HOST")
-	user := os.Getenv("SEEDBOX_USER")
-	pass := os.Getenv("SEEDBOX_PASS")
-
-	if host == "" || user == "" || pass == "" {
-		return fmt.Errorf("missing SSH credentials for symlink removal")
-	}
-
-	// Remove symlink command
-	sshCmd := fmt.Sprintf("rm %q", symlinkPath)
-
-	// Execute via sshpass
-	cmd := exec.Command("sshpass", "-p", pass, "ssh",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "LogLevel=ERROR",
-		fmt.Sprintf("%s@%s", user, host),
-		sshCmd)
-
-	slog.Debug("removing symlink", "path", symlinkPath)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		slog.Warn("failed to remove symlink (non-critical)", "path", symlinkPath, "error", err, "output", string(output))
-		// Don't return error - cleanup is best-effort
-	} else {
-		slog.Info("symlink removed successfully", "path", symlinkPath)
-	}
-
-	return nil
-}
-
-// isRemoteDirectory checks if the remote path is a directory using rclone lsf --dirs-only
+// isRemoteDirectory checks if the remote path is a directory using rclone lsf
 func (r *RCloneExecutor) isRemoteDirectory(remotePath string) bool {
 	rcloneConfig := r.config.GetRClone()
 
 	// Build full remote path
-	fullRemotePath := fmt.Sprintf("%s:%s%s", rcloneConfig.RemoteName, rcloneConfig.RemotePath, remotePath)
+	fullRemotePath := fmt.Sprintf("%s:%s", rcloneConfig.RemoteName, remotePath)
 
-	// Use rclone lsf --dirs-only to check if path is a directory
-	cmd := exec.Command("rclone", "lsf", "--dirs-only", fullRemotePath, "--config", rcloneConfig.ConfigFile)
+	slog.Info("checking if remote path is directory",
+		"remote_path", remotePath,
+		"full_remote_path", fullRemotePath)
 
-	// If the command succeeds and returns output, it's a directory
-	output, err := cmd.Output()
-	if err != nil {
-		// If lsf fails, assume it's a file
-		return false
-	}
+	// Use rclone lsf with --dirs-only to check if path can be listed as a directory
+	// This is more efficient and reliable than listing all contents
+	cmd := exec.Command("rclone", "lsf", "--dirs-only", "--max-depth", "0",
+		fullRemotePath, "--config", rcloneConfig.ConfigFile)
 
-	// If there's any output, the remote path contains directories (meaning it is a directory)
-	return len(strings.TrimSpace(string(output))) > 0
+	// If the command succeeds, the path is a directory
+	err := cmd.Run()
+	isDirectory := err == nil
+
+	slog.Info("directory check result",
+		"full_remote_path", fullRemotePath,
+		"is_directory", isDirectory,
+		"method", "lsf --dirs-only --max-depth 0")
+
+	return isDirectory
 }
