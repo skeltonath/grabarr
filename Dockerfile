@@ -16,7 +16,7 @@ RUN go mod download && \
     CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o grabarr ./cmd/grabarr
 
 # Set permissions
-RUN chmod +x grabarr scripts/setup-rclone.sh && \
+RUN chmod +x grabarr && \
     chown -R 99:100 /app /config
 
 # Expose port
@@ -27,4 +27,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
 # Run the application
-CMD ["./scripts/setup-rclone.sh", "./grabarr"]
+CMD ["./grabarr"]

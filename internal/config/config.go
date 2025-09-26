@@ -42,7 +42,6 @@ type DownloadsConfig struct {
 type RcloneConfig struct {
 	RemoteName            string        `yaml:"remote_name"`
 	RemotePath            string        `yaml:"remote_path"`
-	LocalPath             string        `yaml:"local_path"`
 	ConfigFile            string        `yaml:"config_file"`
 	BandwidthLimit        string        `yaml:"bandwidth_limit"`
 	TransferTimeout       time.Duration `yaml:"transfer_timeout"`
@@ -56,9 +55,8 @@ type ResourcesConfig struct {
 }
 
 type BandwidthConfig struct {
-	MaxUsagePercent      int           `yaml:"max_usage_percent"`
-	CheckInterval        time.Duration `yaml:"check_interval"`
-	SeedboxTotalBandwidth string       `yaml:"seedbox_total_bandwidth"`
+	MaxUsagePercent int           `yaml:"max_usage_percent"`
+	CheckInterval   time.Duration `yaml:"check_interval"`
 }
 
 type DiskConfig struct {
@@ -78,10 +76,7 @@ type JobsConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path                  string        `yaml:"path"`
-	MaxConnections        int           `yaml:"max_connections"`
-	ConnectionMaxLifetime time.Duration `yaml:"connection_max_lifetime"`
-	BackupInterval        time.Duration `yaml:"backup_interval"`
+	Path string `yaml:"path"`
 }
 
 type NotificationsConfig struct {
@@ -98,18 +93,13 @@ type PushoverConfig struct {
 }
 
 type LoggingConfig struct {
-	Level       string `yaml:"level"`
-	Format      string `yaml:"format"`
-	File        string `yaml:"file"`
-	MaxSize     string `yaml:"max_size"`
-	MaxBackups  int    `yaml:"max_backups"`
-	MaxAge      string `yaml:"max_age"`
+	Level  string `yaml:"level"`
+	Format string `yaml:"format"`
+	File   string `yaml:"file"`
 }
 
 type MonitoringConfig struct {
-	MetricsEnabled         bool          `yaml:"metrics_enabled"`
-	HealthCheckTimeout     time.Duration `yaml:"health_check_timeout"`
-	ResourceCheckInterval  time.Duration `yaml:"resource_check_interval"`
+	ResourceCheckInterval time.Duration `yaml:"resource_check_interval"`
 }
 
 var (
@@ -191,7 +181,6 @@ func (c *Config) validate() error {
 
 func (c *Config) ensureDirectories() error {
 	dirs := []string{
-		c.Rclone.LocalPath,
 		filepath.Dir(c.Database.Path),
 	}
 

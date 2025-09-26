@@ -1,18 +1,15 @@
 services:
   grabarr:
-    build: .
+    image: grabarr:latest
     container_name: grabarr
     restart: unless-stopped
     ports:
       - "8080:8080"
     user: "99:100"  # Use Unraid nobody user
     volumes:
-      # Configuration files
-      - ./config.yaml:/config/config.yaml:ro
-      - ./rclone.conf:/config/rclone.conf:ro
-
-      # Data persistence (local to container directory)
-      - ./data:/data
+      # Configuration and data persistence
+      - /mnt/user/appdata/grabarr:/config
+      - /mnt/user/appdata/grabarr/data:/data
 
       # Unraid mount points
       - /mnt/user:/unraid/user:rw        # Main array access
@@ -20,19 +17,6 @@ services:
 
     env_file:
       - .env  # Load environment variables from .env file
-
-    environment:
-      # These will be overridden by .env file if present
-      - PUSHOVER_TOKEN=${PUSHOVER_TOKEN:-}
-      - PUSHOVER_USER=${PUSHOVER_USER:-}
-      - TZ=${TZ:-America/New_York}
-
-      # RClone credentials
-      - RCLONE_SEEDBOX_HOST=${RCLONE_SEEDBOX_HOST:-}
-      - RCLONE_SEEDBOX_USER=${RCLONE_SEEDBOX_USER:-}
-      - RCLONE_SEEDBOX_PASS=${RCLONE_SEEDBOX_PASS:-}
-
-    # No resource limits to prevent killing large transfers
 
     # Logging
     logging:

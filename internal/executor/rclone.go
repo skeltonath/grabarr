@@ -134,8 +134,8 @@ func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, string, err
 	if job.LocalPath != "" {
 		destPath = job.LocalPath
 	} else {
-		// Use configured local path + job name
-		destPath = filepath.Join(rcloneConfig.LocalPath, job.Name)
+		// Use configured downloads local path + job name
+		destPath = filepath.Join(r.config.GetDownloads().LocalPath, job.Name)
 	}
 
 	// Check if remote path is a directory and preserve structure
@@ -390,10 +390,10 @@ func (r *RCloneExecutor) GetProgressChannel() <-chan models.JobProgress {
 
 // createSymlink creates a symlink on the remote host via SSH
 func (r *RCloneExecutor) createSymlink(originalPath, symlinkPath string) error {
-	// Get SSH credentials from environment (same as rclone config)
-	host := os.Getenv("RCLONE_SEEDBOX_HOST")
-	user := os.Getenv("RCLONE_SEEDBOX_USER")
-	pass := os.Getenv("RCLONE_SEEDBOX_PASS")
+	// Get SSH credentials from environment
+	host := os.Getenv("SEEDBOX_HOST")
+	user := os.Getenv("SEEDBOX_USER")
+	pass := os.Getenv("SEEDBOX_PASS")
 
 	if host == "" || user == "" || pass == "" {
 		return fmt.Errorf("missing SSH credentials for symlink creation")
@@ -423,10 +423,10 @@ func (r *RCloneExecutor) createSymlink(originalPath, symlinkPath string) error {
 
 // removeSymlink removes a symlink on the remote host via SSH
 func (r *RCloneExecutor) removeSymlink(symlinkPath string) error {
-	// Get SSH credentials from environment (same as rclone config)
-	host := os.Getenv("RCLONE_SEEDBOX_HOST")
-	user := os.Getenv("RCLONE_SEEDBOX_USER")
-	pass := os.Getenv("RCLONE_SEEDBOX_PASS")
+	// Get SSH credentials from environment
+	host := os.Getenv("SEEDBOX_HOST")
+	user := os.Getenv("SEEDBOX_USER")
+	pass := os.Getenv("SEEDBOX_PASS")
 
 	if host == "" || user == "" || pass == "" {
 		return fmt.Errorf("missing SSH credentials for symlink removal")

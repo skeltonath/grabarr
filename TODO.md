@@ -29,6 +29,7 @@
 - [ ] Add unit tests for core functionality
 - [ ] Optimize database queries and add proper indexing
 - [ ] Add input validation for all API endpoints
+- [ ] Consider better approach for cache drive monitoring instead of mounting entire /mnt/cache into container
 
 ## Documentation
 - [ ] Create comprehensive API documentation
