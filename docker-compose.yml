@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+      - "5572:5572"
     user: "99:100"  # Use Unraid nobody user
     volumes:
       # Configuration and data persistence

@@ -44,7 +44,7 @@ type JobProgress struct {
 	TransferredBytes  int64     `json:"transferred_bytes"`
 	TotalBytes        int64     `json:"total_bytes"`
 	TransferSpeed     int64     `json:"transfer_speed"`
-	ETA               *Duration `json:"eta,omitempty"`
+	ETA               *time.Time `json:"eta,omitempty"`
 	CurrentFile       string    `json:"current_file,omitempty"`
 	FilesCompleted    int       `json:"files_completed"`
 	FilesTotal        int       `json:"files_total"`
@@ -72,35 +72,6 @@ type JobAttempt struct {
 	LogData      string    `json:"log_data,omitempty" db:"log_data"`
 }
 
-type Duration struct {
-	time.Duration
-}
-
-// Custom JSON marshaling for Duration
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.Duration.String())
-}
-
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-	switch value := v.(type) {
-	case float64:
-		d.Duration = time.Duration(value)
-		return nil
-	case string:
-		var err error
-		d.Duration, err = time.ParseDuration(value)
-		if err != nil {
-			return err
-		}
-		return nil
-	default:
-		return fmt.Errorf("invalid duration")
-	}
-}
 
 // Database value methods for custom types
 func (jp JobProgress) Value() (driver.Value, error) {

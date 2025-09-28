@@ -1,287 +1,177 @@
 package executor
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"grabarr/internal/config"
 	"grabarr/internal/models"
 	"grabarr/internal/queue"
+	"grabarr/internal/rclone"
 )
 
 type RCloneExecutor struct {
 	config       *config.Config
 	monitor      queue.ResourceChecker
 	progressChan chan models.JobProgress
+	client       *rclone.Client
 }
 
 func NewRCloneExecutor(cfg *config.Config, monitor queue.ResourceChecker) *RCloneExecutor {
+	rcloneConfig := cfg.GetRClone()
+	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
+
 	return &RCloneExecutor{
 		config:       cfg,
 		monitor:      monitor,
 		progressChan: make(chan models.JobProgress, 100),
+		client:       client,
 	}
 }
 
 func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
-	slog.Info("starting rclone execution", "job_id", job.ID, "name", job.Name)
+	slog.Info("starting rclone HTTP execution", "job_id", job.ID, "name", job.Name)
 
-	// Prepare rclone command
-	cmd, err := r.prepareCommand(job)
-	if err != nil {
-		return fmt.Errorf("failed to prepare rclone command: %w", err)
+	// Check if daemon is responsive
+	if err := r.client.Ping(ctx); err != nil {
+		return fmt.Errorf("rclone daemon not responsive: %w", err)
 	}
 
-	return r.executeCommand(ctx, cmd, job)
+	// Prepare the copy operation using universal filter approach
+	srcFs, dstFs, filter := r.prepareCopyRequest(job)
+
+	// Single copy operation - works for both files and directories!
+	copyResp, err := r.client.Copy(ctx, srcFs, dstFs, filter)
+
+	if err != nil {
+		return fmt.Errorf("failed to start copy operation: %w", err)
+	}
+
+	slog.Info("copy operation started", "job_id", job.ID, "rclone_job_id", copyResp.JobID)
+
+	// Monitor the job progress
+	return r.monitorJob(ctx, job, copyResp.JobID)
 }
 
-func (r *RCloneExecutor) executeCommand(ctx context.Context, cmd *exec.Cmd, job *models.Job) error {
-	// Set up progress monitoring
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-
-	// Start the command
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start rclone: %w", err)
-	}
-
-	// Monitor progress in separate goroutines
-	progressCtx, progressCancel := context.WithCancel(ctx)
-	defer progressCancel()
-
-	go r.monitorProgress(progressCtx, stdout, job)
-	go r.monitorErrors(progressCtx, stderr, job)
-
-	// Wait for command to complete or context cancellation
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case <-ctx.Done():
-		cmd.Process.Kill()
-		return ctx.Err()
-	case err := <-done:
-		if err != nil {
-			return fmt.Errorf("rclone execution failed: %w", err)
-		}
-		return nil
-	}
-}
-
-func (r *RCloneExecutor) prepareCommand(job *models.Job) (*exec.Cmd, error) {
+func (r *RCloneExecutor) prepareCopyRequest(job *models.Job) (string, string, map[string]interface{}) {
 	rcloneConfig := r.config.GetRClone()
 
-	// Build source path
-	sourcePath := fmt.Sprintf("%s:%s", rcloneConfig.RemoteName, job.RemotePath)
+	// Always use parent directory as source
+	parentDir := filepath.Dir(job.RemotePath)
+	if parentDir == "." {
+		parentDir = ""
+	}
+	srcFs := rcloneConfig.RemoteName + ":" + parentDir + "/"
 
-	// Use the local path from the job
-	basePath := job.LocalPath
-
-	// Build destination path
-	destPath := filepath.Join(basePath, filepath.Base(job.RemotePath))
-
-	// Determine command based on whether source is directory or file
-	var command string
-	if r.isRemoteDirectory(job.RemotePath) {
-		command = "copy"
-	} else {
-		command = "copyto"
+	// Local destination (ensure trailing slash)
+	dstFs := job.LocalPath
+	if !strings.HasSuffix(dstFs, "/") {
+		dstFs += "/"
 	}
 
-	// Build base rclone arguments
-	args := []string{
-		command,
-		sourcePath,
-		destPath,
-		"--config", rcloneConfig.ConfigFile,
-		"--progress",
-		"--stats", "1s",
-		"--stats-one-line",
-		"--transfers", "4",
-		"--ignore-existing",
+	// Universal filter that works for files and directories
+	targetName := filepath.Base(job.RemotePath)
+	filter := map[string]interface{}{
+		"IncludeRule": []string{
+			targetName,      // Match exact file
+			targetName + "/**", // Match directory contents
+		},
 	}
 
-	// Add directory-specific flags
-	if command == "copy" {
-		args = append(args, "--create-empty-src-dirs")
-	}
-
-	// Add bandwidth limit if configured
-	if rcloneConfig.BandwidthLimit != "" {
-		args = append(args, "--bwlimit", rcloneConfig.BandwidthLimit)
-	}
-
-	// Add transfer timeout if configured
-	if rcloneConfig.TransferTimeout > 0 {
-		args = append(args, "--timeout", rcloneConfig.TransferTimeout.String())
-	}
-
-	// Add any additional arguments from job metadata
-	if len(job.Metadata.RCloneArgs) > 0 {
-		args = append(args, job.Metadata.RCloneArgs...)
-	}
-
-	// Add any additional arguments from config
-	if len(rcloneConfig.AdditionalArgs) > 0 {
-		args = append(args, rcloneConfig.AdditionalArgs...)
-	}
-
-	cmd := exec.Command("rclone", args...)
-
-	slog.Info("prepared rclone command",
+	slog.Info("prepared copy request",
 		"job_id", job.ID,
-		"command", command,
-		"source", sourcePath,
-		"dest", destPath,
-		"args", args)
+		"src_fs", srcFs,
+		"dst_fs", dstFs,
+		"target_name", targetName,
+		"filter", filter)
 
-	return cmd, nil
+	return srcFs, dstFs, filter
 }
 
-func (r *RCloneExecutor) monitorProgress(ctx context.Context, stdout io.ReadCloser, job *models.Job) {
-	scanner := bufio.NewScanner(stdout)
+func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rcloneJobID int64) error {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
-	// Regular expressions for parsing rclone output
-	// Match format: "46 MiB / 5.250 GiB, 1%, 6.346 MiB/s, ETA 13m59s"
-	transferredRe := regexp.MustCompile(`([0-9.]+\s*[KMGT]?i?B)\s*/\s*([0-9.]+\s*[KMGT]?i?B),\s*([0-9]+)%`)
-	speedRe := regexp.MustCompile(`([0-9.]+\s*[KMGT]?i?B/s)`)
-	etaRe := regexp.MustCompile(`ETA\s+([0-9hms-]+)`)
-	filesRe := regexp.MustCompile(`Transferred:\s+([0-9]+)\s*/\s*([0-9]+),\s*([0-9]+)%`)
-
-	for scanner.Scan() {
+	for {
 		select {
 		case <-ctx.Done():
-			return
-		default:
-		}
+			// Stop the rclone job if context is cancelled
+			stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := r.client.StopJob(stopCtx, rcloneJobID); err != nil {
+				slog.Error("failed to stop rclone job", "job_id", job.ID, "rclone_job_id", rcloneJobID, "error", err)
+			}
+			return ctx.Err()
 
-		line := scanner.Text()
-		slog.Info("rclone output", "job_id", job.ID, "line", line)
+		case <-ticker.C:
+			status, err := r.client.GetJobStatus(ctx, rcloneJobID)
+			if err != nil {
+				slog.Error("failed to get job status", "job_id", job.ID, "rclone_job_id", rcloneJobID, "error", err)
+				continue
+			}
 
-		// Parse progress information
-		progress := r.parseProgressLine(line, transferredRe, speedRe, etaRe, filesRe)
-		if progress != nil {
-			progress.LastUpdateTime = time.Now()
+			// Update progress
+			r.updateJobProgress(job, status)
 
-			// Update job progress
-			job.UpdateProgress(*progress)
-
-			// Send progress update (non-blocking)
-			select {
-			case r.progressChan <- *progress:
-			default:
+			// Check if job is finished
+			if status.Finished {
+				if !status.Success {
+					return fmt.Errorf("rclone job failed: %s", status.Error)
+				}
+				slog.Info("rclone job completed successfully", "job_id", job.ID, "rclone_job_id", rcloneJobID)
+				return nil
 			}
 		}
 	}
-
-	if err := scanner.Err(); err != nil {
-		slog.Error("error reading rclone stdout", "job_id", job.ID, "error", err)
-	}
 }
 
-func (r *RCloneExecutor) monitorErrors(ctx context.Context, stderr io.ReadCloser, job *models.Job) {
-	scanner := bufio.NewScanner(stderr)
-
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		line := scanner.Text()
-		slog.Info("rclone output", "job_id", job.ID, "line", line)
+func (r *RCloneExecutor) updateJobProgress(job *models.Job, status *rclone.JobStatus) {
+	progress := models.JobProgress{
+		LastUpdateTime: time.Now(),
 	}
 
-	if err := scanner.Err(); err != nil {
-		slog.Error("error reading rclone stderr", "job_id", job.ID, "error", err)
-	}
-}
-
-func (r *RCloneExecutor) parseProgressLine(line string, transferredRe, speedRe, etaRe, filesRe *regexp.Regexp) *models.JobProgress {
-	progress := &models.JobProgress{}
-	hasProgress := false
-
-	// Parse transferred bytes and percentage
-	if matches := transferredRe.FindStringSubmatch(line); len(matches) >= 4 {
-		transferred := r.parseBytes(matches[1])
-		total := r.parseBytes(matches[2])
-		percentage, _ := strconv.Atoi(matches[3])
-
-		progress.TransferredBytes = transferred
-		progress.TotalBytes = total
-		progress.Percentage = float64(percentage)
-		hasProgress = true
+	// Extract progress information from status
+	output := status.Output
+	if output.TotalBytes > 0 {
+		progress.TotalBytes = output.TotalBytes
+		progress.TransferredBytes = output.Bytes
+		progress.Percentage = float64(output.Bytes) / float64(output.TotalBytes) * 100
 	}
 
-	// Parse transfer speed
-	if matches := speedRe.FindStringSubmatch(line); len(matches) >= 2 {
-		speed := r.parseBytes(matches[1])
-		progress.TransferSpeed = speed
-		hasProgress = true
+	if output.TotalTransfers > 0 {
+		progress.FilesTotal = int(output.TotalTransfers)
+		progress.FilesCompleted = int(output.Transfers)
 	}
 
-	// Parse file counts
-	if matches := filesRe.FindStringSubmatch(line); len(matches) >= 4 {
-		completed, _ := strconv.Atoi(matches[1])
-		total, _ := strconv.Atoi(matches[2])
+	progress.TransferSpeed = int64(output.Speed)
 
-		progress.FilesCompleted = completed
-		progress.FilesTotal = total
-		hasProgress = true
+	// Estimate ETA if we have transfer speed
+	if output.Speed > 0 && output.TotalBytes > 0 {
+		remainingBytes := output.TotalBytes - output.Bytes
+		etaSeconds := float64(remainingBytes) / output.Speed
+		eta := time.Now().Add(time.Duration(etaSeconds) * time.Second)
+		progress.ETA = &eta
 	}
 
-	if hasProgress {
-		return progress
-	}
-	return nil
-}
+	// Update job progress
+	job.UpdateProgress(progress)
 
-func (r *RCloneExecutor) parseBytes(s string) int64 {
-	s = strings.TrimSpace(s)
-
-	// Handle different units
-	multiplier := int64(1)
-	if strings.HasSuffix(s, "KiB") || strings.HasSuffix(s, "KB") {
-		multiplier = 1024
-		s = strings.TrimSuffix(strings.TrimSuffix(s, "KiB"), "KB")
-	} else if strings.HasSuffix(s, "MiB") || strings.HasSuffix(s, "MB") {
-		multiplier = 1024 * 1024
-		s = strings.TrimSuffix(strings.TrimSuffix(s, "MiB"), "MB")
-	} else if strings.HasSuffix(s, "GiB") || strings.HasSuffix(s, "GB") {
-		multiplier = 1024 * 1024 * 1024
-		s = strings.TrimSuffix(strings.TrimSuffix(s, "GiB"), "GB")
-	} else if strings.HasSuffix(s, "TiB") || strings.HasSuffix(s, "TB") {
-		multiplier = 1024 * 1024 * 1024 * 1024
-		s = strings.TrimSuffix(strings.TrimSuffix(s, "TiB"), "TB")
-	} else if strings.HasSuffix(s, "B") {
-		s = strings.TrimSuffix(s, "B")
+	// Send progress update (non-blocking)
+	select {
+	case r.progressChan <- progress:
+	default:
 	}
 
-	value, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0
-	}
-
-	return int64(value * float64(multiplier))
+	slog.Debug("updated job progress",
+		"job_id", job.ID,
+		"percentage", progress.Percentage,
+		"transferred", progress.TransferredBytes,
+		"total", progress.TotalBytes,
+		"speed", progress.TransferSpeed)
 }
 
 func (r *RCloneExecutor) GetProgressChannel() <-chan models.JobProgress {
@@ -291,32 +181,4 @@ func (r *RCloneExecutor) GetProgressChannel() <-chan models.JobProgress {
 func (r *RCloneExecutor) CanExecute() bool {
 	// Check if we have available resources
 	return r.monitor.CanScheduleJob()
-}
-
-// isRemoteDirectory checks if the remote path is a directory using rclone lsf
-func (r *RCloneExecutor) isRemoteDirectory(remotePath string) bool {
-	rcloneConfig := r.config.GetRClone()
-
-	// Build full remote path
-	fullRemotePath := fmt.Sprintf("%s:%s", rcloneConfig.RemoteName, remotePath)
-
-	slog.Info("checking if remote path is directory",
-		"remote_path", remotePath,
-		"full_remote_path", fullRemotePath)
-
-	// Use rclone lsf with --dirs-only to check if path can be listed as a directory
-	// This is more efficient and reliable than listing all contents
-	cmd := exec.Command("rclone", "lsf", "--dirs-only", "--max-depth", "0",
-		fullRemotePath, "--config", rcloneConfig.ConfigFile)
-
-	// If the command succeeds, the path is a directory
-	err := cmd.Run()
-	isDirectory := err == nil
-
-	slog.Info("directory check result",
-		"full_remote_path", fullRemotePath,
-		"is_directory", isDirectory,
-		"method", "lsf --dirs-only --max-depth 0")
-
-	return isDirectory
 }

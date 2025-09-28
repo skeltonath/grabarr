@@ -45,6 +45,7 @@ type RcloneConfig struct {
 	BandwidthLimit        string        `yaml:"bandwidth_limit"`
 	TransferTimeout       time.Duration `yaml:"transfer_timeout"`
 	AdditionalArgs        []string      `yaml:"additional_args"`
+	DaemonAddr            string        `yaml:"daemon_addr"`
 }
 
 type ResourcesConfig struct {

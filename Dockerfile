@@ -16,15 +16,15 @@ RUN go mod download && \
     CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o grabarr ./cmd/grabarr
 
 # Set permissions
-RUN chmod +x grabarr && \
+RUN chmod +x grabarr docker-entrypoint.sh && \
     chown -R 99:100 /app /config
 
-# Expose port
-EXPOSE 8080
+# Expose ports
+EXPOSE 8080 5572
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
-# Run the application
-CMD ["./grabarr"]
+# Run the startup script
+CMD ["./docker-entrypoint.sh"]
