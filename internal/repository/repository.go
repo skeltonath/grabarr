@@ -390,6 +390,221 @@ func (r *Repository) SetConfig(key, value string) error {
 	return nil
 }
 
+// Sync job operations
+func (r *Repository) CreateSyncJob(syncJob *models.SyncJob) error {
+	query := `
+		INSERT INTO sync_jobs (
+			remote_path, local_path, status, progress, stats
+		) VALUES (?, ?, ?, ?, ?)
+	`
+
+	result, err := r.db.Exec(query,
+		syncJob.RemotePath, syncJob.LocalPath, syncJob.Status,
+		syncJob.Progress, syncJob.Stats)
+	if err != nil {
+		return fmt.Errorf("failed to create sync job: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get sync job ID: %w", err)
+	}
+
+	syncJob.ID = id
+	syncJob.CreatedAt = time.Now()
+	syncJob.UpdatedAt = time.Now()
+
+	return nil
+}
+
+func (r *Repository) GetSyncJob(id int64) (*models.SyncJob, error) {
+	query := `
+		SELECT id, remote_path, local_path, status, error_message,
+			   progress, stats, created_at, updated_at, started_at,
+			   completed_at, rclone_job_id
+		FROM sync_jobs WHERE id = ?
+	`
+
+	var syncJob models.SyncJob
+	var errorMessage sql.NullString
+	var startedAt, completedAt sql.NullTime
+	var rcloneJobID sql.NullInt64
+
+	err := r.db.QueryRow(query, id).Scan(
+		&syncJob.ID, &syncJob.RemotePath, &syncJob.LocalPath, &syncJob.Status,
+		&errorMessage, &syncJob.Progress, &syncJob.Stats, &syncJob.CreatedAt,
+		&syncJob.UpdatedAt, &startedAt, &completedAt, &rcloneJobID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("sync job %d not found", id)
+		}
+		return nil, fmt.Errorf("failed to get sync job: %w", err)
+	}
+
+	if errorMessage.Valid {
+		syncJob.ErrorMessage = errorMessage.String
+	}
+	if startedAt.Valid {
+		syncJob.StartedAt = &startedAt.Time
+	}
+	if completedAt.Valid {
+		syncJob.CompletedAt = &completedAt.Time
+	}
+	if rcloneJobID.Valid {
+		syncJob.RCloneJobID = &rcloneJobID.Int64
+	}
+
+	return &syncJob, nil
+}
+
+func (r *Repository) GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error) {
+	query := `
+		SELECT id, remote_path, local_path, status, error_message,
+			   progress, stats, created_at, updated_at, started_at,
+			   completed_at, rclone_job_id
+		FROM sync_jobs
+	`
+
+	var conditions []string
+	var args []interface{}
+
+	if len(filter.Status) > 0 {
+		placeholders := strings.Repeat("?,", len(filter.Status))
+		placeholders = placeholders[:len(placeholders)-1] // Remove trailing comma
+		conditions = append(conditions, fmt.Sprintf("status IN (%s)", placeholders))
+		for _, status := range filter.Status {
+			args = append(args, status)
+		}
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// Sorting
+	sortBy := "created_at"
+	if filter.SortBy != "" {
+		sortBy = filter.SortBy
+	}
+	sortOrder := "DESC"
+	if filter.SortOrder != "" {
+		sortOrder = filter.SortOrder
+	}
+	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortOrder)
+
+	// Pagination
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query sync jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var syncJobs []*models.SyncJob
+	for rows.Next() {
+		var syncJob models.SyncJob
+		var errorMessage sql.NullString
+		var startedAt, completedAt sql.NullTime
+		var rcloneJobID sql.NullInt64
+
+		err := rows.Scan(
+			&syncJob.ID, &syncJob.RemotePath, &syncJob.LocalPath, &syncJob.Status,
+			&errorMessage, &syncJob.Progress, &syncJob.Stats, &syncJob.CreatedAt,
+			&syncJob.UpdatedAt, &startedAt, &completedAt, &rcloneJobID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan sync job: %w", err)
+		}
+
+		if errorMessage.Valid {
+			syncJob.ErrorMessage = errorMessage.String
+		}
+		if startedAt.Valid {
+			syncJob.StartedAt = &startedAt.Time
+		}
+		if completedAt.Valid {
+			syncJob.CompletedAt = &completedAt.Time
+		}
+		if rcloneJobID.Valid {
+			syncJob.RCloneJobID = &rcloneJobID.Int64
+		}
+
+		syncJobs = append(syncJobs, &syncJob)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sync jobs: %w", err)
+	}
+
+	return syncJobs, nil
+}
+
+func (r *Repository) UpdateSyncJob(syncJob *models.SyncJob) error {
+	query := `
+		UPDATE sync_jobs SET
+			status = ?, error_message = ?, progress = ?, stats = ?,
+			started_at = ?, completed_at = ?, rclone_job_id = ?
+		WHERE id = ?
+	`
+
+	_, err := r.db.Exec(query,
+		syncJob.Status, syncJob.ErrorMessage, syncJob.Progress, syncJob.Stats,
+		syncJob.StartedAt, syncJob.CompletedAt, syncJob.RCloneJobID, syncJob.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update sync job: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) DeleteSyncJob(id int64) error {
+	_, err := r.db.Exec("DELETE FROM sync_jobs WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete sync job: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) GetSyncSummary() (*models.SyncSummary, error) {
+	query := `
+		SELECT
+			COUNT(*) as total,
+			COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0) as queued,
+			COALESCE(SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END), 0) as running,
+			COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
+			COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
+			COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) as cancelled
+		FROM sync_jobs
+	`
+
+	var summary models.SyncSummary
+	err := r.db.QueryRow(query).Scan(
+		&summary.TotalSyncs, &summary.QueuedSyncs, &summary.RunningSyncs,
+		&summary.CompletedSyncs, &summary.FailedSyncs, &summary.CancelledSyncs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sync summary: %w", err)
+	}
+
+	return &summary, nil
+}
+
+func (r *Repository) GetActiveSyncJobsCount() (int, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM sync_jobs WHERE status IN ('queued', 'running')").Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get active sync jobs count: %w", err)
+	}
+	return count, nil
+}
+
 // Cleanup operations
 func (r *Repository) CleanupOldJobs(completedBefore, failedBefore time.Time) (int, error) {
 	query := `

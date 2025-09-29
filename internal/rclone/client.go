@@ -28,10 +28,11 @@ func NewClient(baseURL string) *Client {
 
 // SyncCopyRequest represents a request to copy files/directories using sync/copy
 type SyncCopyRequest struct {
-	SrcFs  string                 `json:"srcFs"`
-	DstFs  string                 `json:"dstFs"`
-	Filter map[string]interface{} `json:"_filter,omitempty"`
-	Async  bool                   `json:"_async,omitempty"`
+	SrcFs   string                 `json:"srcFs"`
+	DstFs   string                 `json:"dstFs"`
+	Filter  map[string]interface{} `json:"_filter,omitempty"`
+	Async   bool                   `json:"_async,omitempty"`
+	Config  map[string]interface{} `json:"_config,omitempty"`
 }
 
 
@@ -91,6 +92,23 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 		DstFs:  dstFs,
 		Filter: filter,
 		Async:  true, // Always use async to avoid timeouts on large transfers
+	}
+
+	var resp CopyResponse
+	err := c.makeRequest(ctx, "POST", "/sync/copy", req, &resp)
+	return &resp, err
+}
+
+// CopyWithIgnoreExisting initiates a copy operation that skips existing files
+func (c *Client) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*CopyResponse, error) {
+	req := SyncCopyRequest{
+		SrcFs:  srcFs,
+		DstFs:  dstFs,
+		Filter: filter,
+		Async:  true, // Always use async to avoid timeouts on large transfers
+		Config: map[string]interface{}{
+			"IgnoreExisting": true, // Skip files that already exist on destination
+		},
 	}
 
 	var resp CopyResponse

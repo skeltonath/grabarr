@@ -64,6 +64,35 @@ BEGIN
     UPDATE system_config SET updated_at = CURRENT_TIMESTAMP WHERE key = NEW.key;
 END;
 
+-- Sync jobs table for bulk sync operations
+CREATE TABLE IF NOT EXISTS sync_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    remote_path TEXT NOT NULL,
+    local_path TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    error_message TEXT,
+    progress TEXT, -- JSON blob
+    stats TEXT, -- JSON blob
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    completed_at DATETIME,
+    rclone_job_id INTEGER
+);
+
+-- Indexes for sync jobs performance
+CREATE INDEX IF NOT EXISTS idx_sync_jobs_status ON sync_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_sync_jobs_created_at ON sync_jobs(created_at);
+CREATE INDEX IF NOT EXISTS idx_sync_jobs_rclone_job_id ON sync_jobs(rclone_job_id);
+
+-- Trigger to automatically update updated_at timestamp for sync jobs
+CREATE TRIGGER IF NOT EXISTS sync_jobs_updated_at
+    AFTER UPDATE ON sync_jobs
+    FOR EACH ROW
+BEGIN
+    UPDATE sync_jobs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
 -- Initial system configuration values
 INSERT OR IGNORE INTO system_config (key, value, description) VALUES
     ('schema_version', '1', 'Database schema version'),

@@ -12,9 +12,10 @@ import (
 )
 
 type Handlers struct {
-	queue    queue.JobQueue
-	monitor  ResourceMonitor
-	config   *config.Config
+	queue       queue.JobQueue
+	monitor     ResourceMonitor
+	config      *config.Config
+	syncService SyncService
 }
 
 type ResourceMonitor interface {
@@ -30,11 +31,12 @@ type APIResponse struct {
 }
 
 
-func NewHandlers(jobQueue queue.JobQueue, monitor ResourceMonitor, cfg *config.Config) *Handlers {
+func NewHandlers(jobQueue queue.JobQueue, monitor ResourceMonitor, cfg *config.Config, syncService SyncService) *Handlers {
 	return &Handlers{
-		queue:   jobQueue,
-		monitor: monitor,
-		config:  cfg,
+		queue:       jobQueue,
+		monitor:     monitor,
+		config:      cfg,
+		syncService: syncService,
 	}
 }
 
@@ -51,6 +53,13 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/jobs/{id:[0-9]+}", h.DeleteJob).Methods("DELETE")
 	api.HandleFunc("/jobs/{id:[0-9]+}/cancel", h.CancelJob).Methods("POST")
 	api.HandleFunc("/jobs/summary", h.GetJobSummary).Methods("GET")
+
+	// Sync endpoints
+	api.HandleFunc("/sync", h.CreateSync).Methods("POST")
+	api.HandleFunc("/sync", h.GetSyncs).Methods("GET")
+	api.HandleFunc("/sync/{id:[0-9]+}", h.GetSync).Methods("GET")
+	api.HandleFunc("/sync/{id:[0-9]+}/cancel", h.CancelSync).Methods("POST")
+	api.HandleFunc("/sync/summary", h.GetSyncSummary).Methods("GET")
 
 	// System endpoints
 	api.HandleFunc("/health", h.HealthCheck).Methods("GET")
