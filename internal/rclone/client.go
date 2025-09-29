@@ -21,7 +21,7 @@ func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 5 * time.Minute, // Increase timeout for large file operations
+			Timeout: 30 * time.Second, // Short timeout since we use async operations
 		},
 	}
 }
@@ -31,6 +31,7 @@ type SyncCopyRequest struct {
 	SrcFs  string                 `json:"srcFs"`
 	DstFs  string                 `json:"dstFs"`
 	Filter map[string]interface{} `json:"_filter,omitempty"`
+	Async  bool                   `json:"_async,omitempty"`
 }
 
 
@@ -89,6 +90,7 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 		SrcFs:  srcFs,
 		DstFs:  dstFs,
 		Filter: filter,
+		Async:  true, // Always use async to avoid timeouts on large transfers
 	}
 
 	var resp CopyResponse
