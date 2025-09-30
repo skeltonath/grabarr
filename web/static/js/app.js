@@ -5,6 +5,7 @@ class GrabarrDashboard {
         this.apiBase = '/api/v1';
         this.refreshInterval = null;
         this.currentJobs = [];
+        this.currentSyncs = [];
         this.currentFilter = '';
         this.currentSearch = '';
 
@@ -12,12 +13,39 @@ class GrabarrDashboard {
     }
 
     init() {
+        this.initTheme();
         this.setupEventListeners();
         this.startAutoRefresh();
         this.loadDashboard();
     }
 
+    initTheme() {
+        // Load theme from localStorage or default to light
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        this.updateThemeIcon(savedTheme);
+    }
+
+    updateThemeIcon(theme) {
+        const icon = document.getElementById('theme-icon');
+        icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        this.updateThemeIcon(newTheme);
+    }
+
     setupEventListeners() {
+        // Theme toggle
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+            this.toggleTheme();
+        });
+
         // Refresh button
         document.getElementById('refresh-btn').addEventListener('click', () => {
             this.loadDashboard();
@@ -46,18 +74,31 @@ class GrabarrDashboard {
             this.filterAndDisplayJobs();
         });
 
-        // Modal controls
+        // Job modal controls
         document.getElementById('modal-close').addEventListener('click', () => {
-            this.closeModal();
+            this.closeModal('job-modal');
         });
         document.getElementById('modal-close-btn').addEventListener('click', () => {
-            this.closeModal();
+            this.closeModal('job-modal');
+        });
+
+        // Sync modal controls
+        document.getElementById('sync-modal-close').addEventListener('click', () => {
+            this.closeModal('sync-modal');
+        });
+        document.getElementById('sync-modal-close-btn').addEventListener('click', () => {
+            this.closeModal('sync-modal');
         });
 
         // Modal background click
         document.getElementById('job-modal').addEventListener('click', (e) => {
             if (e.target.id === 'job-modal') {
-                this.closeModal();
+                this.closeModal('job-modal');
+            }
+        });
+        document.getElementById('sync-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'sync-modal') {
+                this.closeModal('sync-modal');
             }
         });
 
@@ -68,12 +109,17 @@ class GrabarrDashboard {
         document.getElementById('modal-delete-btn').addEventListener('click', () => {
             this.deleteJob();
         });
+        document.getElementById('sync-modal-cancel-btn').addEventListener('click', () => {
+            this.cancelSync();
+        });
     }
 
     startAutoRefresh() {
         this.stopAutoRefresh(); // Clear existing interval
         this.refreshInterval = setInterval(() => {
             this.loadJobs();
+            this.loadSyncs();
+            this.loadJobSummary();
         }, 3000); // Refresh every 3 seconds
     }
 
@@ -88,7 +134,8 @@ class GrabarrDashboard {
         await Promise.all([
             this.loadSystemStatus(),
             this.loadJobSummary(),
-            this.loadJobs()
+            this.loadJobs(),
+            this.loadSyncs()
         ]);
     }
 
@@ -135,6 +182,20 @@ class GrabarrDashboard {
         } catch (error) {
             console.error('Error loading jobs:', error);
             this.showError('Failed to load jobs');
+        }
+    }
+
+    async loadSyncs() {
+        try {
+            const response = await fetch(`${this.apiBase}/syncs?limit=50`);
+            const data = await response.json();
+
+            if (data.success) {
+                this.currentSyncs = data.data || [];
+                this.displaySyncs(this.currentSyncs);
+            }
+        } catch (error) {
+            console.error('Error loading syncs:', error);
         }
     }
 
@@ -217,6 +278,55 @@ class GrabarrDashboard {
         `).join('');
     }
 
+    displaySyncs(syncs) {
+        const tbody = document.getElementById('syncs-tbody');
+
+        // Filter to show only active syncs (not completed/failed/cancelled)
+        const activeSyncs = syncs.filter(sync =>
+            sync.status === 'queued' || sync.status === 'running'
+        );
+
+        if (activeSyncs.length === 0) {
+            tbody.innerHTML = `
+                <tr class="loading-row">
+                    <td colspan="8">No active syncs</td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = activeSyncs.map(sync => `
+            <tr onclick="dashboard.showSyncDetails(${sync.id})" data-sync-id="${sync.id}">
+                <td>${sync.id}</td>
+                <td>
+                    <div class="job-name" title="${this.escapeHtml(sync.remote_path)}">
+                        ${this.truncateText(sync.remote_path, 40)}
+                    </div>
+                </td>
+                <td>
+                    <span class="status-badge status-${sync.status}">
+                        ${sync.status}
+                    </span>
+                </td>
+                <td>
+                    ${this.renderProgress(sync.progress)}
+                </td>
+                <td>
+                    <div class="sync-detail">
+                        ${sync.progress?.files_completed || 0} / ${sync.progress?.files_total || 0}
+                    </div>
+                </td>
+                <td>${this.formatSpeed(sync.progress?.transfer_speed || 0)}</td>
+                <td>${this.formatDate(sync.created_at)}</td>
+                <td>
+                    <button class="btn btn-sm" onclick="event.stopPropagation(); dashboard.showSyncDetails(${sync.id})">
+                        View
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
     renderProgress(progress) {
         if (!progress || progress.percentage === 0) {
             return '<div class="progress-bar"><div class="progress-fill" style="width: 0%"></div></div>';
@@ -240,13 +350,34 @@ class GrabarrDashboard {
 
             if (data.success && data.data) {
                 this.renderJobModal(data.data);
-                this.openModal();
+                this.openModal('job-modal');
             } else {
                 this.showError('Failed to load job details');
             }
         } catch (error) {
             console.error('Error loading job details:', error);
             this.showError('Failed to load job details');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async showSyncDetails(syncId) {
+        try {
+            this.showLoading(true);
+
+            const response = await fetch(`${this.apiBase}/syncs/${syncId}`);
+            const data = await response.json();
+
+            if (data.success && data.data) {
+                this.renderSyncModal(data.data);
+                this.openModal('sync-modal');
+            } else {
+                this.showError('Failed to load sync details');
+            }
+        } catch (error) {
+            console.error('Error loading sync details:', error);
+            this.showError('Failed to load sync details');
         } finally {
             this.showLoading(false);
         }
@@ -298,7 +429,7 @@ class GrabarrDashboard {
                 ${job.error_message ? `
                 <div class="detail-group">
                     <div class="detail-label">Error:</div>
-                    <div class="detail-value" style="color: #ef4444;">${this.escapeHtml(job.error_message)}</div>
+                    <div class="detail-value" style="color: var(--status-failed);">${this.escapeHtml(job.error_message)}</div>
                 </div>
                 ` : ''}
 
@@ -364,6 +495,121 @@ class GrabarrDashboard {
         this.currentModalJobId = job.id;
     }
 
+    renderSyncModal(sync) {
+        document.getElementById('sync-modal-title').textContent = `Sync #${sync.id}`;
+
+        const modalBody = document.getElementById('sync-modal-body');
+        modalBody.innerHTML = `
+            <div class="job-detail">
+                <div class="detail-group">
+                    <div class="detail-label">ID:</div>
+                    <div class="detail-value">${sync.id}</div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Remote Path:</div>
+                    <div class="detail-value">${this.escapeHtml(sync.remote_path)}</div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Local Path:</div>
+                    <div class="detail-value">${this.escapeHtml(sync.local_path || 'Auto')}</div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Status:</div>
+                    <div class="detail-value">
+                        <span class="status-badge status-${sync.status}">${sync.status}</span>
+                    </div>
+                </div>
+
+                ${sync.error_message ? `
+                <div class="detail-group">
+                    <div class="detail-label">Error:</div>
+                    <div class="detail-value" style="color: var(--status-failed);">${this.escapeHtml(sync.error_message)}</div>
+                </div>
+                ` : ''}
+
+                <div class="detail-group">
+                    <div class="detail-label">Progress:</div>
+                    <div class="detail-value">
+                        <div class="progress-detail">
+                            <div class="progress-bar-large">
+                                <div class="progress-fill-large" style="width: ${sync.progress?.percentage || 0}%"></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.875rem; margin-top: 0.5rem;">
+                                <span>${(sync.progress?.percentage || 0).toFixed(1)}%</span>
+                                <span>${this.formatBytes(sync.progress?.transferred_bytes || 0)} / ${this.formatBytes(sync.progress?.total_bytes || 0)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Files:</div>
+                    <div class="detail-value">
+                        ${sync.progress?.files_completed || 0} / ${sync.progress?.files_total || 0} completed
+                    </div>
+                </div>
+
+                ${sync.progress?.current_file ? `
+                <div class="detail-group">
+                    <div class="detail-label">Current File:</div>
+                    <div class="detail-value">${this.escapeHtml(sync.progress.current_file)}</div>
+                </div>
+                ` : ''}
+
+                ${sync.progress?.transfer_speed ? `
+                <div class="detail-group">
+                    <div class="detail-label">Speed:</div>
+                    <div class="detail-value">${this.formatSpeed(sync.progress.transfer_speed)}</div>
+                </div>
+                ` : ''}
+
+                <div class="detail-group">
+                    <div class="detail-label">Statistics:</div>
+                    <div class="detail-value">
+                        <div class="sync-detail">
+                            <div>Transferred: ${sync.stats?.files_transferred || 0} files (${this.formatBytes(sync.stats?.bytes_transferred || 0)})</div>
+                            <div>Skipped: ${sync.stats?.files_skipped || 0} files</div>
+                            <div>Errors: ${sync.stats?.files_errored || 0} files</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Created:</div>
+                    <div class="detail-value">${this.formatDateTime(sync.created_at)}</div>
+                </div>
+
+                ${sync.started_at ? `
+                <div class="detail-group">
+                    <div class="detail-label">Started:</div>
+                    <div class="detail-value">${this.formatDateTime(sync.started_at)}</div>
+                </div>
+                ` : ''}
+
+                ${sync.completed_at ? `
+                <div class="detail-group">
+                    <div class="detail-label">Completed:</div>
+                    <div class="detail-value">${this.formatDateTime(sync.completed_at)}</div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+
+        // Show cancel button only if sync is active
+        const cancelBtn = document.getElementById('sync-modal-cancel-btn');
+        if (sync.status === 'running' || sync.status === 'queued') {
+            cancelBtn.style.display = 'block';
+        } else {
+            cancelBtn.style.display = 'none';
+        }
+
+        // Store sync ID for actions
+        this.currentModalSyncId = sync.id;
+    }
+
     async cancelJob() {
         if (!this.currentModalJobId) return;
 
@@ -379,7 +625,7 @@ class GrabarrDashboard {
             const data = await response.json();
 
             if (data.success) {
-                this.closeModal();
+                this.closeModal('job-modal');
                 this.loadDashboard();
                 this.showSuccess('Job cancelled successfully');
             } else {
@@ -408,7 +654,7 @@ class GrabarrDashboard {
             const data = await response.json();
 
             if (data.success) {
-                this.closeModal();
+                this.closeModal('job-modal');
                 this.loadDashboard();
                 this.showSuccess('Job deleted successfully');
             } else {
@@ -422,15 +668,48 @@ class GrabarrDashboard {
         }
     }
 
-    openModal() {
-        document.getElementById('job-modal').classList.add('active');
+    async cancelSync() {
+        if (!this.currentModalSyncId) return;
+
+        if (!confirm('Are you sure you want to cancel this sync?')) return;
+
+        try {
+            this.showLoading(true);
+
+            const response = await fetch(`${this.apiBase}/syncs/${this.currentModalSyncId}/cancel`, {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.closeModal('sync-modal');
+                this.loadDashboard();
+                this.showSuccess('Sync cancelled successfully');
+            } else {
+                this.showError('Failed to cancel sync');
+            }
+        } catch (error) {
+            console.error('Error cancelling sync:', error);
+            this.showError('Failed to cancel sync');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    openModal(modalId) {
+        document.getElementById(modalId).classList.add('active');
         document.body.style.overflow = 'hidden';
     }
 
-    closeModal() {
-        document.getElementById('job-modal').classList.remove('active');
+    closeModal(modalId) {
+        document.getElementById(modalId).classList.remove('active');
         document.body.style.overflow = '';
-        this.currentModalJobId = null;
+        if (modalId === 'job-modal') {
+            this.currentModalJobId = null;
+        } else if (modalId === 'sync-modal') {
+            this.currentModalSyncId = null;
+        }
     }
 
     showLoading(show) {

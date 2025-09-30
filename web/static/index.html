@@ -18,6 +18,16 @@
                 <div class="last-updated">
                     Last updated: <span id="last-updated">-</span>
                 </div>
+                <div class="controls">
+                    <button class="btn btn-primary" id="refresh-btn">Refresh</button>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="auto-refresh" checked>
+                        Auto-refresh
+                    </label>
+                    <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+                        <span id="theme-icon">🌙</span>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -25,38 +35,64 @@
     <main class="main">
         <div class="container">
             <!-- System Overview -->
-            <div class="dashboard-grid">
-                <div class="card overview-card">
-                    <h2>System Overview</h2>
-                    <div class="overview-stats">
-                        <div class="stat">
-                            <div class="stat-value" id="jobs-queued">-</div>
-                            <div class="stat-label">Queued</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value" id="jobs-running">-</div>
-                            <div class="stat-label">Running</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value" id="jobs-completed">-</div>
-                            <div class="stat-label">Completed</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value" id="jobs-failed">-</div>
-                            <div class="stat-label">Failed</div>
-                        </div>
+            <div class="card overview-card">
+                <h2>System Overview</h2>
+                <div class="overview-stats">
+                    <div class="stat">
+                        <div class="stat-value" id="jobs-queued">-</div>
+                        <div class="stat-label">Queued</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="jobs-running">-</div>
+                        <div class="stat-label">Running</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="jobs-completed">-</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="jobs-failed">-</div>
+                        <div class="stat-label">Failed</div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Controls -->
-                <div class="card controls-card">
-                    <h2>Controls</h2>
+            <!-- Sync Jobs Section -->
+            <h2 class="section-title">Active Syncs</h2>
+            <div class="card syncs-card">
+                <div class="card-header">
+                    <h2>Sync Jobs</h2>
+                </div>
+
+                <div class="table-container">
+                    <table class="jobs-table" id="syncs-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Remote Path</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Files</th>
+                                <th>Speed</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="syncs-tbody">
+                            <tr class="loading-row">
+                                <td colspan="8">No active syncs</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Jobs Section -->
+            <h2 class="section-title">Download Jobs</h2>
+            <div class="card jobs-card">
+                <div class="card-header">
+                    <h2>Jobs</h2>
                     <div class="controls">
-                        <button class="btn btn-primary" id="refresh-btn">Refresh Now</button>
-                        <label class="toggle-label">
-                            <input type="checkbox" id="auto-refresh" checked>
-                            Auto-refresh
-                        </label>
                         <select id="status-filter" class="filter-select">
                             <option value="">All Jobs</option>
                             <option value="queued">Queued</option>
@@ -65,16 +101,9 @@
                             <option value="failed">Failed</option>
                             <option value="cancelled">Cancelled</option>
                         </select>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Jobs Table -->
-            <div class="card jobs-card">
-                <div class="card-header">
-                    <h2>Jobs</h2>
-                    <div class="search-box">
-                        <input type="text" id="search-input" placeholder="Search jobs..." class="search-input">
+                        <div class="search-box">
+                            <input type="text" id="search-input" placeholder="Search jobs..." class="search-input">
+                        </div>
                     </div>
                 </div>
 
@@ -117,6 +146,23 @@
                 <button class="btn btn-secondary" id="modal-close-btn">Close</button>
                 <button class="btn btn-danger" id="modal-cancel-btn" style="display: none;">Cancel Job</button>
                 <button class="btn btn-danger" id="modal-delete-btn" style="display: none;">Delete Job</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Detail Modal -->
+    <div class="modal" id="sync-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="sync-modal-title">Sync Details</h3>
+                <button class="modal-close" id="sync-modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="sync-modal-body">
+                <!-- Sync details will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="sync-modal-close-btn">Close</button>
+                <button class="btn btn-danger" id="sync-modal-cancel-btn" style="display: none;">Cancel Sync</button>
             </div>
         </div>
     </div>
