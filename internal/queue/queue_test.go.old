@@ -1,0 +1,1773 @@
+package queue
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"testing"
+	"time"
+
+	"grabarr/internal/config"
+	"grabarr/internal/models"
+	"grabarr/internal/testutil"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// ========================================
+// Test Mocks (to avoid import cycle)
+// ========================================
+
+type mockJobExecutor struct {
+	executeFunc func(ctx context.Context, job *models.Job) error
+	canExecute  bool
+	mu          sync.Mutex
+}
+
+func newMockJobExecutor() *mockJobExecutor {
+	return &mockJobExecutor{
+		canExecute: true,
+		executeFunc: func(ctx context.Context, job *models.Job) error {
+			return nil
+		},
+	}
+}
+
+func (m *mockJobExecutor) Execute(ctx context.Context, job *models.Job) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.executeFunc(ctx, job)
+}
+
+func (m *mockJobExecutor) CanExecute() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.canExecute
+}
+
+func (m *mockJobExecutor) SetExecuteFunc(f func(ctx context.Context, job *models.Job) error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.executeFunc = f
+}
+
+type mockResourceChecker struct {
+	canSchedule      bool
+	resourceStatus   ResourceStatus
+	canScheduleFunc  func() bool
+	mu               sync.Mutex
+}
+
+func newMockResourceChecker() *mockResourceChecker {
+	return &mockResourceChecker{
+		canSchedule: true,
+		resourceStatus: ResourceStatus{
+			BandwidthAvailable: true,
+			DiskSpaceAvailable: true,
+		},
+	}
+}
+
+func (m *mockResourceChecker) CanScheduleJob() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.canScheduleFunc != nil {
+		return m.canScheduleFunc()
+	}
+	return m.canSchedule
+}
+
+func (m *mockResourceChecker) GetResourceStatus() ResourceStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.resourceStatus
+}
+
+func (m *mockResourceChecker) SetCanSchedule(can bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.canSchedule = can
+}
+
+func (m *mockResourceChecker) SetCanScheduleFunc(f func() bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.canScheduleFunc = f
+}
+
+// ========================================
+// 1. Constructor Tests
+// ========================================
+
+func TestNew(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	assert.NotNil(t, q)
+	queue := q.(*queue)
+	assert.Equal(t, repo, queue.repo)
+	assert.Equal(t, cfg, queue.config)
+	assert.Equal(t, mockChecker, queue.resourceChecker)
+	assert.NotNil(t, queue.activeJobs)
+	assert.NotNil(t, queue.jobQueue)
+	assert.False(t, queue.running)
+}
+
+func TestSetJobExecutor(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	queue := q.(*queue)
+	assert.Equal(t, mockExecutor, queue.executor)
+}
+
+// ========================================
+// 2. Lifecycle Tests
+// ========================================
+
+func TestStart_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+
+	queue := q.(*queue)
+	assert.True(t, queue.running)
+	assert.NotNil(t, queue.schedulerCtx)
+	assert.NotNil(t, queue.schedulerCancel)
+
+	// Cleanup
+	q.Stop()
+}
+
+func TestStart_AlreadyRunning(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx := context.Background()
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Try to start again
+	err = q.Start(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already running")
+}
+
+func TestStart_NoExecutor(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	ctx := context.Background()
+	err := q.Start(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "job executor not set")
+}
+
+func TestStart_LoadsExistingJobs(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	// Create some queued and running jobs in the database
+	queuedJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	runningJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Name = "running-job"
+		j.Status = models.JobStatusRunning
+	})
+	pendingJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Name = "pending-job"
+		j.Status = models.JobStatusPending
+	})
+
+	require.NoError(t, repo.CreateJob(queuedJob))
+	require.NoError(t, repo.CreateJob(runningJob))
+	require.NoError(t, repo.CreateJob(pendingJob))
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Wait a bit for jobs to be loaded
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that running and pending jobs were reset to queued
+	updatedRunning, err := repo.GetJob(runningJob.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusQueued, updatedRunning.Status)
+
+	updatedPending, err := repo.GetJob(pendingJob.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusQueued, updatedPending.Status)
+}
+
+func TestStop_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+		Server: config.ServerConfig{
+			ShutdownTimeout: 5 * time.Second,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx := context.Background()
+	err := q.Start(ctx)
+	require.NoError(t, err)
+
+	err = q.Stop()
+	assert.NoError(t, err)
+
+	queue := q.(*queue)
+	assert.False(t, queue.running)
+}
+
+func TestStop_NotRunning(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	err := q.Stop()
+	assert.NoError(t, err)
+}
+
+// ========================================
+// 3. Enqueue Tests
+// ========================================
+
+func TestEnqueue_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxRetries: 3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	job := testutil.CreateTestJob()
+	err := q.Enqueue(job)
+	require.NoError(t, err)
+
+	assert.NotZero(t, job.ID)
+
+	// Verify job was saved to database
+	savedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, job.Name, savedJob.Name)
+	assert.Equal(t, models.JobStatusQueued, savedJob.Status)
+}
+
+func TestEnqueue_SetsDefaults(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxRetries: 5,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = ""
+		j.MaxRetries = 0
+	})
+
+	err := q.Enqueue(job)
+	require.NoError(t, err)
+
+	assert.Equal(t, models.JobStatusQueued, job.Status)
+	assert.Equal(t, 5, job.MaxRetries)
+}
+
+func TestEnqueue_FullQueue(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxRetries: 3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// Fill the queue to capacity (1000 buffered)
+	for i := 0; i < 1000; i++ {
+		job := testutil.CreateTestJob(func(j *models.Job) {
+			j.Name = "filler-job"
+		})
+		queue.jobQueue <- job
+	}
+
+	// Try to enqueue when full
+	job := testutil.CreateTestJob()
+	err := q.Enqueue(job)
+	assert.NoError(t, err) // Should not error, job saved to DB
+
+	// Verify job was saved to database even though queue was full
+	savedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, job.Name, savedJob.Name)
+}
+
+func TestEnqueue_DatabaseError(t *testing.T) {
+	// This test would require a way to inject a failing repository
+	// Skipping for now as we're using real SQLite
+	t.Skip("Requires repository mock to simulate DB failure")
+}
+
+// ========================================
+// 4. Job Retrieval Tests
+// ========================================
+
+func TestGetJob_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	job := testutil.CreateTestJob()
+	require.NoError(t, repo.CreateJob(job))
+
+	retrievedJob, err := q.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, job.ID, retrievedJob.ID)
+	assert.Equal(t, job.Name, retrievedJob.Name)
+}
+
+func TestGetJob_NotFound(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	_, err := q.GetJob(99999)
+	assert.Error(t, err)
+}
+
+func TestGetJobs_WithFilters(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	// Create some jobs with different statuses
+	queuedJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	completedJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Name = "completed-job"
+		j.Status = models.JobStatusCompleted
+	})
+
+	require.NoError(t, repo.CreateJob(queuedJob))
+	require.NoError(t, repo.CreateJob(completedJob))
+
+	// Filter for queued jobs only
+	jobs, err := q.GetJobs(models.JobFilter{
+		Status: []models.JobStatus{models.JobStatusQueued},
+	})
+	require.NoError(t, err)
+	assert.Len(t, jobs, 1)
+	assert.Equal(t, models.JobStatusQueued, jobs[0].Status)
+}
+
+func TestGetSummary_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	// Create jobs with different statuses
+	require.NoError(t, repo.CreateJob(testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})))
+	require.NoError(t, repo.CreateJob(testutil.CreateTestJob(func(j *models.Job) {
+		j.Name = "running"
+		j.Status = models.JobStatusRunning
+	})))
+	require.NoError(t, repo.CreateJob(testutil.CreateTestJob(func(j *models.Job) {
+		j.Name = "completed"
+		j.Status = models.JobStatusCompleted
+	})))
+
+	summary, err := q.GetSummary()
+	require.NoError(t, err)
+	assert.Equal(t, 3, summary.TotalJobs)
+	assert.Equal(t, 1, summary.QueuedJobs)
+	assert.Equal(t, 1, summary.RunningJobs)
+	assert.Equal(t, 1, summary.CompletedJobs)
+}
+
+// ========================================
+// 5. Cancel Tests
+// ========================================
+
+func TestCancelJob_ActiveJob(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	// Mock executor to block on execution
+	executionStarted := make(chan struct{})
+	executionBlocked := make(chan struct{})
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, job *models.Job) error {
+			close(executionStarted)
+			<-executionBlocked // Block until we're done testing
+			return nil
+		}).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx := context.Background()
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Create and schedule a job
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusRunning
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue := q.(*queue)
+	jobCtx, cancel := context.WithCancel(ctx)
+	queue.mu.Lock()
+	queue.activeJobs[job.ID] = cancel
+	queue.mu.Unlock()
+
+	// Cancel the job
+	err = q.CancelJob(job.ID)
+	assert.NoError(t, err)
+
+	// Verify job was removed from active jobs
+	queue.mu.RLock()
+	_, exists := queue.activeJobs[job.ID]
+	queue.mu.RUnlock()
+	assert.False(t, exists)
+
+	// Verify job status was updated in database
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusCancelled, updatedJob.Status)
+
+	close(executionBlocked)
+}
+
+func TestCancelJob_QueuedJob(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	err := q.CancelJob(job.ID)
+	assert.NoError(t, err)
+
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusCancelled, updatedJob.Status)
+}
+
+func TestCancelJob_CompletedJob(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusCompleted
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	err := q.CancelJob(job.ID)
+	assert.NoError(t, err)
+
+	// Completed job should remain completed
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusCompleted, updatedJob.Status)
+}
+
+func TestCancelJob_NotFound(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	err := q.CancelJob(99999)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get job")
+}
+
+func TestCancelJob_DatabaseError(t *testing.T) {
+	// Would require repository mock
+	t.Skip("Requires repository mock to simulate DB failure")
+}
+
+// ========================================
+// 6. Scheduling Tests
+// ========================================
+
+func TestCanScheduleNewJob_UnderLimit(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// Add 2 active jobs (under limit of 3)
+	queue.activeJobs[1] = func() {}
+	queue.activeJobs[2] = func() {}
+
+	assert.True(t, queue.canScheduleNewJob())
+}
+
+func TestCanScheduleNewJob_AtLimit(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// Add 2 active jobs (at limit of 2)
+	queue.activeJobs[1] = func() {}
+	queue.activeJobs[2] = func() {}
+
+	assert.False(t, queue.canScheduleNewJob())
+}
+
+func TestScheduleJob_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	// Mock executor to complete quickly
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(nil).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	job := testutil.CreateTestJob()
+	require.NoError(t, repo.CreateJob(job))
+
+	queue := q.(*queue)
+	queue.scheduleJob(job)
+
+	// Wait for job to be added to activeJobs
+	time.Sleep(50 * time.Millisecond)
+
+	queue.mu.RLock()
+	_, exists := queue.activeJobs[job.ID]
+	queue.mu.RUnlock()
+	assert.True(t, exists)
+
+	// Wait for execution to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify job was removed from activeJobs after completion
+	queue.mu.RLock()
+	_, stillExists := queue.activeJobs[job.ID]
+	queue.mu.RUnlock()
+	assert.False(t, stillExists)
+}
+
+func TestScheduleJob_UpdatesStatus(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	jobStarted := make(chan struct{})
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, job *models.Job) error {
+			close(jobStarted)
+			<-ctx.Done()
+			return ctx.Err()
+		}).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue := q.(*queue)
+	queue.scheduleJob(job)
+
+	// Wait for execution to start
+	<-jobStarted
+
+	// Check job status was updated to running
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusRunning, updatedJob.Status)
+	assert.NotNil(t, updatedJob.StartedAt)
+
+	cancel() // Trigger context cancellation
+}
+
+func TestProcessQueue_WithResources(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockChecker.EXPECT().
+		CanScheduleJob().
+		Return(true).
+		Maybe()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(nil).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Add a job to the queue
+	job := testutil.CreateTestJob()
+	require.NoError(t, repo.CreateJob(job))
+	queue.jobQueue <- job
+
+	// Trigger processQueue
+	queue.processQueue()
+
+	// Wait for processing
+	time.Sleep(100 * time.Millisecond)
+
+	// Job should have been scheduled
+	queue.mu.RLock()
+	activeCount := len(queue.activeJobs)
+	queue.mu.RUnlock()
+	assert.Greater(t, activeCount, 0)
+}
+
+func TestProcessQueue_NoResources(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockChecker.EXPECT().
+		CanScheduleJob().
+		Return(false).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	queue.schedulerCtx = ctx
+	queue.schedulerCancel = cancel
+	queue.running = true
+
+	// Add a job to the queue
+	job := testutil.CreateTestJob()
+	queue.jobQueue <- job
+
+	// Trigger processQueue with no resources
+	queue.processQueue()
+
+	// Job should not have been scheduled
+	queue.mu.RLock()
+	activeCount := len(queue.activeJobs)
+	queue.mu.RUnlock()
+	assert.Equal(t, 0, activeCount)
+
+	// Job should still be in the queue
+	assert.Equal(t, 1, len(queue.jobQueue))
+}
+
+func TestProcessQueue_LoadsFromDatabase(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockChecker.EXPECT().
+		CanScheduleJob().
+		Return(true).
+		Maybe()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(nil).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Create jobs in database but not in memory queue
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	// Empty the in-memory queue
+	for len(queue.jobQueue) > 0 {
+		<-queue.jobQueue
+	}
+
+	// Trigger processQueue - should load from database
+	queue.processQueue()
+
+	// Wait for processing
+	time.Sleep(200 * time.Millisecond)
+
+	// Job should have been loaded and scheduled
+	queue.mu.RLock()
+	activeCount := len(queue.activeJobs)
+	queue.mu.RUnlock()
+	assert.Greater(t, activeCount, 0)
+}
+
+func TestScheduler_TickerProcessing(t *testing.T) {
+	// This is more of an integration test
+	// We'll verify the scheduler goroutine processes jobs on ticker
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockChecker.EXPECT().
+		CanScheduleJob().
+		Return(true).
+		Maybe()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(nil).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Create a queued job in database
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	// Wait for ticker to fire (5 second ticker + buffer)
+	time.Sleep(6 * time.Second)
+
+	// Job should have been processed
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.NotEqual(t, models.JobStatusQueued, updatedJob.Status)
+}
+
+// ========================================
+// 7. Execution Tests
+// ========================================
+
+func TestExecuteJob_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(nil).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Verify job was marked as completed
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusCompleted, updatedJob.Status)
+	assert.NotNil(t, updatedJob.StartedAt)
+	assert.NotNil(t, updatedJob.CompletedAt)
+}
+
+func TestExecuteJob_Failure(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    0, // No retries
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(errors.New("execution failed")).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+		j.MaxRetries = 0
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Verify job was marked as failed
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusFailed, updatedJob.Status)
+	assert.Contains(t, updatedJob.ErrorMessage, "execution failed")
+}
+
+func TestExecuteJob_ContextCancelled(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    0,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(context.Canceled).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	queue.schedulerCtx = ctx
+	cancel() // Cancel immediately
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+		j.MaxRetries = 0
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Job should be marked as failed
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusFailed, updatedJob.Status)
+}
+
+func TestExecuteJob_CreatesAttempt(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(nil).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Verify attempt was created
+	attempts, err := repo.GetJobAttempts(job.ID)
+	require.NoError(t, err)
+	assert.Len(t, attempts, 1)
+	assert.Equal(t, models.JobStatusCompleted, attempts[0].Status)
+	assert.Equal(t, 1, attempts[0].AttemptNum)
+}
+
+func TestExecuteJob_UpdatesAttempt(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    0,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(errors.New("test error")).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+		j.MaxRetries = 0
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Verify attempt was updated with error
+	attempts, err := repo.GetJobAttempts(job.ID)
+	require.NoError(t, err)
+	assert.Len(t, attempts, 1)
+	assert.Equal(t, models.JobStatusFailed, attempts[0].Status)
+	assert.Equal(t, "test error", attempts[0].ErrorMessage)
+	assert.NotNil(t, attempts[0].EndedAt)
+}
+
+func TestExecuteJob_RetryOnFailure(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent:    2,
+			MaxRetries:       3,
+			RetryBackoffBase: 1 * time.Millisecond,
+			RetryBackoffMax:  100 * time.Millisecond,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(errors.New("temporary failure")).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+		j.MaxRetries = 3
+		j.Retries = 0
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Wait for retry to be scheduled
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify job retry count was incremented
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, updatedJob.Retries)
+
+	// Job should be back in queue for retry
+	select {
+	case jobFromQueue := <-queue.jobQueue:
+		assert.Equal(t, job.ID, jobFromQueue.ID)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Job was not re-queued for retry")
+	}
+}
+
+func TestExecuteJob_NoRetryWhenExhausted(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+			MaxRetries:    1,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(errors.New("failure")).
+		Once()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+		j.MaxRetries = 1
+		j.Retries = 1 // Already at max retries
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Verify job was marked as failed (no retry)
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusFailed, updatedJob.Status)
+	assert.Equal(t, 1, updatedJob.Retries) // Retry count unchanged
+}
+
+func TestExecuteJob_DatabaseErrorDuringStart(t *testing.T) {
+	// Would require mocking repository
+	t.Skip("Requires repository mock")
+}
+
+func TestExecuteJob_DatabaseErrorDuringComplete(t *testing.T) {
+	// Would require mocking repository
+	t.Skip("Requires repository mock")
+}
+
+// ========================================
+// 8. Retry Tests
+// ========================================
+
+func TestCalculateRetryBackoff_FirstRetry(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			RetryBackoffBase: 10 * time.Second,
+			RetryBackoffMax:  5 * time.Minute,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	backoff := queue.calculateRetryBackoff(0)
+	assert.Equal(t, 10*time.Second, backoff) // base * 2^0 = 10 * 1
+}
+
+func TestCalculateRetryBackoff_ExponentialGrowth(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			RetryBackoffBase: 10 * time.Second,
+			RetryBackoffMax:  10 * time.Minute,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	tests := []struct {
+		retryCount int
+		expected   time.Duration
+	}{
+		{0, 10 * time.Second},      // 10 * 2^0 = 10
+		{1, 20 * time.Second},      // 10 * 2^1 = 20
+		{2, 40 * time.Second},      // 10 * 2^2 = 40
+		{3, 80 * time.Second},      // 10 * 2^3 = 80
+		{4, 160 * time.Second},     // 10 * 2^4 = 160
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("retry_%d", tt.retryCount), func(t *testing.T) {
+			backoff := queue.calculateRetryBackoff(tt.retryCount)
+			assert.Equal(t, tt.expected, backoff)
+		})
+	}
+}
+
+func TestCalculateRetryBackoff_CappedAtMax(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			RetryBackoffBase: 10 * time.Second,
+			RetryBackoffMax:  1 * time.Minute, // Cap at 1 minute
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// After enough retries, should cap at max
+	backoff := queue.calculateRetryBackoff(10) // Would be 10 * 2^10 = 10240 seconds
+	assert.Equal(t, 1*time.Minute, backoff)
+}
+
+func TestCalculateRetryBackoff_MultipleRetries(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			RetryBackoffBase: 5 * time.Second,
+			RetryBackoffMax:  5 * time.Minute,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// Each backoff should be longer than the previous
+	backoff1 := queue.calculateRetryBackoff(0)
+	backoff2 := queue.calculateRetryBackoff(1)
+	backoff3 := queue.calculateRetryBackoff(2)
+
+	assert.Less(t, backoff1, backoff2)
+	assert.Less(t, backoff2, backoff3)
+}
+
+// ========================================
+// 9. Cleanup Tests
+// ========================================
+
+func TestPerformCleanup_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			CleanupCompletedAfter: 1 * time.Hour,
+			CleanupFailedAfter:    24 * time.Hour,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// Create old completed job
+	oldJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusCompleted
+	})
+	require.NoError(t, repo.CreateJob(oldJob))
+
+	// Manually set updated_at to be old (would need direct SQL or wait)
+	// For this test, we'll just verify cleanup runs without error
+	queue.performCleanup()
+
+	// Cleanup should run without error
+	// Full verification would require direct SQL manipulation
+}
+
+func TestPerformCleanup_NoOldJobs(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			CleanupCompletedAfter: 1 * time.Hour,
+			CleanupFailedAfter:    24 * time.Hour,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// Create recent completed job
+	recentJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusCompleted
+	})
+	require.NoError(t, repo.CreateJob(recentJob))
+
+	queue.performCleanup()
+
+	// Job should still exist
+	job, err := repo.GetJob(recentJob.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, job)
+}
+
+func TestPerformCleanup_DatabaseError(t *testing.T) {
+	// Would require repository mock
+	t.Skip("Requires repository mock to simulate DB failure")
+}
+
+func TestCleanupRoutine_TickerFires(t *testing.T) {
+	// This would require running for >1 hour or mocking time
+	// Skipping for practical reasons
+	t.Skip("Requires long wait or time mocking")
+}
+
+// ========================================
+// 10. Load Existing Jobs Tests
+// ========================================
+
+func TestLoadExistingJobs_QueuedJobs(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	// Create queued jobs
+	job1 := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+		j.Priority = 10
+	})
+	job2 := testutil.CreateTestJob(func(j *models.Job) {
+		j.Name = "job2"
+		j.Status = models.JobStatusQueued
+		j.Priority = 5
+	})
+	require.NoError(t, repo.CreateJob(job1))
+	require.NoError(t, repo.CreateJob(job2))
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue.schedulerCtx = ctx
+	queue.schedulerCancel = cancel
+
+	err := queue.loadExistingJobs()
+	require.NoError(t, err)
+
+	// Jobs should be in the queue (higher priority first)
+	assert.Greater(t, len(queue.jobQueue), 0)
+}
+
+func TestLoadExistingJobs_ResetsRunningJobs(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	// Create a running job (simulates crash recovery)
+	runningJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusRunning
+	})
+	require.NoError(t, repo.CreateJob(runningJob))
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue.schedulerCtx = ctx
+	queue.schedulerCancel = cancel
+
+	err := queue.loadExistingJobs()
+	require.NoError(t, err)
+
+	// Job should be reset to queued
+	updatedJob, err := repo.GetJob(runningJob.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusQueued, updatedJob.Status)
+}
+
+func TestLoadExistingJobs_ResetsPendingJobs(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	// Create a pending job
+	pendingJob := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusPending
+	})
+	require.NoError(t, repo.CreateJob(pendingJob))
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue.schedulerCtx = ctx
+	queue.schedulerCancel = cancel
+
+	err := queue.loadExistingJobs()
+	require.NoError(t, err)
+
+	// Job should be reset to queued
+	updatedJob, err := repo.GetJob(pendingJob.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusQueued, updatedJob.Status)
+}
+
+func TestLoadExistingJobs_FullQueue(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := newMockResourceChecker()
+
+	// Create more jobs than the queue can hold
+	for i := 0; i < 1010; i++ {
+		job := testutil.CreateTestJob(func(j *models.Job) {
+			j.Name = fmt.Sprintf("job-%d", i)
+			j.Status = models.JobStatusQueued
+		})
+		require.NoError(t, repo.CreateJob(job))
+	}
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queue.schedulerCtx = ctx
+	queue.schedulerCancel = cancel
+
+	err := queue.loadExistingJobs()
+	require.NoError(t, err)
+
+	// Queue should be at capacity (1000), some jobs won't fit
+	assert.Equal(t, 1000, len(queue.jobQueue))
+}
+
+// ========================================
+// 11. Concurrency Tests
+// ========================================
+
+func TestConcurrentEnqueue(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxRetries: 3,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+
+	// Enqueue jobs from multiple goroutines
+	numGoroutines := 10
+	jobsPerGoroutine := 10
+	done := make(chan bool, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(goroutineID int) {
+			for j := 0; j < jobsPerGoroutine; j++ {
+				job := testutil.CreateTestJob(func(job *models.Job) {
+					job.Name = fmt.Sprintf("job-g%d-j%d", goroutineID, j)
+				})
+				err := q.Enqueue(job)
+				assert.NoError(t, err)
+			}
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Verify all jobs were created
+	jobs, err := q.GetJobs(models.JobFilter{
+		Status: []models.JobStatus{models.JobStatusQueued},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, numGoroutines*jobsPerGoroutine, len(jobs))
+}
+
+func TestConcurrentCancelAndExecute(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 5,
+			MaxRetries:    0,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	// Mock executor to run for a bit
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, job *models.Job) error {
+			time.Sleep(100 * time.Millisecond)
+			return nil
+		}).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Create and enqueue jobs
+	jobs := make([]*models.Job, 10)
+	for i := 0; i < 10; i++ {
+		job := testutil.CreateTestJob(func(j *models.Job) {
+			j.Name = fmt.Sprintf("concurrent-job-%d", i)
+		})
+		require.NoError(t, q.Enqueue(job))
+		jobs[i] = job
+	}
+
+	// Wait a bit for jobs to start
+	time.Sleep(150 * time.Millisecond)
+
+	// Try to cancel jobs concurrently
+	for _, job := range jobs {
+		go func(jobID int64) {
+			_ = q.CancelJob(jobID)
+		}(job.ID)
+	}
+
+	// Wait for cancellations
+	time.Sleep(200 * time.Millisecond)
+
+	// No race conditions should occur (test with -race flag)
+}
+
+func TestRaceConditionActiveJobs(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 10,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+
+	q := New(repo, cfg, mockChecker)
+	queue := q.(*queue)
+
+	// Simulate concurrent reads and writes to activeJobs
+	done := make(chan bool, 20)
+
+	// Writers
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			queue.mu.Lock()
+			queue.activeJobs[int64(id)] = func() {}
+			queue.mu.Unlock()
+			done <- true
+		}(i)
+	}
+
+	// Readers
+	for i := 0; i < 10; i++ {
+		go func() {
+			queue.mu.RLock()
+			_ = len(queue.activeJobs)
+			queue.mu.RUnlock()
+			done <- true
+		}()
+	}
+
+	// Wait for all operations
+	for i := 0; i < 20; i++ {
+		<-done
+	}
+
+	// No race conditions should occur (test with -race flag)
+}
+
+func TestShutdownDuringExecution(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+		Server: config.ServerConfig{
+			ShutdownTimeout: 2 * time.Second,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	// Mock executor to run for longer than shutdown timeout
+	executionStarted := make(chan struct{})
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		RunAndReturn(func(ctx context.Context, job *models.Job) error {
+			close(executionStarted)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Second):
+				return nil
+			}
+		}).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx := context.Background()
+	err := q.Start(ctx)
+	require.NoError(t, err)
+
+	// Enqueue a job
+	job := testutil.CreateTestJob()
+	require.NoError(t, q.Enqueue(job))
+
+	// Wait for execution to start
+	<-executionStarted
+
+	// Stop the queue (should timeout waiting for job)
+	startStop := time.Now()
+	err = q.Stop()
+	stopDuration := time.Since(startStop)
+
+	assert.NoError(t, err)
+	// Should have waited close to the shutdown timeout
+	assert.GreaterOrEqual(t, stopDuration, 2*time.Second)
+	assert.Less(t, stopDuration, 3*time.Second)
+}
+
+func TestResourceCheckerIntegration(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 5,
+			MaxRetries:    0,
+		},
+	}
+	mockChecker := newMockResourceChecker()
+	mockExecutor := newMockJobExecutor()
+
+	callCount := 0
+	// Resource checker blocks after 2 jobs
+	mockChecker.EXPECT().
+		CanScheduleJob().
+		RunAndReturn(func() bool {
+			callCount++
+			return callCount <= 2
+		}).
+		Maybe()
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(nil).
+		Maybe()
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := q.Start(ctx)
+	require.NoError(t, err)
+	defer q.Stop()
+
+	// Enqueue 5 jobs
+	for i := 0; i < 5; i++ {
+		job := testutil.CreateTestJob(func(j *models.Job) {
+			j.Name = fmt.Sprintf("resource-test-%d", i)
+		})
+		require.NoError(t, q.Enqueue(job))
+	}
+
+	// Wait for processing
+	time.Sleep(200 * time.Millisecond)
+
+	queue := q.(*queue)
+	queue.mu.RLock()
+	activeCount := len(queue.activeJobs)
+	queue.mu.RUnlock()
+
+	// Should have stopped scheduling after resource check failed
+	assert.LessOrEqual(t, activeCount, 2)
+}
+
+func TestLoadExistingJobs_DatabaseError(t *testing.T) {
+	// Would require repository mock
+	t.Skip("Requires repository mock to simulate DB failure")
+}

@@ -1,0 +1,14 @@
+with-expecter: true
+dir: "internal/mocks"
+outpkg: mocks
+packages:
+  grabarr/internal/interfaces:
+    interfaces:
+      JobQueue:
+      JobExecutor:
+      ResourceChecker:
+      ResourceMonitor:
+      SyncService:
+      SyncRepository:
+      BandwidthMonitor:
+      RCloneClient:

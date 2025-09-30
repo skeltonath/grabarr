@@ -9,30 +9,15 @@ import (
 	"time"
 
 	"grabarr/internal/config"
+	"grabarr/internal/interfaces"
 	"grabarr/internal/models"
 	"grabarr/internal/repository"
 )
 
-type JobQueue interface {
-	Start(ctx context.Context) error
-	Stop() error
-	Enqueue(job *models.Job) error
-	GetJob(id int64) (*models.Job, error)
-	GetJobs(filter models.JobFilter) ([]*models.Job, error)
-	CancelJob(id int64) error
-	GetSummary() (*models.JobSummary, error)
-	SetJobExecutor(executor JobExecutor)
-}
-
-type JobExecutor interface {
-	Execute(ctx context.Context, job *models.Job) error
-	CanExecute() bool
-}
-
 type queue struct {
 	repo     *repository.Repository
 	config   *config.Config
-	executor JobExecutor
+	executor interfaces.JobExecutor
 
 	// Internal state
 	mu              sync.RWMutex
@@ -43,26 +28,13 @@ type queue struct {
 	schedulerCancel context.CancelFunc
 
 	// Resource management
-	resourceChecker ResourceChecker
+	resourceChecker interfaces.ResourceChecker
 
 	// Cleanup
 	lastCleanup time.Time
 }
 
-type ResourceChecker interface {
-	CanScheduleJob() bool
-	GetResourceStatus() ResourceStatus
-}
-
-type ResourceStatus struct {
-	BandwidthAvailable bool    `json:"bandwidth_available"`
-	BandwidthUsage     float64 `json:"bandwidth_usage_percent"`
-	DiskSpaceAvailable bool    `json:"disk_space_available"`
-	CacheDiskFree      int64   `json:"cache_disk_free_bytes"`
-	ArrayDiskFree      int64   `json:"array_disk_free_bytes"`
-}
-
-func New(repo *repository.Repository, config *config.Config, resourceChecker ResourceChecker) JobQueue {
+func New(repo *repository.Repository, config *config.Config, resourceChecker interfaces.ResourceChecker) interfaces.JobQueue {
 	return &queue{
 		repo:            repo,
 		config:          config,
@@ -73,7 +45,7 @@ func New(repo *repository.Repository, config *config.Config, resourceChecker Res
 	}
 }
 
-func (q *queue) SetJobExecutor(executor JobExecutor) {
+func (q *queue) SetJobExecutor(executor interfaces.JobExecutor) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.executor = executor

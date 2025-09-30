@@ -8,29 +8,20 @@ import (
 	"time"
 
 	"grabarr/internal/config"
+	"grabarr/internal/interfaces"
 	"grabarr/internal/models"
 	"grabarr/internal/rclone"
 )
 
 const MaxConcurrentSyncs = 1
 
-type SyncRepository interface {
-	CreateSyncJob(syncJob *models.SyncJob) error
-	GetSyncJob(id int64) (*models.SyncJob, error)
-	GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error)
-	UpdateSyncJob(syncJob *models.SyncJob) error
-	DeleteSyncJob(id int64) error
-	GetSyncSummary() (*models.SyncSummary, error)
-	GetActiveSyncJobsCount() (int, error)
-}
-
 type SyncService struct {
 	config     *config.Config
-	repository SyncRepository
-	client     *rclone.Client
+	repository interfaces.SyncRepository
+	client     interfaces.RCloneClient
 }
 
-func NewSyncService(cfg *config.Config, repo SyncRepository) *SyncService {
+func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository) *SyncService {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
@@ -222,7 +213,7 @@ func (s *SyncService) monitorSyncJob(ctx context.Context, syncJob *models.SyncJo
 	}
 }
 
-func (s *SyncService) updateSyncProgress(syncJob *models.SyncJob, status *rclone.JobStatus) {
+func (s *SyncService) updateSyncProgress(syncJob *models.SyncJob, status *models.RCloneJobStatus) {
 	progress := models.SyncProgress{
 		LastUpdateTime: time.Now(),
 	}

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"grabarr/internal/config"
-	"grabarr/internal/queue"
+	"grabarr/internal/interfaces"
 
 	"golang.org/x/sys/unix"
 )
@@ -19,20 +19,15 @@ type Monitor struct {
 	// Resource monitoring state
 	mu                sync.RWMutex
 	lastResourceCheck time.Time
-	resourceStatus    queue.ResourceStatus
+	resourceStatus    interfaces.ResourceStatus
 	metrics           map[string]interface{}
 
 	// Bandwidth monitoring
-	bandwidthMonitor BandwidthMonitor
+	bandwidthMonitor interfaces.BandwidthMonitor
 
 	// Context management
 	ctx    context.Context
 	cancel context.CancelFunc
-}
-
-type BandwidthMonitor interface {
-	GetCurrentUsage() (float64, error) // Returns usage percentage
-	IsAvailable() bool
 }
 
 func New(cfg *config.Config) *Monitor {
@@ -64,7 +59,7 @@ func (m *Monitor) Stop() error {
 	return nil
 }
 
-func (m *Monitor) GetResourceStatus() queue.ResourceStatus {
+func (m *Monitor) GetResourceStatus() interfaces.ResourceStatus {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.resourceStatus
@@ -272,7 +267,7 @@ type sshBandwidthMonitor struct {
 	keyPath  string
 }
 
-func NewSSHBandwidthMonitor(host, username, keyPath string) BandwidthMonitor {
+func NewSSHBandwidthMonitor(host, username, keyPath string) interfaces.BandwidthMonitor {
 	return &sshBandwidthMonitor{
 		host:     host,
 		username: username,

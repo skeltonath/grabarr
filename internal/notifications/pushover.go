@@ -18,6 +18,7 @@ type PushoverNotifier struct {
 	config     *config.Config
 	httpClient *http.Client
 	enabled    bool
+	apiURL     string
 }
 
 type pushoverRequest struct {
@@ -51,6 +52,7 @@ func NewPushoverNotifier(cfg *config.Config) *PushoverNotifier {
 			Timeout: 30 * time.Second,
 		},
 		enabled: cfg.GetNotifications().Pushover.Enabled,
+		apiURL:  pushoverAPIURL,
 	}
 }
 
@@ -167,7 +169,7 @@ func (p *PushoverNotifier) sendNotification(req pushoverRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", pushoverAPIURL, bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.apiURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}

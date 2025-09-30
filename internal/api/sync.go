@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -13,14 +12,6 @@ import (
 
 type CreateSyncRequest struct {
 	RemotePath string `json:"remote_path"`
-}
-
-type SyncService interface {
-	StartSync(ctx context.Context, remotePath string) (*models.SyncJob, error)
-	GetSyncJob(id int64) (*models.SyncJob, error)
-	GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error)
-	CancelSync(ctx context.Context, id int64) error
-	GetSyncSummary() (*models.SyncSummary, error)
 }
 
 func (h *Handlers) CreateSync(w http.ResponseWriter, r *http.Request) {

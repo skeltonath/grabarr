@@ -9,19 +9,19 @@ import (
 	"time"
 
 	"grabarr/internal/config"
+	"grabarr/internal/interfaces"
 	"grabarr/internal/models"
-	"grabarr/internal/queue"
 	"grabarr/internal/rclone"
 )
 
 type RCloneExecutor struct {
 	config       *config.Config
-	monitor      queue.ResourceChecker
+	monitor      interfaces.ResourceChecker
 	progressChan chan models.JobProgress
-	client       *rclone.Client
+	client       interfaces.RCloneClient
 }
 
-func NewRCloneExecutor(cfg *config.Config, monitor queue.ResourceChecker) *RCloneExecutor {
+func NewRCloneExecutor(cfg *config.Config, monitor interfaces.ResourceChecker) *RCloneExecutor {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
@@ -129,7 +129,7 @@ func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rclone
 	}
 }
 
-func (r *RCloneExecutor) updateJobProgress(job *models.Job, status *rclone.JobStatus) {
+func (r *RCloneExecutor) updateJobProgress(job *models.Job, status *models.RCloneJobStatus) {
 	progress := models.JobProgress{
 		LastUpdateTime: time.Now(),
 	}

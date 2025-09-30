@@ -82,11 +82,30 @@ test-verbose: ## Run tests with verbose output
 	@echo "$(GREEN)Running tests (verbose)...$(NC)"
 	@go test -v ./...
 
-test-coverage: ## Generate test coverage report
+test-race: ## Run tests with race detector
+	@echo "$(GREEN)Running tests with race detector...$(NC)"
+	@go test -race ./...
+	@echo "$(GREEN)✓ Tests passed with no race conditions$(NC)"
+
+test-coverage: ## Generate test coverage report (HTML) - excludes interfaces/mocks/testutil
 	@echo "$(GREEN)Generating test coverage report...$(NC)"
-	@go test -coverprofile=coverage.out ./...
+	@go test \
+		$$(go list ./internal/... | grep -v -e '/interfaces$$' -e '/mocks$$' -e '/testutil$$') \
+		-short -coverprofile=coverage.out
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)✓ Coverage report generated: coverage.html$(NC)"
+	@go tool cover -func=coverage.out | grep total
+
+test-coverage-summary: ## Show test coverage percentage - excludes interfaces/mocks/testutil
+	@echo "$(GREEN)Generating coverage summary...$(NC)"
+	@go test \
+		$$(go list ./internal/... | grep -v -e '/interfaces$$' -e '/mocks$$' -e '/testutil$$') \
+		-short -coverprofile=coverage.out > /dev/null 2>&1
+	@go tool cover -func=coverage.out | grep total | awk '{print "$(GREEN)Total Coverage: " $$3 "$(NC)"}'
+	@rm coverage.out
+
+test-ci: fmt vet test ## Run all pre-commit checks (format, vet, test)
+	@echo "$(GREEN)✓ All pre-commit checks passed$(NC)"
 
 test-sanitizer: ## Run only sanitizer module tests
 	@echo "$(GREEN)Running sanitizer tests...$(NC)"
@@ -121,7 +140,8 @@ docker-shell: ## Open shell in running container
 deploy: docker-build ## Deploy to remote server
 	@echo "$(GREEN)Deploying to ${REMOTE_HOST}...$(NC)"
 	@echo "$(YELLOW)Copying files to remote server...$(NC)"
-	@scp docker-compose.yml config.yaml .env ${REMOTE_USER}@${REMOTE_HOST}:/opt/grabarr/
+	@scp docker-compose.yml .env ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/
+	@scp config.yaml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/config/
 	@echo "$(YELLOW)Saving and loading Docker image on remote...$(NC)"
 	@docker save ${DOCKER_IMAGE}:${DOCKER_TAG} | ssh ${REMOTE_USER}@${REMOTE_HOST} "docker load"
 	@echo "$(YELLOW)Starting service on remote...$(NC)"

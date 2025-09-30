@@ -40,6 +40,34 @@ Grabarr - Go-based download management service for managing downloads from remot
 - Merge to main when complete
 - Always commit related changes together
 
+## Testing Workflow
+- **ALWAYS** add unit tests when adding new features
+- **ALWAYS** update tests when modifying existing code
+- **ALWAYS** run tests before committing: `make test` or `make test-ci`
+- Aim for 70%+ coverage on new code
+- Use table-driven tests for multiple scenarios
+- Mock external dependencies (HTTP, database, etc.)
+- See `TESTING.md` for detailed testing documentation
+
+### Pre-Commit Checklist
+```bash
+make fmt           # Format code
+make vet           # Static analysis
+make test          # Run all tests
+# OR use the combined command:
+make test-ci       # Does all of the above
+```
+
+### Testing Commands
+```bash
+make test                    # Run all tests
+make test-verbose            # Run tests with verbose output
+make test-race               # Run tests with race detector
+make test-coverage           # Generate HTML coverage report
+make test-coverage-summary   # Show coverage percentage
+make test-ci                 # Run all pre-commit checks
+```
+
 ## Config Management Rules
 - **NEVER** add config fields that aren't immediately used in code
 - When adding config fields, update config.yaml and the Go structs simultaneously

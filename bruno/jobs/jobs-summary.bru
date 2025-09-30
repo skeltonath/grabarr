@@ -1,0 +1,15 @@
+meta {
+  name: /jobs/summary
+  type: http
+  seq: 3
+}
+
+get {
+  url: https://hooks.dppeppel.me/grabarr/api/v1/jobs/summary
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"grabarr/internal/models"
 	"io"
 	"net/http"
 	"time"
@@ -86,7 +87,7 @@ type JobListResponse struct {
 
 
 // Copy initiates a copy operation for files or directories with optional filtering
-func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*CopyResponse, error) {
+func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
 	req := SyncCopyRequest{
 		SrcFs:  srcFs,
 		DstFs:  dstFs,
@@ -96,11 +97,11 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 
 	var resp CopyResponse
 	err := c.makeRequest(ctx, "POST", "/sync/copy", req, &resp)
-	return &resp, err
+	return &models.RCloneCopyResponse{JobID: resp.JobID}, err
 }
 
 // CopyWithIgnoreExisting initiates a copy operation that skips existing files
-func (c *Client) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*CopyResponse, error) {
+func (c *Client) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
 	req := SyncCopyRequest{
 		SrcFs:  srcFs,
 		DstFs:  dstFs,
@@ -113,23 +114,45 @@ func (c *Client) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string
 
 	var resp CopyResponse
 	err := c.makeRequest(ctx, "POST", "/sync/copy", req, &resp)
-	return &resp, err
+	return &models.RCloneCopyResponse{JobID: resp.JobID}, err
 }
 
 
 // GetJobStatus gets the status of a specific job
-func (c *Client) GetJobStatus(ctx context.Context, jobID int64) (*JobStatus, error) {
+func (c *Client) GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error) {
 	var status JobStatus
 	endpoint := fmt.Sprintf("/job/status?jobid=%d", jobID)
 	err := c.makeRequest(ctx, "POST", endpoint, nil, &status)
-	return &status, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to model type
+	return &models.RCloneJobStatus{
+		ID:       status.ID,
+		Name:     status.Name,
+		Group:    status.Group,
+		Error:    status.Error,
+		Finished: status.Finished,
+		Success:  status.Success,
+		Duration: status.Duration,
+		Progress: status.Progress,
+		Output: models.RCloneOutput{
+			Bytes:          status.Output.Bytes,
+			Speed:          status.Output.Speed,
+			TotalBytes:     status.Output.TotalBytes,
+			TotalTransfers: status.Output.TotalTransfers,
+			Transfers:      status.Output.Transfers,
+			Errors:         status.Output.Errors,
+		},
+	}, nil
 }
 
 // ListJobs lists all active jobs
-func (c *Client) ListJobs(ctx context.Context) (*JobListResponse, error) {
+func (c *Client) ListJobs(ctx context.Context) (*models.RCloneJobListResponse, error) {
 	var resp JobListResponse
 	err := c.makeRequest(ctx, "POST", "/job/list", nil, &resp)
-	return &resp, err
+	return &models.RCloneJobListResponse{JobIDs: resp.JobIDs}, err
 }
 
 // StopJob stops a running job

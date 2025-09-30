@@ -6,21 +6,16 @@ import (
 	"net/http"
 
 	"grabarr/internal/config"
-	"grabarr/internal/queue"
+	"grabarr/internal/interfaces"
 
 	"github.com/gorilla/mux"
 )
 
 type Handlers struct {
-	queue       queue.JobQueue
-	monitor     ResourceMonitor
+	queue       interfaces.JobQueue
+	monitor     interfaces.ResourceMonitor
 	config      *config.Config
-	syncService SyncService
-}
-
-type ResourceMonitor interface {
-	GetResourceStatus() queue.ResourceStatus
-	GetMetrics() map[string]interface{}
+	syncService interfaces.SyncService
 }
 
 type APIResponse struct {
@@ -31,7 +26,7 @@ type APIResponse struct {
 }
 
 
-func NewHandlers(jobQueue queue.JobQueue, monitor ResourceMonitor, cfg *config.Config, syncService SyncService) *Handlers {
+func NewHandlers(jobQueue interfaces.JobQueue, monitor interfaces.ResourceMonitor, cfg *config.Config, syncService interfaces.SyncService) *Handlers {
 	return &Handlers{
 		queue:       jobQueue,
 		monitor:     monitor,
