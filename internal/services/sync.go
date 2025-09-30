@@ -19,16 +19,22 @@ type SyncService struct {
 	config     *config.Config
 	repository interfaces.SyncRepository
 	client     interfaces.RCloneClient
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository) *SyncService {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &SyncService{
 		config:     cfg,
 		repository: repo,
 		client:     client,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
@@ -66,7 +72,7 @@ func (s *SyncService) StartSync(ctx context.Context, remotePath string) (*models
 	}
 
 	// Start the sync operation asynchronously
-	go s.executeSyncJob(context.Background(), syncJob)
+	go s.executeSyncJob(s.ctx, syncJob)
 
 	return syncJob, nil
 }
@@ -105,6 +111,78 @@ func (s *SyncService) CancelSync(ctx context.Context, id int64) error {
 
 func (s *SyncService) GetSyncSummary() (*models.SyncSummary, error) {
 	return s.repository.GetSyncSummary()
+}
+
+func (s *SyncService) RecoverInterruptedSyncs() error {
+	// Find all sync jobs that are in RUNNING state (interrupted by shutdown/crash)
+	syncs, err := s.repository.GetSyncJobs(models.SyncFilter{
+		Status: []models.SyncStatus{models.SyncStatusRunning},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get running syncs: %w", err)
+	}
+
+	if len(syncs) == 0 {
+		return nil
+	}
+
+	slog.Info("recovering interrupted sync jobs", "count", len(syncs))
+
+	for _, sync := range syncs {
+		// Reset to queued status
+		sync.Status = models.SyncStatusQueued
+		sync.UpdatedAt = time.Now()
+
+		if err := s.repository.UpdateSyncJob(sync); err != nil {
+			slog.Error("failed to recover sync job", "sync_id", sync.ID, "error", err)
+			continue
+		}
+
+		slog.Info("recovered interrupted sync", "sync_id", sync.ID, "remote_path", sync.RemotePath)
+
+		// Restart the sync
+		go s.executeSyncJob(s.ctx, sync)
+	}
+
+	return nil
+}
+
+func (s *SyncService) Shutdown() error {
+	slog.Info("shutting down sync service")
+
+	// Cancel context to stop all ongoing operations
+	s.cancel()
+
+	// Find all active sync jobs and mark them as queued
+	syncs, err := s.repository.GetSyncJobs(models.SyncFilter{
+		Status: []models.SyncStatus{models.SyncStatusRunning},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get active syncs: %w", err)
+	}
+
+	for _, sync := range syncs {
+		// Try to stop the rclone job if it's still running
+		if sync.RCloneJobID != nil {
+			stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := s.client.StopJob(stopCtx, *sync.RCloneJobID); err != nil {
+				slog.Warn("failed to stop rclone job during shutdown", "sync_id", sync.ID, "rclone_job_id", *sync.RCloneJobID, "error", err)
+			}
+			cancel()
+		}
+
+		// Mark as queued for restart
+		sync.Status = models.SyncStatusQueued
+		sync.UpdatedAt = time.Now()
+
+		if err := s.repository.UpdateSyncJob(sync); err != nil {
+			slog.Error("failed to mark sync as queued during shutdown", "sync_id", sync.ID, "error", err)
+		} else {
+			slog.Info("marked interrupted sync as queued", "sync_id", sync.ID, "remote_path", sync.RemotePath)
+		}
+	}
+
+	return nil
 }
 
 func (s *SyncService) executeSyncJob(ctx context.Context, syncJob *models.SyncJob) {

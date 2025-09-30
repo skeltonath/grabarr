@@ -83,9 +83,9 @@ func (q *queue) Start(ctx context.Context) error {
 
 func (q *queue) Stop() error {
 	q.mu.Lock()
-	defer q.mu.Unlock()
 
 	if !q.running {
+		q.mu.Unlock()
 		return nil
 	}
 
@@ -96,11 +96,39 @@ func (q *queue) Stop() error {
 		q.schedulerCancel()
 	}
 
+	// Mark all active jobs as queued before cancelling them
+	interruptedJobIDs := make([]int64, 0, len(q.activeJobs))
+	for jobID := range q.activeJobs {
+		interruptedJobIDs = append(interruptedJobIDs, jobID)
+	}
+	q.mu.Unlock()
+
+	// Update job statuses outside the lock to avoid deadlock
+	for _, jobID := range interruptedJobIDs {
+		job, err := q.repo.GetJob(jobID)
+		if err != nil {
+			slog.Error("failed to get job during shutdown", "job_id", jobID, "error", err)
+			continue
+		}
+
+		if job.Status == models.JobStatusRunning {
+			job.Status = models.JobStatusQueued
+			job.UpdatedAt = time.Now()
+			if err := q.repo.UpdateJob(job); err != nil {
+				slog.Error("failed to mark job as queued during shutdown", "job_id", jobID, "error", err)
+			} else {
+				slog.Info("marked interrupted job as queued", "job_id", jobID, "name", job.Name)
+			}
+		}
+	}
+
 	// Cancel all active jobs
+	q.mu.Lock()
 	for jobID, cancel := range q.activeJobs {
 		slog.Info("cancelling active job", "job_id", jobID)
 		cancel()
 	}
+	q.mu.Unlock()
 
 	// Wait for jobs to finish or timeout
 	timeout := time.After(q.config.GetServer().ShutdownTimeout)
@@ -110,10 +138,16 @@ func (q *queue) Stop() error {
 	for {
 		select {
 		case <-timeout:
-			slog.Warn("timeout waiting for jobs to finish", "active_jobs", len(q.activeJobs))
+			q.mu.RLock()
+			activeCount := len(q.activeJobs)
+			q.mu.RUnlock()
+			slog.Warn("timeout waiting for jobs to finish", "active_jobs", activeCount)
 			return nil
 		case <-ticker.C:
-			if len(q.activeJobs) == 0 {
+			q.mu.RLock()
+			activeCount := len(q.activeJobs)
+			q.mu.RUnlock()
+			if activeCount == 0 {
 				slog.Info("all jobs finished, queue stopped")
 				return nil
 			}

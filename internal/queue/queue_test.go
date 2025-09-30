@@ -147,6 +147,110 @@ func TestStop_Success(t *testing.T) {
 	assert.False(t, queue.running)
 }
 
+func TestStop_MarksRunningJobsAsQueued(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+		Server: config.ServerConfig{
+			ShutdownTimeout: 1 * time.Second,
+		},
+	}
+	mockChecker := mocks.NewMockResourceChecker(t)
+	mockExecutor := mocks.NewMockJobExecutor(t)
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx := context.Background()
+	err := q.Start(ctx)
+	require.NoError(t, err)
+
+	// Manually create a job and mark it as running (simulating a running job)
+	job := testutil.CreateTestJob()
+	err = repo.CreateJob(job)
+	require.NoError(t, err)
+
+	// Mark it as running directly in the database
+	job.MarkStarted()
+	err = repo.UpdateJob(job)
+	require.NoError(t, err)
+
+	// Manually add to active jobs map to simulate it's being tracked
+	queue := q.(*queue)
+	queue.mu.Lock()
+	_, cancel := context.WithCancel(ctx)
+	queue.activeJobs[job.ID] = cancel
+	queue.mu.Unlock()
+
+	// Stop the queue
+	err = q.Stop()
+	assert.NoError(t, err)
+
+	// Verify job was marked as queued
+	queuedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusQueued, queuedJob.Status)
+}
+
+func TestStop_HandlesMultipleRunningJobs(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 3,
+		},
+		Server: config.ServerConfig{
+			ShutdownTimeout: 1 * time.Second,
+		},
+	}
+	mockChecker := mocks.NewMockResourceChecker(t)
+	mockExecutor := mocks.NewMockJobExecutor(t)
+
+	q := New(repo, cfg, mockChecker)
+	q.SetJobExecutor(mockExecutor)
+
+	ctx := context.Background()
+	err := q.Start(ctx)
+	require.NoError(t, err)
+
+	// Create multiple jobs and mark them as running
+	jobs := []*models.Job{
+		testutil.CreateTestJob(),
+		testutil.CreateTestJob(),
+		testutil.CreateTestJob(),
+	}
+
+	queue := q.(*queue)
+	for _, job := range jobs {
+		// Create in database
+		err = repo.CreateJob(job)
+		require.NoError(t, err)
+
+		// Mark as running
+		job.MarkStarted()
+		err = repo.UpdateJob(job)
+		require.NoError(t, err)
+
+		// Add to active jobs map
+		queue.mu.Lock()
+		_, cancel := context.WithCancel(ctx)
+		queue.activeJobs[job.ID] = cancel
+		queue.mu.Unlock()
+	}
+
+	// Stop the queue
+	err = q.Stop()
+	assert.NoError(t, err)
+
+	// Verify all jobs were marked as queued
+	for _, job := range jobs {
+		queuedJob, err := repo.GetJob(job.ID)
+		require.NoError(t, err)
+		assert.Equal(t, models.JobStatusQueued, queuedJob.Status)
+	}
+}
+
 // ========================================
 // 3. Enqueue Tests
 // ========================================

@@ -40,10 +40,15 @@ func TestStartSync_Success(t *testing.T) {
 	mockRepo := mocks.NewMockSyncRepository(t)
 	mockClient := mocks.NewMockRCloneClient(t)
 
+	serviceCtx, serviceCancel := context.WithCancel(context.Background())
+	defer serviceCancel()
+
 	service := &SyncService{
 		config:     cfg,
 		repository: mockRepo,
 		client:     mockClient,
+		ctx:        serviceCtx,
+		cancel:     serviceCancel,
 	}
 
 	ctx := context.Background()
@@ -534,4 +539,237 @@ func TestUpdateSyncProgress_ETACalculation(t *testing.T) {
 	// ETA should be roughly 7 seconds from now (7000 bytes remaining / 1000 bytes/sec)
 	expectedETA := time.Now().Add(7 * time.Second)
 	assert.WithinDuration(t, expectedETA, *syncJob.Progress.ETA, 2*time.Second)
+}
+
+func TestRecoverInterruptedSyncs_Success(t *testing.T) {
+	cfg := &config.Config{
+		Downloads: config.DownloadsConfig{
+			LocalPath: "/local/downloads",
+		},
+	}
+	mockRepo := mocks.NewMockSyncRepository(t)
+	mockClient := mocks.NewMockRCloneClient(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	service := &SyncService{
+		config:     cfg,
+		repository: mockRepo,
+		client:     mockClient,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	// Create mock running syncs
+	runningSyncs := []*models.SyncJob{
+		{
+			ID:         1,
+			RemotePath: "/remote/path1",
+			LocalPath:  "/local/downloads",
+			Status:     models.SyncStatusRunning,
+		},
+		{
+			ID:         2,
+			RemotePath: "/remote/path2",
+			LocalPath:  "/local/downloads",
+			Status:     models.SyncStatusRunning,
+		},
+	}
+
+	// Mock GetSyncJobs to return running syncs
+	mockRepo.EXPECT().
+		GetSyncJobs(mock.MatchedBy(func(filter models.SyncFilter) bool {
+			return len(filter.Status) == 1 && filter.Status[0] == models.SyncStatusRunning
+		})).
+		Return(runningSyncs, nil).
+		Once()
+
+	// Mock UpdateSyncJob - will be called during recovery and potentially during async execution
+	mockRepo.EXPECT().
+		UpdateSyncJob(mock.Anything).
+		Return(nil).
+		Maybe()
+
+	// Mock the async executeSyncJob calls (they'll happen in goroutines)
+	mockClient.EXPECT().
+		CopyWithIgnoreExisting(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(&models.RCloneCopyResponse{JobID: 123}, nil).
+		Maybe()
+
+	// Execute recovery
+	err := service.RecoverInterruptedSyncs()
+	assert.NoError(t, err)
+}
+
+func TestRecoverInterruptedSyncs_NoRunningSyncs(t *testing.T) {
+	cfg := &config.Config{}
+	mockRepo := mocks.NewMockSyncRepository(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	service := &SyncService{
+		config:     cfg,
+		repository: mockRepo,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	// Mock GetSyncJobs to return empty list
+	mockRepo.EXPECT().
+		GetSyncJobs(mock.Anything).
+		Return([]*models.SyncJob{}, nil).
+		Once()
+
+	err := service.RecoverInterruptedSyncs()
+	assert.NoError(t, err)
+}
+
+func TestRecoverInterruptedSyncs_GetJobsError(t *testing.T) {
+	cfg := &config.Config{}
+	mockRepo := mocks.NewMockSyncRepository(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	service := &SyncService{
+		config:     cfg,
+		repository: mockRepo,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	// Mock GetSyncJobs to return error
+	mockRepo.EXPECT().
+		GetSyncJobs(mock.Anything).
+		Return(nil, errors.New("database error")).
+		Once()
+
+	err := service.RecoverInterruptedSyncs()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get running syncs")
+}
+
+func TestShutdown_Success(t *testing.T) {
+	cfg := &config.Config{}
+	mockRepo := mocks.NewMockSyncRepository(t)
+	mockClient := mocks.NewMockRCloneClient(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	service := &SyncService{
+		config:     cfg,
+		repository: mockRepo,
+		client:     mockClient,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	rcloneJobID := int64(999)
+	runningSyncs := []*models.SyncJob{
+		{
+			ID:          1,
+			RemotePath:  "/remote/path1",
+			Status:      models.SyncStatusRunning,
+			RCloneJobID: &rcloneJobID,
+		},
+	}
+
+	// Mock GetSyncJobs to return running syncs
+	mockRepo.EXPECT().
+		GetSyncJobs(mock.MatchedBy(func(filter models.SyncFilter) bool {
+			return len(filter.Status) == 1 && filter.Status[0] == models.SyncStatusRunning
+		})).
+		Return(runningSyncs, nil).
+		Once()
+
+	// Mock StopJob
+	mockClient.EXPECT().
+		StopJob(mock.Anything, rcloneJobID).
+		Return(nil).
+		Once()
+
+	// Mock UpdateSyncJob
+	mockRepo.EXPECT().
+		UpdateSyncJob(mock.MatchedBy(func(job *models.SyncJob) bool {
+			return job.ID == 1 && job.Status == models.SyncStatusQueued
+		})).
+		Return(nil).
+		Once()
+
+	err := service.Shutdown()
+	assert.NoError(t, err)
+}
+
+func TestShutdown_NoActiveSyncs(t *testing.T) {
+	cfg := &config.Config{}
+	mockRepo := mocks.NewMockSyncRepository(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	service := &SyncService{
+		config:     cfg,
+		repository: mockRepo,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	// Mock GetSyncJobs to return empty list
+	mockRepo.EXPECT().
+		GetSyncJobs(mock.Anything).
+		Return([]*models.SyncJob{}, nil).
+		Once()
+
+	err := service.Shutdown()
+	assert.NoError(t, err)
+}
+
+func TestShutdown_StopJobError(t *testing.T) {
+	cfg := &config.Config{}
+	mockRepo := mocks.NewMockSyncRepository(t)
+	mockClient := mocks.NewMockRCloneClient(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	service := &SyncService{
+		config:     cfg,
+		repository: mockRepo,
+		client:     mockClient,
+		ctx:        ctx,
+		cancel:     cancel,
+	}
+
+	rcloneJobID := int64(999)
+	runningSyncs := []*models.SyncJob{
+		{
+			ID:          1,
+			RemotePath:  "/remote/path1",
+			Status:      models.SyncStatusRunning,
+			RCloneJobID: &rcloneJobID,
+		},
+	}
+
+	// Mock GetSyncJobs
+	mockRepo.EXPECT().
+		GetSyncJobs(mock.Anything).
+		Return(runningSyncs, nil).
+		Once()
+
+	// Mock StopJob to return error (should be logged but not fail shutdown)
+	mockClient.EXPECT().
+		StopJob(mock.Anything, rcloneJobID).
+		Return(errors.New("stop job failed")).
+		Once()
+
+	// Mock UpdateSyncJob (should still be called)
+	mockRepo.EXPECT().
+		UpdateSyncJob(mock.MatchedBy(func(job *models.SyncJob) bool {
+			return job.ID == 1 && job.Status == models.SyncStatusQueued
+		})).
+		Return(nil).
+		Once()
+
+	err := service.Shutdown()
+	assert.NoError(t, err) // Shutdown should succeed even if stop job fails
 }
