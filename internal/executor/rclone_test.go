@@ -22,14 +22,16 @@ func TestNewRCloneExecutor(t *testing.T) {
 		},
 	}
 	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
-	executor := NewRCloneExecutor(cfg, mockMonitor)
+	executor := NewRCloneExecutor(cfg, mockMonitor, mockRepo)
 
 	assert.NotNil(t, executor)
 	assert.Equal(t, cfg, executor.config)
 	assert.Equal(t, mockMonitor, executor.monitor)
 	assert.NotNil(t, executor.client)
 	assert.NotNil(t, executor.progressChan)
+	assert.Equal(t, mockRepo, executor.repo)
 }
 
 func TestExecute_Success(t *testing.T) {
@@ -40,12 +42,14 @@ func TestExecute_Success(t *testing.T) {
 	}
 	mockMonitor := mocks.NewMockResourceChecker(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		config:       cfg,
 		monitor:      mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
+		repo:         mockRepo,
 	}
 
 	job := &models.Job{
@@ -87,6 +91,12 @@ func TestExecute_Success(t *testing.T) {
 		}, nil).
 		Once()
 
+	// Mock UpdateJob for final persist
+	mockRepo.EXPECT().
+		UpdateJob(mock.Anything).
+		Return(nil).
+		Once()
+
 	err := executor.Execute(ctx, job)
 
 	assert.NoError(t, err)
@@ -96,12 +106,14 @@ func TestExecute_DaemonNotResponsive(t *testing.T) {
 	cfg := &config.Config{}
 	mockMonitor := mocks.NewMockResourceChecker(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		config:       cfg,
 		monitor:      mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
+		repo:         mockRepo,
 	}
 
 	job := &models.Job{
@@ -132,12 +144,14 @@ func TestExecute_CopyFails(t *testing.T) {
 	}
 	mockMonitor := mocks.NewMockResourceChecker(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		config:       cfg,
 		monitor:      mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
+		repo:         mockRepo,
 	}
 
 	job := &models.Job{
@@ -253,10 +267,12 @@ func TestPrepareCopyRequest_NestedPath(t *testing.T) {
 
 func TestMonitorJob_Success(t *testing.T) {
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		client:       mockClient,
 		progressChan: make(chan models.JobProgress, 100),
+		repo:         mockRepo,
 	}
 
 	job := &models.Job{
@@ -279,6 +295,12 @@ func TestMonitorJob_Success(t *testing.T) {
 		}, nil).
 		Once()
 
+	// Expect UpdateJob for final persist
+	mockRepo.EXPECT().
+		UpdateJob(mock.Anything).
+		Return(nil).
+		Once()
+
 	err := executor.monitorJob(ctx, job, rcloneJobID)
 
 	assert.NoError(t, err)
@@ -286,10 +308,12 @@ func TestMonitorJob_Success(t *testing.T) {
 
 func TestMonitorJob_Failure(t *testing.T) {
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		client:       mockClient,
 		progressChan: make(chan models.JobProgress, 100),
+		repo:         mockRepo,
 	}
 
 	job := &models.Job{
@@ -309,6 +333,12 @@ func TestMonitorJob_Failure(t *testing.T) {
 		}, nil).
 		Once()
 
+	// Expect UpdateJob for final persist even on failure
+	mockRepo.EXPECT().
+		UpdateJob(mock.Anything).
+		Return(nil).
+		Once()
+
 	err := executor.monitorJob(ctx, job, rcloneJobID)
 
 	assert.Error(t, err)
@@ -318,10 +348,12 @@ func TestMonitorJob_Failure(t *testing.T) {
 
 func TestMonitorJob_ContextCancelled(t *testing.T) {
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		client:       mockClient,
 		progressChan: make(chan models.JobProgress, 100),
+		repo:         mockRepo,
 	}
 
 	job := &models.Job{
@@ -347,10 +379,12 @@ func TestMonitorJob_ContextCancelled(t *testing.T) {
 
 func TestMonitorJob_StatusCheckError(t *testing.T) {
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		client:       mockClient,
 		progressChan: make(chan models.JobProgress, 100),
+		repo:         mockRepo,
 	}
 
 	job := &models.Job{
@@ -374,6 +408,12 @@ func TestMonitorJob_StatusCheckError(t *testing.T) {
 			Success:  true,
 		}, nil).
 		Once()
+
+	// Expect UpdateJob calls - one periodic, one final
+	mockRepo.EXPECT().
+		UpdateJob(mock.Anything).
+		Return(nil).
+		Maybe() // Allow multiple calls during monitoring
 
 	err := executor.monitorJob(ctx, job, rcloneJobID)
 

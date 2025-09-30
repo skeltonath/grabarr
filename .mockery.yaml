@@ -6,6 +6,7 @@ packages:
     interfaces:
       JobQueue:
       JobExecutor:
+      JobRepository:
       ResourceChecker:
       ResourceMonitor:
       SyncService:

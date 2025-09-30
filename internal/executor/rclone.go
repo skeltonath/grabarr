@@ -19,9 +19,10 @@ type RCloneExecutor struct {
 	monitor      interfaces.ResourceChecker
 	progressChan chan models.JobProgress
 	client       interfaces.RCloneClient
+	repo         interfaces.JobRepository
 }
 
-func NewRCloneExecutor(cfg *config.Config, monitor interfaces.ResourceChecker) *RCloneExecutor {
+func NewRCloneExecutor(cfg *config.Config, monitor interfaces.ResourceChecker, repo interfaces.JobRepository) *RCloneExecutor {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
@@ -30,6 +31,7 @@ func NewRCloneExecutor(cfg *config.Config, monitor interfaces.ResourceChecker) *
 		monitor:      monitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       client,
+		repo:         repo,
 	}
 }
 
@@ -96,6 +98,10 @@ func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rclone
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	// Track when we last persisted progress to database
+	lastPersist := time.Now()
+	persistInterval := 2 * time.Second
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -114,11 +120,27 @@ func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rclone
 				continue
 			}
 
-			// Update progress
+			// Update progress in memory
 			r.updateJobProgress(job, status)
+
+			// Persist to database periodically (every 2 seconds)
+			now := time.Now()
+			if now.Sub(lastPersist) >= persistInterval {
+				if err := r.repo.UpdateJob(job); err != nil {
+					slog.Error("failed to persist job progress", "job_id", job.ID, "error", err)
+				} else {
+					lastPersist = now
+					slog.Debug("persisted job progress", "job_id", job.ID, "percentage", job.Progress.Percentage)
+				}
+			}
 
 			// Check if job is finished
 			if status.Finished {
+				// Final persist before returning
+				if err := r.repo.UpdateJob(job); err != nil {
+					slog.Error("failed to persist final job state", "job_id", job.ID, "error", err)
+				}
+
 				if !status.Success {
 					return fmt.Errorf("rclone job failed: %s", status.Error)
 				}

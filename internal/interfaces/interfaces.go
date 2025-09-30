@@ -71,6 +71,12 @@ type BandwidthMonitor interface {
 	IsAvailable() bool
 }
 
+// JobRepository provides database access for jobs
+type JobRepository interface {
+	UpdateJob(job *models.Job) error
+	GetJob(id int64) (*models.Job, error)
+}
+
 // RCloneClient provides an interface to interact with RClone daemon
 type RCloneClient interface {
 	Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error)
