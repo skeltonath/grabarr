@@ -11,6 +11,7 @@ grabarr
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+coverage.html
 
 # Dependency directories
 vendor/
@@ -22,6 +23,7 @@ go.work.sum
 # IDE files
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
