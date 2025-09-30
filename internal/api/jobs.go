@@ -13,12 +13,12 @@ import (
 )
 
 type CreateJobRequest struct {
-	Name          string            `json:"name"`
-	RemotePath    string            `json:"remote_path"`
-	Priority      int               `json:"priority,omitempty"`
-	MaxRetries    int               `json:"max_retries,omitempty"`
-	EstimatedSize int64             `json:"estimated_size,omitempty"`
-	FileSize      int64             `json:"file_size,omitempty"`
+	Name          string             `json:"name"`
+	RemotePath    string             `json:"remote_path"`
+	Priority      int                `json:"priority,omitempty"`
+	MaxRetries    int                `json:"max_retries,omitempty"`
+	EstimatedSize int64              `json:"estimated_size,omitempty"`
+	FileSize      int64              `json:"file_size,omitempty"`
 	Metadata      models.JobMetadata `json:"metadata,omitempty"`
 }
 

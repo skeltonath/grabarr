@@ -289,7 +289,7 @@ func TestGetJob_Success(t *testing.T) {
 		Name:   "test-job",
 		Status: models.JobStatusRunning,
 		Progress: models.JobProgress{
-			Percentage: 50.0,
+			Percentage:     50.0,
 			LastUpdateTime: time.Now(),
 		},
 	}

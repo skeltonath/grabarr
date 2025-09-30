@@ -25,7 +25,6 @@ type APIResponse struct {
 	Message string      `json:"message,omitempty"`
 }
 
-
 func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper, cfg *config.Config, syncService interfaces.SyncService) *Handlers {
 	return &Handlers{
 		queue:       jobQueue,
@@ -67,7 +66,6 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api.Use(jsonContentTypeMiddleware)
 }
 
-
 func (h *Handlers) writeSuccess(w http.ResponseWriter, statusCode int, data interface{}, message string) {
 	w.WriteHeader(statusCode)
 	response := APIResponse{
@@ -98,4 +96,3 @@ func (h *Handlers) writeError(w http.ResponseWriter, statusCode int, message str
 		slog.Error("failed to encode error response", "error", jsonErr)
 	}
 }
-

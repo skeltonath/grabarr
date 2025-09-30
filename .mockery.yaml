@@ -13,3 +13,4 @@ packages:
       SyncRepository:
       BandwidthMonitor:
       RCloneClient:
+      Notifier:

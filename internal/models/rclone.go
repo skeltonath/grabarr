@@ -7,15 +7,15 @@ type RCloneCopyResponse struct {
 
 // RCloneJobStatus represents the status of a running job
 type RCloneJobStatus struct {
-	ID        int64
-	Name      string
-	Group     string
-	Error     string
-	Finished  bool
-	Success   bool
-	Duration  float64
-	Progress  string
-	Output    RCloneOutput
+	ID       int64
+	Name     string
+	Group    string
+	Error    string
+	Finished bool
+	Success  bool
+	Duration float64
+	Progress string
+	Output   RCloneOutput
 }
 
 // RCloneOutput represents the transfer statistics from rclone

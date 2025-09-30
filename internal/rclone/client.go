@@ -29,13 +29,12 @@ func NewClient(baseURL string) *Client {
 
 // SyncCopyRequest represents a request to copy files/directories using sync/copy
 type SyncCopyRequest struct {
-	SrcFs   string                 `json:"srcFs"`
-	DstFs   string                 `json:"dstFs"`
-	Filter  map[string]interface{} `json:"_filter,omitempty"`
-	Async   bool                   `json:"_async,omitempty"`
-	Config  map[string]interface{} `json:"_config,omitempty"`
+	SrcFs  string                 `json:"srcFs"`
+	DstFs  string                 `json:"dstFs"`
+	Filter map[string]interface{} `json:"_filter,omitempty"`
+	Async  bool                   `json:"_async,omitempty"`
+	Config map[string]interface{} `json:"_config,omitempty"`
 }
-
 
 // CopyResponse represents the response from a copy operation
 type CopyResponse struct {
@@ -59,32 +58,31 @@ type JobStatus struct {
 
 // Output represents the transfer statistics from rclone
 type Output struct {
-	Bytes             int64   `json:"bytes"`
-	Checks            int64   `json:"checks"`
-	Deletes           int64   `json:"deletes"`
-	ElapsedTime       float64 `json:"elapsedTime"`
-	Errors            int64   `json:"errors"`
-	ETA               *int64  `json:"eta"`
-	FatalError        bool    `json:"fatalError"`
-	Renames           int64   `json:"renames"`
-	RetryError        bool    `json:"retryError"`
-	ServerSideCopies  int64   `json:"serverSideCopies"`
-	ServerSideCopyBytes int64 `json:"serverSideCopyBytes"`
-	ServerSideMoveBytes int64 `json:"serverSideMoveBytes"`
-	ServerSideMoves   int64   `json:"serverSideMoves"`
-	Speed             float64 `json:"speed"`
-	TotalBytes        int64   `json:"totalBytes"`
-	TotalChecks       int64   `json:"totalChecks"`
-	TotalTransfers    int64   `json:"totalTransfers"`
-	TransferTime      float64 `json:"transferTime"`
-	Transfers         int64   `json:"transfers"`
+	Bytes               int64   `json:"bytes"`
+	Checks              int64   `json:"checks"`
+	Deletes             int64   `json:"deletes"`
+	ElapsedTime         float64 `json:"elapsedTime"`
+	Errors              int64   `json:"errors"`
+	ETA                 *int64  `json:"eta"`
+	FatalError          bool    `json:"fatalError"`
+	Renames             int64   `json:"renames"`
+	RetryError          bool    `json:"retryError"`
+	ServerSideCopies    int64   `json:"serverSideCopies"`
+	ServerSideCopyBytes int64   `json:"serverSideCopyBytes"`
+	ServerSideMoveBytes int64   `json:"serverSideMoveBytes"`
+	ServerSideMoves     int64   `json:"serverSideMoves"`
+	Speed               float64 `json:"speed"`
+	TotalBytes          int64   `json:"totalBytes"`
+	TotalChecks         int64   `json:"totalChecks"`
+	TotalTransfers      int64   `json:"totalTransfers"`
+	TransferTime        float64 `json:"transferTime"`
+	Transfers           int64   `json:"transfers"`
 }
 
 // JobListResponse represents the response from job/list
 type JobListResponse struct {
 	JobIDs []int64 `json:"jobids"`
 }
-
 
 // Copy initiates a copy operation for files or directories with optional filtering
 func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
@@ -116,7 +114,6 @@ func (c *Client) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string
 	err := c.makeRequest(ctx, "POST", "/sync/copy", req, &resp)
 	return &models.RCloneCopyResponse{JobID: resp.JobID}, err
 }
-
 
 // GetJobStatus gets the status of a specific job
 func (c *Client) GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error) {
@@ -160,7 +157,6 @@ func (c *Client) StopJob(ctx context.Context, jobID int64) error {
 	endpoint := fmt.Sprintf("/job/stop?jobid=%d", jobID)
 	return c.makeRequest(ctx, "POST", endpoint, nil, nil)
 }
-
 
 // Ping checks if the rclone daemon is responsive
 func (c *Client) Ping(ctx context.Context) error {

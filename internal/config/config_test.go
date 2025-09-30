@@ -108,13 +108,13 @@ monitoring:
 func TestConfigValidation(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      Config
+		config      *Config
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "invalid port - negative",
-			config: Config{
+			config: &Config{
 				Server: ServerConfig{Port: -1},
 				Jobs:   JobsConfig{MaxConcurrent: 1},
 			},
@@ -123,7 +123,7 @@ func TestConfigValidation(t *testing.T) {
 		},
 		{
 			name: "invalid port - too high",
-			config: Config{
+			config: &Config{
 				Server: ServerConfig{Port: 99999},
 				Jobs:   JobsConfig{MaxConcurrent: 1},
 			},
@@ -132,7 +132,7 @@ func TestConfigValidation(t *testing.T) {
 		},
 		{
 			name: "invalid max concurrent",
-			config: Config{
+			config: &Config{
 				Server: ServerConfig{Port: 8080},
 				Jobs:   JobsConfig{MaxConcurrent: 0},
 			},
@@ -141,7 +141,7 @@ func TestConfigValidation(t *testing.T) {
 		},
 		{
 			name: "invalid max retries",
-			config: Config{
+			config: &Config{
 				Server: ServerConfig{Port: 8080},
 				Jobs:   JobsConfig{MaxConcurrent: 1, MaxRetries: -1},
 			},
@@ -150,7 +150,7 @@ func TestConfigValidation(t *testing.T) {
 		},
 		{
 			name: "pushover enabled without token",
-			config: Config{
+			config: &Config{
 				Server: ServerConfig{Port: 8080},
 				Jobs:   JobsConfig{MaxConcurrent: 1},
 				Notifications: NotificationsConfig{
@@ -166,7 +166,7 @@ func TestConfigValidation(t *testing.T) {
 		},
 		{
 			name: "valid config",
-			config: Config{
+			config: &Config{
 				Server: ServerConfig{Port: 8080},
 				Jobs:   JobsConfig{MaxConcurrent: 3, MaxRetries: 3},
 				Notifications: NotificationsConfig{
@@ -177,7 +177,8 @@ func TestConfigValidation(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for i := range tests {
+		tt := tests[i] // Create local copy to avoid range var issue
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.config.validate()
 			if tt.expectError {

@@ -24,14 +24,16 @@ func TestNewSyncService(t *testing.T) {
 	}
 	mockRepo := mocks.NewMockSyncRepository(t)
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockNotifier := mocks.NewMockNotifier(t)
 
-	service := NewSyncService(cfg, mockRepo, mockGatekeeper)
+	service := NewSyncService(cfg, mockRepo, mockGatekeeper, mockNotifier)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, cfg, service.config)
 	assert.Equal(t, mockRepo, service.repository)
 	assert.NotNil(t, service.client)
 	assert.Equal(t, mockGatekeeper, service.gatekeeper)
+	assert.Equal(t, mockNotifier, service.notifier)
 }
 
 func TestStartSync_Success(t *testing.T) {
@@ -339,9 +341,9 @@ func TestCancelSync_Success(t *testing.T) {
 	rcloneJobID := int64(456)
 
 	syncJob := &models.SyncJob{
-		ID:           123,
-		Status:       models.SyncStatusRunning,
-		RCloneJobID:  &rcloneJobID,
+		ID:          123,
+		Status:      models.SyncStatusRunning,
+		RCloneJobID: &rcloneJobID,
 	}
 
 	mockRepo.EXPECT().

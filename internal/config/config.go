@@ -39,12 +39,12 @@ type DownloadsConfig struct {
 }
 
 type RcloneConfig struct {
-	RemoteName            string        `yaml:"remote_name"`
-	ConfigFile            string        `yaml:"config_file"`
-	BandwidthLimit        string        `yaml:"bandwidth_limit"`
-	TransferTimeout       time.Duration `yaml:"transfer_timeout"`
-	AdditionalArgs        []string      `yaml:"additional_args"`
-	DaemonAddr            string        `yaml:"daemon_addr"`
+	RemoteName      string        `yaml:"remote_name"`
+	ConfigFile      string        `yaml:"config_file"`
+	BandwidthLimit  string        `yaml:"bandwidth_limit"`
+	TransferTimeout time.Duration `yaml:"transfer_timeout"`
+	AdditionalArgs  []string      `yaml:"additional_args"`
+	DaemonAddr      string        `yaml:"daemon_addr"`
 }
 
 type GatekeeperConfig struct {
@@ -59,9 +59,9 @@ type SeedboxConfig struct {
 }
 
 type CacheDiskConfig struct {
-	Path             string        `yaml:"path"`
-	MaxUsagePercent  int           `yaml:"max_usage_percent"`
-	CheckInterval    time.Duration `yaml:"check_interval"`
+	Path            string        `yaml:"path"`
+	MaxUsagePercent int           `yaml:"max_usage_percent"`
+	CheckInterval   time.Duration `yaml:"check_interval"`
 }
 
 type GatekeeperRules struct {
@@ -70,12 +70,12 @@ type GatekeeperRules struct {
 }
 
 type JobsConfig struct {
-	MaxConcurrent          int           `yaml:"max_concurrent"`
-	MaxRetries             int           `yaml:"max_retries"`
-	RetryBackoffBase       time.Duration `yaml:"retry_backoff_base"`
-	RetryBackoffMax        time.Duration `yaml:"retry_backoff_max"`
-	CleanupCompletedAfter  time.Duration `yaml:"cleanup_completed_after"`
-	CleanupFailedAfter     time.Duration `yaml:"cleanup_failed_after"`
+	MaxConcurrent         int           `yaml:"max_concurrent"`
+	MaxRetries            int           `yaml:"max_retries"`
+	RetryBackoffBase      time.Duration `yaml:"retry_backoff_base"`
+	RetryBackoffMax       time.Duration `yaml:"retry_backoff_max"`
+	CleanupCompletedAfter time.Duration `yaml:"cleanup_completed_after"`
+	CleanupFailedAfter    time.Duration `yaml:"cleanup_failed_after"`
 }
 
 type DatabaseConfig struct {
@@ -100,7 +100,6 @@ type LoggingConfig struct {
 	Format string `yaml:"format"`
 	File   string `yaml:"file"`
 }
-
 
 var (
 	globalConfig *Config
@@ -230,7 +229,7 @@ func (c *Config) watchConfig(configPath string) {
 
 			// Check if the config file was modified
 			if filepath.Base(event.Name) == filepath.Base(configPath) &&
-			   (event.Has(fsnotify.Write) || event.Has(fsnotify.Create)) {
+				(event.Has(fsnotify.Write) || event.Has(fsnotify.Create)) {
 				slog.Info("config file changed, reloading", "file", configPath)
 
 				// Small delay to ensure file write is complete
@@ -342,4 +341,3 @@ func (c *Config) GetLogging() LoggingConfig {
 	defer c.mu.RUnlock()
 	return c.Logging
 }
-

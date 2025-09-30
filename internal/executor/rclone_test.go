@@ -46,7 +46,7 @@ func TestExecute_Success(t *testing.T) {
 
 	executor := &RCloneExecutor{
 		config:       cfg,
-		gatekeeper:      mockMonitor,
+		gatekeeper:   mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
 		repo:         mockRepo,
@@ -110,7 +110,7 @@ func TestExecute_DaemonNotResponsive(t *testing.T) {
 
 	executor := &RCloneExecutor{
 		config:       cfg,
-		gatekeeper:      mockMonitor,
+		gatekeeper:   mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
 		repo:         mockRepo,
@@ -148,7 +148,7 @@ func TestExecute_CopyFails(t *testing.T) {
 
 	executor := &RCloneExecutor{
 		config:       cfg,
-		gatekeeper:      mockMonitor,
+		gatekeeper:   mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
 		repo:         mockRepo,
@@ -187,7 +187,7 @@ func TestPrepareCopyRequest_File(t *testing.T) {
 	mockMonitor := mocks.NewMockGatekeeper(t)
 
 	executor := &RCloneExecutor{
-		config:  cfg,
+		config:     cfg,
 		gatekeeper: mockMonitor,
 	}
 
@@ -217,7 +217,7 @@ func TestPrepareCopyRequest_Directory(t *testing.T) {
 	mockMonitor := mocks.NewMockGatekeeper(t)
 
 	executor := &RCloneExecutor{
-		config:  cfg,
+		config:     cfg,
 		gatekeeper: mockMonitor,
 	}
 
@@ -245,7 +245,7 @@ func TestPrepareCopyRequest_NestedPath(t *testing.T) {
 	mockMonitor := mocks.NewMockGatekeeper(t)
 
 	executor := &RCloneExecutor{
-		config:  cfg,
+		config:     cfg,
 		gatekeeper: mockMonitor,
 	}
 

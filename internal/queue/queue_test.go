@@ -25,14 +25,16 @@ func TestNew(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
+	mockNotifier := mocks.NewMockNotifier(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, mockNotifier)
 
 	assert.NotNil(t, q)
 	queue := q.(*queue)
 	assert.Equal(t, repo, queue.repo)
 	assert.Equal(t, cfg, queue.config)
 	assert.Equal(t, mockChecker, queue.gatekeeper)
+	assert.Equal(t, mockNotifier, queue.notifier)
 	assert.NotNil(t, queue.activeJobs)
 	assert.NotNil(t, queue.jobQueue)
 	assert.False(t, queue.running)
@@ -42,9 +44,10 @@ func TestSetJobExecutor(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
+	mockNotifier := mocks.NewMockNotifier(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, mockNotifier)
 	q.SetJobExecutor(mockExecutor)
 
 	queue := q.(*queue)
@@ -66,7 +69,7 @@ func TestStart_Success(t *testing.T) {
 	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,7 +97,7 @@ func TestStart_AlreadyRunning(t *testing.T) {
 	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 
 	ctx := context.Background()
@@ -113,7 +116,7 @@ func TestStart_NoExecutor(t *testing.T) {
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	ctx := context.Background()
 	err := q.Start(ctx)
@@ -134,7 +137,7 @@ func TestStop_Success(t *testing.T) {
 	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 
 	ctx := context.Background()
@@ -161,7 +164,7 @@ func TestStop_MarksRunningJobsAsQueued(t *testing.T) {
 	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 
 	ctx := context.Background()
@@ -208,7 +211,7 @@ func TestStop_HandlesMultipleRunningJobs(t *testing.T) {
 	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 
 	ctx := context.Background()
@@ -265,7 +268,7 @@ func TestEnqueue_Success(t *testing.T) {
 	}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	job := testutil.CreateTestJob()
 	err := q.Enqueue(job)
@@ -289,7 +292,7 @@ func TestEnqueue_SetsDefaults(t *testing.T) {
 	}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	job := testutil.CreateTestJob(func(j *models.Job) {
 		j.Status = ""
@@ -312,7 +315,7 @@ func TestGetJob_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	job := testutil.CreateTestJob()
 	require.NoError(t, repo.CreateJob(job))
@@ -328,7 +331,7 @@ func TestGetJobs_WithFilters(t *testing.T) {
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	// Create some jobs with different statuses
 	queuedJob := testutil.CreateTestJob(func(j *models.Job) {
@@ -356,7 +359,7 @@ func TestGetSummary_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	// Create jobs with different statuses
 	require.NoError(t, repo.CreateJob(testutil.CreateTestJob(func(j *models.Job) {
@@ -388,7 +391,7 @@ func TestCancelJob_QueuedJob(t *testing.T) {
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	job := testutil.CreateTestJob(func(j *models.Job) {
 		j.Status = models.JobStatusQueued
@@ -408,7 +411,7 @@ func TestCancelJob_NotFound(t *testing.T) {
 	cfg := &config.Config{}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 
 	err := q.CancelJob(99999)
 	assert.Error(t, err)
@@ -428,7 +431,7 @@ func TestCanScheduleNewJob_UnderLimit(t *testing.T) {
 	}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	queue := q.(*queue)
 
 	// Add 2 active jobs (under limit of 3)
@@ -447,7 +450,7 @@ func TestCanScheduleNewJob_AtLimit(t *testing.T) {
 	}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	queue := q.(*queue)
 
 	// Add 2 active jobs (at limit of 2)
@@ -477,7 +480,7 @@ func TestExecuteJob_Success(t *testing.T) {
 		Return(nil).
 		Once()
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 	queue := q.(*queue)
 
@@ -515,7 +518,7 @@ func TestExecuteJob_Failure(t *testing.T) {
 		Return(errors.New("execution failed")).
 		Once()
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 	queue := q.(*queue)
 
@@ -551,7 +554,7 @@ func TestCalculateRetryBackoff_ExponentialGrowth(t *testing.T) {
 	}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	queue := q.(*queue)
 
 	tests := []struct {
@@ -581,7 +584,7 @@ func TestCalculateRetryBackoff_CappedAtMax(t *testing.T) {
 	}
 	mockChecker := mocks.NewMockGatekeeper(t)
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	queue := q.(*queue)
 
 	// After enough retries, should cap at max
@@ -625,7 +628,7 @@ func TestQueueIntegration_SimpleExecution(t *testing.T) {
 		Return(nil).
 		Maybe()
 
-	q := New(repo, cfg, mockChecker)
+	q := New(repo, cfg, mockChecker, nil)
 	q.SetJobExecutor(mockExecutor)
 
 	ctx, cancel := context.WithCancel(context.Background())
