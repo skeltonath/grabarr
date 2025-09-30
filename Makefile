@@ -21,9 +21,9 @@ YELLOW=\033[0;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build run dev clean test test-verbose test-coverage test-sanitizer fmt vet lint deps
+.PHONY: help build run clean test test-verbose test-coverage test-race test-coverage-summary test-ci fmt vet deps gen-mocks
 .PHONY: docker-build docker-run docker-stop docker-logs docker-shell
-.PHONY: deploy deploy-logs deploy-restart setup-config web-check
+.PHONY: deploy deploy-logs deploy-restart setup-config
 
 # Default target
 all: fmt vet test build
@@ -43,16 +43,6 @@ run: build ## Run the application locally (requires config.yaml)
 	@echo "$(GREEN)Starting ${BINARY_NAME}...$(NC)"
 	@./${BINARY_NAME}
 
-dev: ## Run with file watching for development (requires entr)
-	@if ! command -v entr >/dev/null 2>&1; then \
-		echo "$(YELLOW)Installing entr for file watching...$(NC)"; \
-		echo "$(YELLOW)On macOS: brew install entr$(NC)"; \
-		echo "$(YELLOW)On Linux: sudo apt-get install entr$(NC)"; \
-		exit 1; \
-	fi
-	@echo "$(GREEN)Starting development mode with auto-reload...$(NC)"
-	@find . -name "*.go" | entr -r sh -c 'make build && ./${BINARY_NAME}'
-
 fmt: ## Format Go code
 	@echo "$(GREEN)Formatting Go code...$(NC)"
 	@go fmt ./...
@@ -63,13 +53,14 @@ vet: ## Run go vet for static analysis
 	@go vet ./...
 	@echo "$(GREEN)✓ Static analysis passed$(NC)"
 
-lint: ## Run golint (install if not available)
-	@if ! command -v golint >/dev/null 2>&1; then \
-		echo "$(YELLOW)Installing golint...$(NC)"; \
-		go install golang.org/x/lint/golint@latest; \
+gen-mocks: ## Generate mocks using mockery
+	@echo "$(GREEN)Generating mocks...$(NC)"
+	@if ! command -v mockery >/dev/null 2>&1; then \
+		echo "$(YELLOW)Installing mockery...$(NC)"; \
+		go install github.com/vektra/mockery/v2@latest; \
 	fi
-	@echo "$(GREEN)Running golint...$(NC)"
-	@golint ./...
+	@mockery --all --dir internal/interfaces --output internal/mocks --case underscore
+	@echo "$(GREEN)✓ Mocks generated$(NC)"
 
 ## Testing Targets
 
@@ -107,15 +98,11 @@ test-coverage-summary: ## Show test coverage percentage - excludes interfaces/mo
 test-ci: fmt vet test ## Run all pre-commit checks (format, vet, test)
 	@echo "$(GREEN)✓ All pre-commit checks passed$(NC)"
 
-test-sanitizer: ## Run only sanitizer module tests
-	@echo "$(GREEN)Running sanitizer tests...$(NC)"
-	@go test -v ./internal/sanitizer/...
-
 ## Docker Targets
 
-docker-build: ## Build Docker image
-	@echo "$(GREEN)Building Docker image ${DOCKER_IMAGE}:${DOCKER_TAG}...$(NC)"
-	@docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+docker-build: ## Build Docker image for linux/amd64 (Unraid)
+	@echo "$(GREEN)Building Docker image ${DOCKER_IMAGE}:${DOCKER_TAG} for linux/amd64...$(NC)"
+	@docker build --platform linux/amd64 -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
 	@echo "$(GREEN)✓ Docker image built$(NC)"
 
 docker-run: docker-build ## Run container locally (detached)
@@ -137,24 +124,24 @@ docker-shell: ## Open shell in running container
 
 ## Deployment Targets
 
-deploy: docker-build ## Deploy to remote server
+deploy: docker-build ## Deploy to remote server (Unraid)
 	@echo "$(GREEN)Deploying to ${REMOTE_HOST}...$(NC)"
-	@echo "$(YELLOW)Copying files to remote server...$(NC)"
-	@scp docker-compose.yml .env ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/
-	@scp config.yaml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/config/
-	@echo "$(YELLOW)Saving and loading Docker image on remote...$(NC)"
-	@docker save ${DOCKER_IMAGE}:${DOCKER_TAG} | ssh ${REMOTE_USER}@${REMOTE_HOST} "docker load"
+	@echo "$(YELLOW)Copying config files to remote...$(NC)"
+	@scp docker-compose.yml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/
+	@scp config.yaml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/
+	@echo "$(YELLOW)Transferring Docker image (this may take a few minutes)...$(NC)"
+	@docker save ${DOCKER_IMAGE}:${DOCKER_TAG} | gzip | ssh ${REMOTE_USER}@${REMOTE_HOST} "gunzip | docker load"
 	@echo "$(YELLOW)Starting service on remote...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /opt/grabarr && docker-compose up -d"
+	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/user/appdata/grabarr && docker-compose up -d"
 	@echo "$(GREEN)✓ Deployment complete$(NC)"
 
 deploy-logs: ## View remote deployment logs
 	@echo "$(GREEN)Viewing logs from ${REMOTE_HOST}...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /opt/grabarr && docker-compose logs -f"
+	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/user/appdata/grabarr && docker-compose logs -f"
 
 deploy-restart: ## Restart remote service
 	@echo "$(GREEN)Restarting service on ${REMOTE_HOST}...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /opt/grabarr && docker-compose restart"
+	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/user/appdata/grabarr && docker-compose restart"
 	@echo "$(GREEN)✓ Service restarted$(NC)"
 
 ## Utility Targets
@@ -196,26 +183,6 @@ setup-config: ## Copy example configs to working configs
 		echo "$(YELLOW)→ rclone.conf already exists$(NC)"; \
 	fi
 
-web-check: ## Verify web UI files are present
-	@echo "$(GREEN)Checking web UI files...$(NC)"
-	@if [ ! -d web/static ]; then \
-		echo "$(RED)✗ web/static directory not found$(NC)"; \
-		exit 1; \
-	fi
-	@if [ ! -f web/static/index.html ]; then \
-		echo "$(RED)✗ web/static/index.html not found$(NC)"; \
-		exit 1; \
-	fi
-	@if [ ! -f web/static/css/style.css ]; then \
-		echo "$(RED)✗ web/static/css/style.css not found$(NC)"; \
-		exit 1; \
-	fi
-	@if [ ! -f web/static/js/app.js ]; then \
-		echo "$(RED)✗ web/static/js/app.js not found$(NC)"; \
-		exit 1; \
-	fi
-	@echo "$(GREEN)✓ All web UI files are present$(NC)"
-
 ## Help
 
 help: ## Show this help message
@@ -225,19 +192,19 @@ help: ## Show this help message
 	@echo "$(GREEN)Usage:$(NC) make [target]"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(build|run|dev|fmt|vet|lint):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-15s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(build|run|fmt|vet|gen-mocks):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Testing:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^test' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-15s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^test' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Docker:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^docker-' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-15s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^docker-' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Deployment:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^deploy' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-15s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^deploy' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(clean|deps|setup-config):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-15s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(clean|deps|setup-config):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Build Info:$(NC)"
 	@echo "  Go Version: $(GO_VERSION)"
