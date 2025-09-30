@@ -9,7 +9,7 @@ Grabarr - Go-based download management service for managing downloads from remot
   - SSH: `root@millions.local`
   - Container user: 99:100 (nobody:users)
   - Paths (Host -> Container):
-    - Config: `/mnt/user/appdata/grabarr/` -> `/config/`
+    - Config: `/mnt/user/appdata/grabarr/config/` -> `/config/`
     - Data: `/mnt/user/appdata/grabarr/data/` -> `/data/`
     - Downloads: `/mnt/user/media/downloads/` -> `/unraid/user/media/downloads/`
     - Cache: `/mnt/cache/` -> `/unraid/cache/`
@@ -22,8 +22,9 @@ Grabarr - Go-based download management service for managing downloads from remot
 5. Load on unraid: `ssh root@millions.local "docker load < /mnt/user/tmp/grabarr-latest.tar.gz"`
 6. Deploy using docker-compose:
    ```bash
-   # Copy files to unraid appdata directory first
-   scp config.yaml docker-compose.yml root@millions.local:/mnt/user/appdata/grabarr/
+   # Copy files to unraid appdata directory first (config goes in config subdirectory!)
+   scp config.yaml root@millions.local:/mnt/user/appdata/grabarr/config/
+   scp docker-compose.yml root@millions.local:/mnt/user/appdata/grabarr/
 
    # Deploy
    ssh root@millions.local "cd /mnt/user/appdata/grabarr && docker-compose up -d"

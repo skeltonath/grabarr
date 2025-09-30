@@ -732,4 +732,3 @@ func TestNotifySyncCompleted_Disabled(t *testing.T) {
 	err := notifier.NotifySyncCompleted(syncJob)
 	assert.NoError(t, err)
 }
-
