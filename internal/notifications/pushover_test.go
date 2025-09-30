@@ -206,7 +206,7 @@ func TestNotifyJobFailed_EmergencyPriority(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, 2, capturedReq.Priority)
-	assert.Equal(t, 30, capturedReq.Retry)  // From config
+	assert.Equal(t, 30, capturedReq.Retry)   // From config
 	assert.Equal(t, 300, capturedReq.Expire) // From config
 }
 
@@ -654,11 +654,10 @@ func TestFormatBytes(t *testing.T) {
 	}
 }
 
-// TestNotification Tests
+// NotifySyncFailed Tests
 
-func TestTestNotification_Success(t *testing.T) {
+func TestNotifySyncFailed_Success(t *testing.T) {
 	cfg := createTestConfig(true)
-
 	mockServer := createMockPushoverServer(t, "test-token", "test-user", http.StatusOK, pushoverResponse{
 		Status:  1,
 		Request: "test-request-id",
@@ -668,17 +667,69 @@ func TestTestNotification_Success(t *testing.T) {
 	notifier := NewPushoverNotifier(cfg)
 	notifier.apiURL = mockServer.URL
 
-	err := notifier.TestNotification()
+	now := time.Now()
+	syncJob := &models.SyncJob{
+		ID:           1,
+		RemotePath:   "/remote/path",
+		LocalPath:    "/local/path",
+		Status:       models.SyncStatusFailed,
+		ErrorMessage: "Test error",
+		StartedAt:    &now,
+	}
 
+	err := notifier.NotifySyncFailed(syncJob)
 	assert.NoError(t, err)
 }
 
-func TestTestNotification_Disabled(t *testing.T) {
+func TestNotifySyncFailed_Disabled(t *testing.T) {
 	cfg := createTestConfig(false)
 	notifier := NewPushoverNotifier(cfg)
 
-	err := notifier.TestNotification()
+	syncJob := &models.SyncJob{ID: 1}
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "pushover notifications are disabled")
+	err := notifier.NotifySyncFailed(syncJob)
+	assert.NoError(t, err)
 }
+
+// NotifySyncCompleted Tests
+
+func TestNotifySyncCompleted_Success(t *testing.T) {
+	cfg := createTestConfig(true)
+	mockServer := createMockPushoverServer(t, "test-token", "test-user", http.StatusOK, pushoverResponse{
+		Status:  1,
+		Request: "test-request-id",
+	})
+	defer mockServer.Close()
+
+	notifier := NewPushoverNotifier(cfg)
+	notifier.apiURL = mockServer.URL
+
+	now := time.Now()
+	completed := now.Add(5 * time.Minute)
+	syncJob := &models.SyncJob{
+		ID:          1,
+		RemotePath:  "/remote/path",
+		LocalPath:   "/local/path",
+		Status:      models.SyncStatusCompleted,
+		StartedAt:   &now,
+		CompletedAt: &completed,
+		Stats: models.SyncStats{
+			FilesTransferred: 100,
+			TotalBytes:       1024000,
+		},
+	}
+
+	err := notifier.NotifySyncCompleted(syncJob)
+	assert.NoError(t, err)
+}
+
+func TestNotifySyncCompleted_Disabled(t *testing.T) {
+	cfg := createTestConfig(false)
+	notifier := NewPushoverNotifier(cfg)
+
+	syncJob := &models.SyncJob{ID: 1}
+
+	err := notifier.NotifySyncCompleted(syncJob)
+	assert.NoError(t, err)
+}
+

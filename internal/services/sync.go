@@ -20,11 +20,12 @@ type SyncService struct {
 	repository interfaces.SyncRepository
 	client     interfaces.RCloneClient
 	gatekeeper interfaces.Gatekeeper
+	notifier   interfaces.Notifier
 	ctx        context.Context
 	cancel     context.CancelFunc
 }
 
-func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository, gatekeeper interfaces.Gatekeeper) *SyncService {
+func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository, gatekeeper interfaces.Gatekeeper, notifier interfaces.Notifier) *SyncService {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
@@ -35,6 +36,7 @@ func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository, gatekeep
 		repository: repo,
 		client:     client,
 		gatekeeper: gatekeeper,
+		notifier:   notifier,
 		ctx:        ctx,
 		cancel:     cancel,
 	}
@@ -265,6 +267,13 @@ func (s *SyncService) monitorSyncJob(ctx context.Context, syncJob *models.SyncJo
 				if !status.Success {
 					slog.Error("sync job failed", "sync_id", syncJob.ID, "rclone_job_id", rcloneJobID, "error", status.Error)
 					syncJob.MarkFailed(status.Error)
+
+					// Send notification about sync failure
+					if s.notifier != nil && s.notifier.IsEnabled() {
+						if notifyErr := s.notifier.NotifySyncFailed(syncJob); notifyErr != nil {
+							slog.Error("failed to send sync failure notification", "sync_id", syncJob.ID, "error", notifyErr)
+						}
+					}
 				} else {
 					slog.Info("sync job completed successfully", "sync_id", syncJob.ID, "rclone_job_id", rcloneJobID)
 
@@ -279,6 +288,13 @@ func (s *SyncService) monitorSyncJob(ctx context.Context, syncJob *models.SyncJo
 					}
 
 					syncJob.MarkCompleted(stats)
+
+					// Send notification about sync completion
+					if s.notifier != nil && s.notifier.IsEnabled() {
+						if notifyErr := s.notifier.NotifySyncCompleted(syncJob); notifyErr != nil {
+							slog.Error("failed to send sync completion notification", "sync_id", syncJob.ID, "error", notifyErr)
+						}
+					}
 				}
 
 				// Final update

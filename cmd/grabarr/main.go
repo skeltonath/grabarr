@@ -70,28 +70,18 @@ func run() error {
 	}
 	defer gk.Stop()
 
+	// Initialize notifications
+	notifier := notifications.NewPushoverNotifier(cfg)
+
 	// Initialize job queue
-	jobQueue := queue.New(repo, cfg, gk)
+	jobQueue := queue.New(repo, cfg, gk, notifier)
 
 	// Initialize job executor
 	jobExecutor := executor.NewRCloneExecutor(cfg, gk, repo)
 	jobQueue.SetJobExecutor(jobExecutor)
 
-	// Initialize notifications
-	notifier := notifications.NewPushoverNotifier(cfg)
-
-	// Test notification on startup if enabled
-	if notifier.IsEnabled() {
-		slog.Info("testing pushover notification")
-		if err := notifier.TestNotification(); err != nil {
-			slog.Warn("pushover test notification failed", "error", err)
-		} else {
-			slog.Info("pushover test notification sent successfully")
-		}
-	}
-
 	// Initialize sync service
-	syncService := services.NewSyncService(cfg, repo, gk)
+	syncService := services.NewSyncService(cfg, repo, gk, notifier)
 	slog.Info("sync service initialized")
 
 	// Recover interrupted syncs
@@ -105,6 +95,18 @@ func run() error {
 
 	if err := jobQueue.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start job queue: %w", err)
+	}
+
+	// Send startup notification
+	if notifier.IsEnabled() {
+		slog.Info("sending startup notification")
+		if err := notifier.NotifySystemAlert(
+			"Service Started",
+			"Grabarr has started successfully and is ready to process jobs.",
+			0, // Normal priority
+		); err != nil {
+			slog.Warn("failed to send startup notification", "error", err)
+		}
 	}
 
 	// Setup HTTP server

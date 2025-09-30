@@ -41,13 +41,13 @@ type GateDecision struct {
 
 // GatekeeperResourceStatus provides current resource status
 type GatekeeperResourceStatus struct {
-	BandwidthUsageMbps   float64 `json:"bandwidth_usage_mbps"`
-	BandwidthLimitMbps   int     `json:"bandwidth_limit_mbps"`
-	CacheUsagePercent    float64 `json:"cache_usage_percent"`
-	CacheMaxPercent      int     `json:"cache_max_percent"`
-	CacheFreeBytes       int64   `json:"cache_free_bytes"`
-	CacheTotalBytes      int64   `json:"cache_total_bytes"`
-	ActiveSyncs          int     `json:"active_syncs"`
+	BandwidthUsageMbps float64 `json:"bandwidth_usage_mbps"`
+	BandwidthLimitMbps int     `json:"bandwidth_limit_mbps"`
+	CacheUsagePercent  float64 `json:"cache_usage_percent"`
+	CacheMaxPercent    int     `json:"cache_max_percent"`
+	CacheFreeBytes     int64   `json:"cache_free_bytes"`
+	CacheTotalBytes    int64   `json:"cache_total_bytes"`
+	ActiveSyncs        int     `json:"active_syncs"`
 }
 
 // SyncService manages sync operations
@@ -84,4 +84,14 @@ type RCloneClient interface {
 	ListJobs(ctx context.Context) (*models.RCloneJobListResponse, error)
 	StopJob(ctx context.Context, jobID int64) error
 	Ping(ctx context.Context) error
+}
+
+// Notifier handles sending notifications for various events
+type Notifier interface {
+	IsEnabled() bool
+	NotifyJobFailed(job *models.Job) error
+	NotifyJobCompleted(job *models.Job) error
+	NotifySyncFailed(syncJob *models.SyncJob) error
+	NotifySyncCompleted(syncJob *models.SyncJob) error
+	NotifySystemAlert(title, message string, priority int) error
 }

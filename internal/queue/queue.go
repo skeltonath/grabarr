@@ -18,6 +18,7 @@ type queue struct {
 	repo     *repository.Repository
 	config   *config.Config
 	executor interfaces.JobExecutor
+	notifier interfaces.Notifier
 
 	// Internal state
 	mu              sync.RWMutex
@@ -34,13 +35,14 @@ type queue struct {
 	lastCleanup time.Time
 }
 
-func New(repo *repository.Repository, config *config.Config, gatekeeper interfaces.Gatekeeper) interfaces.JobQueue {
+func New(repo *repository.Repository, config *config.Config, gatekeeper interfaces.Gatekeeper, notifier interfaces.Notifier) interfaces.JobQueue {
 	return &queue{
 		repo:        repo,
 		config:      config,
 		activeJobs:  make(map[int64]context.CancelFunc),
 		jobQueue:    make(chan *models.Job, 1000), // Buffered channel for job queue
 		gatekeeper:  gatekeeper,
+		notifier:    notifier,
 		lastCleanup: time.Now(),
 	}
 }
@@ -166,7 +168,19 @@ func (q *queue) Enqueue(job *models.Job) error {
 
 	// Create job in database
 	if err := q.repo.CreateJob(job); err != nil {
-		return fmt.Errorf("failed to create job in database: %w", err)
+		errMsg := fmt.Sprintf("failed to create job in database: %v", err)
+		slog.Error("failed to enqueue job", "name", job.Name, "error", err)
+
+		// Send notification about queue failure
+		if q.notifier != nil && q.notifier.IsEnabled() {
+			q.notifier.NotifySystemAlert(
+				"Job Queue Failure",
+				fmt.Sprintf("Failed to enqueue job '%s': %s", job.Name, err.Error()),
+				1, // High priority
+			)
+		}
+
+		return fmt.Errorf(errMsg)
 	}
 
 	// Add to in-memory queue
@@ -223,8 +237,8 @@ func (q *queue) GetSummary() (*models.JobSummary, error) {
 func (q *queue) loadExistingJobs() error {
 	// Load jobs that need to be recovered: queued, pending, and running
 	jobs, err := q.repo.GetJobs(models.JobFilter{
-		Status: []models.JobStatus{models.JobStatusQueued, models.JobStatusPending, models.JobStatusRunning},
-		SortBy: "priority",
+		Status:    []models.JobStatus{models.JobStatusQueued, models.JobStatusPending, models.JobStatusRunning},
+		SortBy:    "priority",
 		SortOrder: "DESC",
 	})
 	if err != nil {
@@ -309,10 +323,10 @@ func (q *queue) processQueue() {
 		default:
 			// No jobs in queue, try to load from database
 			jobs, err := q.repo.GetJobs(models.JobFilter{
-				Status: []models.JobStatus{models.JobStatusQueued, models.JobStatusPending},
-				SortBy: "priority",
+				Status:    []models.JobStatus{models.JobStatusQueued, models.JobStatusPending},
+				SortBy:    "priority",
 				SortOrder: "DESC",
-				Limit: 10,
+				Limit:     10,
 			})
 			if err != nil {
 				slog.Error("failed to load jobs from database", "error", err)
@@ -435,7 +449,12 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) {
 				slog.Error("failed to mark job as failed", "job_id", job.ID, "error", err)
 			}
 
-			// TODO: Send notification about failed job
+			// Send notification about failed job
+			if q.notifier != nil && q.notifier.IsEnabled() {
+				if notifyErr := q.notifier.NotifyJobFailed(job); notifyErr != nil {
+					slog.Error("failed to send job failure notification", "job_id", job.ID, "error", notifyErr)
+				}
+			}
 		}
 	} else {
 		slog.Info("job completed successfully", "job_id", job.ID)

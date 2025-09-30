@@ -19,12 +19,14 @@ func (m *mockSyncRepo) GetActiveSyncJobsCount() (int, error) {
 	return m.activeSyncsCount, m.err
 }
 
-func (m *mockSyncRepo) CreateSyncJob(syncJob *models.SyncJob) error              { return nil }
-func (m *mockSyncRepo) GetSyncJob(id int64) (*models.SyncJob, error)            { return nil, nil }
-func (m *mockSyncRepo) GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error) { return nil, nil }
-func (m *mockSyncRepo) UpdateSyncJob(syncJob *models.SyncJob) error             { return nil }
-func (m *mockSyncRepo) DeleteSyncJob(id int64) error                            { return nil }
-func (m *mockSyncRepo) GetSyncSummary() (*models.SyncSummary, error)            { return nil, nil }
+func (m *mockSyncRepo) CreateSyncJob(syncJob *models.SyncJob) error  { return nil }
+func (m *mockSyncRepo) GetSyncJob(id int64) (*models.SyncJob, error) { return nil, nil }
+func (m *mockSyncRepo) GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error) {
+	return nil, nil
+}
+func (m *mockSyncRepo) UpdateSyncJob(syncJob *models.SyncJob) error  { return nil }
+func (m *mockSyncRepo) DeleteSyncJob(id int64) error                 { return nil }
+func (m *mockSyncRepo) GetSyncSummary() (*models.SyncSummary, error) { return nil, nil }
 
 // Mock rclone client
 type mockRCloneClient struct {

@@ -35,7 +35,6 @@ type GateDecision struct {
 	Details map[string]interface{}
 }
 
-
 func New(cfg *config.Config, syncRepo interfaces.SyncRepository, rcloneClient interfaces.RCloneClient) *Gatekeeper {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -205,7 +204,7 @@ func (g *Gatekeeper) CanStartSync() interfaces.GateDecision {
 			Allowed: false,
 			Reason:  "Insufficient cache space for sync",
 			Details: map[string]interface{}{
-				"current_percent": g.cacheUsage,
+				"current_percent":  g.cacheUsage,
 				"required_percent": cacheMaxPercent - 10,
 			},
 		}
@@ -237,13 +236,13 @@ func (g *Gatekeeper) GetResourceStatus() interfaces.GatekeeperResourceStatus {
 	}
 
 	return interfaces.GatekeeperResourceStatus{
-		BandwidthUsageMbps:   g.bandwidthUsage,
-		BandwidthLimitMbps:   gatekeeperCfg.Seedbox.BandwidthLimitMbps,
-		CacheUsagePercent:    g.cacheUsage,
-		CacheMaxPercent:      gatekeeperCfg.CacheDisk.MaxUsagePercent,
-		CacheFreeBytes:       cacheFreeBytes,
-		CacheTotalBytes:      cacheTotalBytes,
-		ActiveSyncs:          activeSyncs,
+		BandwidthUsageMbps: g.bandwidthUsage,
+		BandwidthLimitMbps: gatekeeperCfg.Seedbox.BandwidthLimitMbps,
+		CacheUsagePercent:  g.cacheUsage,
+		CacheMaxPercent:    gatekeeperCfg.CacheDisk.MaxUsagePercent,
+		CacheFreeBytes:     cacheFreeBytes,
+		CacheTotalBytes:    cacheTotalBytes,
+		ActiveSyncs:        activeSyncs,
 	}
 }
 

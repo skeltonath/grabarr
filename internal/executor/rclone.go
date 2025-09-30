@@ -79,7 +79,7 @@ func (r *RCloneExecutor) prepareCopyRequest(job *models.Job) (string, string, ma
 	targetName := filepath.Base(job.RemotePath)
 	filter := map[string]interface{}{
 		"IncludeRule": []string{
-			targetName,      // Match exact file
+			targetName,         // Match exact file
 			targetName + "/**", // Match directory contents
 		},
 	}
