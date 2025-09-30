@@ -18,6 +18,7 @@ type CreateJobRequest struct {
 	Priority      int               `json:"priority,omitempty"`
 	MaxRetries    int               `json:"max_retries,omitempty"`
 	EstimatedSize int64             `json:"estimated_size,omitempty"`
+	FileSize      int64             `json:"file_size,omitempty"`
 	Metadata      models.JobMetadata `json:"metadata,omitempty"`
 }
 
@@ -48,6 +49,14 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 					category, downloadsConfig.AllowedCategories), nil)
 			return
 		}
+	}
+
+	// Check gatekeeper before creating job
+	decision := h.gatekeeper.CanStartJob(req.FileSize)
+	if !decision.Allowed {
+		h.writeError(w, http.StatusServiceUnavailable,
+			fmt.Sprintf("Cannot start job: %s", decision.Reason), nil)
+		return
 	}
 
 	// Create job model

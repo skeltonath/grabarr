@@ -13,27 +13,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestHandlers(t *testing.T) (*Handlers, *mocks.MockJobQueue, *mocks.MockResourceMonitor, *mocks.MockSyncService) {
+func setupTestHandlers(t *testing.T) (*Handlers, *mocks.MockJobQueue, *mocks.MockGatekeeper, *mocks.MockSyncService) {
 	mockQueue := mocks.NewMockJobQueue(t)
-	mockMonitor := mocks.NewMockResourceMonitor(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
-	handlers := NewHandlers(mockQueue, mockMonitor, cfg, mockSync)
-	return handlers, mockQueue, mockMonitor, mockSync
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
+	return handlers, mockQueue, mockGatekeeper, mockSync
 }
 
 func TestNewHandlers(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
-	mockMonitor := mocks.NewMockResourceMonitor(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
-	handlers := NewHandlers(mockQueue, mockMonitor, cfg, mockSync)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
 
 	assert.NotNil(t, handlers)
 	assert.Equal(t, mockQueue, handlers.queue)
-	assert.Equal(t, mockMonitor, handlers.monitor)
+	assert.Equal(t, mockGatekeeper, handlers.gatekeeper)
 	assert.Equal(t, cfg, handlers.config)
 	assert.Equal(t, mockSync, handlers.syncService)
 }

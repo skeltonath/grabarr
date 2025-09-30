@@ -21,28 +21,33 @@ type JobQueue interface {
 // JobExecutor executes individual jobs
 type JobExecutor interface {
 	Execute(ctx context.Context, job *models.Job) error
-	CanExecute() bool
 }
 
-// ResourceChecker checks system resources before scheduling jobs
-type ResourceChecker interface {
-	CanScheduleJob() bool
-	GetResourceStatus() ResourceStatus
+// Gatekeeper manages resource constraints and enforces operational rules
+type Gatekeeper interface {
+	Start() error
+	Stop() error
+	CanStartJob(fileSize int64) GateDecision
+	CanStartSync() GateDecision
+	GetResourceStatus() GatekeeperResourceStatus
 }
 
-// ResourceStatus represents system resource availability
-type ResourceStatus struct {
-	BandwidthAvailable bool    `json:"bandwidth_available"`
-	BandwidthUsage     float64 `json:"bandwidth_usage_percent"`
-	DiskSpaceAvailable bool    `json:"disk_space_available"`
-	CacheDiskFree      int64   `json:"cache_disk_free_bytes"`
-	ArrayDiskFree      int64   `json:"array_disk_free_bytes"`
+// GateDecision represents whether an operation can proceed
+type GateDecision struct {
+	Allowed bool
+	Reason  string
+	Details map[string]interface{}
 }
 
-// ResourceMonitor provides system resource metrics
-type ResourceMonitor interface {
-	GetResourceStatus() ResourceStatus
-	GetMetrics() map[string]interface{}
+// GatekeeperResourceStatus provides current resource status
+type GatekeeperResourceStatus struct {
+	BandwidthUsageMbps   float64 `json:"bandwidth_usage_mbps"`
+	BandwidthLimitMbps   int     `json:"bandwidth_limit_mbps"`
+	CacheUsagePercent    float64 `json:"cache_usage_percent"`
+	CacheMaxPercent      int     `json:"cache_max_percent"`
+	CacheFreeBytes       int64   `json:"cache_free_bytes"`
+	CacheTotalBytes      int64   `json:"cache_total_bytes"`
+	ActiveSyncs          int     `json:"active_syncs"`
 }
 
 // SyncService manages sync operations
@@ -63,12 +68,6 @@ type SyncRepository interface {
 	DeleteSyncJob(id int64) error
 	GetSyncSummary() (*models.SyncSummary, error)
 	GetActiveSyncJobsCount() (int, error)
-}
-
-// BandwidthMonitor monitors network bandwidth usage
-type BandwidthMonitor interface {
-	GetCurrentUsage() (float64, error) // Returns usage percentage
-	IsAvailable() bool
 }
 
 // JobRepository provides database access for jobs

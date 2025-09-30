@@ -13,7 +13,7 @@ import (
 
 type Handlers struct {
 	queue       interfaces.JobQueue
-	monitor     interfaces.ResourceMonitor
+	gatekeeper  interfaces.Gatekeeper
 	config      *config.Config
 	syncService interfaces.SyncService
 }
@@ -26,10 +26,10 @@ type APIResponse struct {
 }
 
 
-func NewHandlers(jobQueue interfaces.JobQueue, monitor interfaces.ResourceMonitor, cfg *config.Config, syncService interfaces.SyncService) *Handlers {
+func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper, cfg *config.Config, syncService interfaces.SyncService) *Handlers {
 	return &Handlers{
 		queue:       jobQueue,
-		monitor:     monitor,
+		gatekeeper:  gatekeeper,
 		config:      cfg,
 		syncService: syncService,
 	}

@@ -13,9 +13,10 @@ import (
 	"grabarr/internal/api"
 	"grabarr/internal/config"
 	"grabarr/internal/executor"
-	"grabarr/internal/monitor"
+	"grabarr/internal/gatekeeper"
 	"grabarr/internal/notifications"
 	"grabarr/internal/queue"
+	"grabarr/internal/rclone"
 	"grabarr/internal/repository"
 	"grabarr/internal/services"
 
@@ -57,20 +58,23 @@ func run() error {
 
 	slog.Info("database initialized", "path", cfg.GetDatabase().Path)
 
-	// Initialize resource monitor
-	resourceMonitor := monitor.New(cfg)
-	if err := resourceMonitor.Start(); err != nil {
-		return fmt.Errorf("failed to start resource monitor: %w", err)
+	// Initialize RClone client
+	rcloneConfig := cfg.GetRClone()
+	slog.Info("initializing RClone client", "daemon_addr", rcloneConfig.DaemonAddr)
+	rcloneClient := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
+
+	// Initialize gatekeeper
+	gk := gatekeeper.New(cfg, repo, rcloneClient)
+	if err := gk.Start(); err != nil {
+		return fmt.Errorf("failed to start gatekeeper: %w", err)
 	}
-	defer resourceMonitor.Stop()
+	defer gk.Stop()
 
 	// Initialize job queue
-	jobQueue := queue.New(repo, cfg, resourceMonitor)
+	jobQueue := queue.New(repo, cfg, gk)
 
 	// Initialize job executor
-	rcloneConfig := cfg.GetRClone()
-	slog.Info("initializing RClone executor", "daemon_addr", rcloneConfig.DaemonAddr)
-	jobExecutor := executor.NewRCloneExecutor(cfg, resourceMonitor, repo)
+	jobExecutor := executor.NewRCloneExecutor(cfg, gk, repo)
 	jobQueue.SetJobExecutor(jobExecutor)
 
 	// Initialize notifications
@@ -87,7 +91,7 @@ func run() error {
 	}
 
 	// Initialize sync service
-	syncService := services.NewSyncService(cfg, repo)
+	syncService := services.NewSyncService(cfg, repo, gk)
 	slog.Info("sync service initialized")
 
 	// Recover interrupted syncs
@@ -107,7 +111,7 @@ func run() error {
 	router := mux.NewRouter()
 
 	// Setup API handlers
-	handlers := api.NewHandlers(jobQueue, resourceMonitor, cfg, syncService)
+	handlers := api.NewHandlers(jobQueue, gk, cfg, syncService)
 	handlers.RegisterRoutes(router)
 
 	// Log registered routes for debugging

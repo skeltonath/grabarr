@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"grabarr/internal/config"
+	"grabarr/internal/interfaces"
 	"grabarr/internal/mocks"
 	"grabarr/internal/models"
 	"grabarr/internal/testutil"
@@ -23,7 +24,7 @@ import (
 func TestNew(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -31,7 +32,7 @@ func TestNew(t *testing.T) {
 	queue := q.(*queue)
 	assert.Equal(t, repo, queue.repo)
 	assert.Equal(t, cfg, queue.config)
-	assert.Equal(t, mockChecker, queue.resourceChecker)
+	assert.Equal(t, mockChecker, queue.gatekeeper)
 	assert.NotNil(t, queue.activeJobs)
 	assert.NotNil(t, queue.jobQueue)
 	assert.False(t, queue.running)
@@ -40,7 +41,7 @@ func TestNew(t *testing.T) {
 func TestSetJobExecutor(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	q := New(repo, cfg, mockChecker)
@@ -62,7 +63,7 @@ func TestStart_Success(t *testing.T) {
 			MaxRetries:    3,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	q := New(repo, cfg, mockChecker)
@@ -90,7 +91,7 @@ func TestStart_AlreadyRunning(t *testing.T) {
 			MaxConcurrent: 2,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	q := New(repo, cfg, mockChecker)
@@ -110,7 +111,7 @@ func TestStart_AlreadyRunning(t *testing.T) {
 func TestStart_NoExecutor(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -130,7 +131,7 @@ func TestStop_Success(t *testing.T) {
 			ShutdownTimeout: 5 * time.Second,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	q := New(repo, cfg, mockChecker)
@@ -157,7 +158,7 @@ func TestStop_MarksRunningJobsAsQueued(t *testing.T) {
 			ShutdownTimeout: 1 * time.Second,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	q := New(repo, cfg, mockChecker)
@@ -204,7 +205,7 @@ func TestStop_HandlesMultipleRunningJobs(t *testing.T) {
 			ShutdownTimeout: 1 * time.Second,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	q := New(repo, cfg, mockChecker)
@@ -262,7 +263,7 @@ func TestEnqueue_Success(t *testing.T) {
 			MaxRetries: 3,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -286,7 +287,7 @@ func TestEnqueue_SetsDefaults(t *testing.T) {
 			MaxRetries: 5,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -309,7 +310,7 @@ func TestEnqueue_SetsDefaults(t *testing.T) {
 func TestGetJob_Success(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -325,7 +326,7 @@ func TestGetJob_Success(t *testing.T) {
 func TestGetJobs_WithFilters(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -353,7 +354,7 @@ func TestGetJobs_WithFilters(t *testing.T) {
 func TestGetSummary_Success(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -385,7 +386,7 @@ func TestGetSummary_Success(t *testing.T) {
 func TestCancelJob_QueuedJob(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -405,7 +406,7 @@ func TestCancelJob_QueuedJob(t *testing.T) {
 func TestCancelJob_NotFound(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 
@@ -425,7 +426,7 @@ func TestCanScheduleNewJob_UnderLimit(t *testing.T) {
 			MaxConcurrent: 3,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 	queue := q.(*queue)
@@ -444,7 +445,7 @@ func TestCanScheduleNewJob_AtLimit(t *testing.T) {
 			MaxConcurrent: 2,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 	queue := q.(*queue)
@@ -468,7 +469,7 @@ func TestExecuteJob_Success(t *testing.T) {
 			MaxRetries:    3,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	mockExecutor.EXPECT().
@@ -506,7 +507,7 @@ func TestExecuteJob_Failure(t *testing.T) {
 			MaxRetries:    0, // No retries
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	mockExecutor.EXPECT().
@@ -548,7 +549,7 @@ func TestCalculateRetryBackoff_ExponentialGrowth(t *testing.T) {
 			RetryBackoffMax:  10 * time.Minute,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 	queue := q.(*queue)
@@ -578,7 +579,7 @@ func TestCalculateRetryBackoff_CappedAtMax(t *testing.T) {
 			RetryBackoffMax:  1 * time.Minute, // Cap at 1 minute
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 
 	q := New(repo, cfg, mockChecker)
 	queue := q.(*queue)
@@ -609,13 +610,13 @@ func TestQueueIntegration_SimpleExecution(t *testing.T) {
 			ShutdownTimeout: 5 * time.Second,
 		},
 	}
-	mockChecker := mocks.NewMockResourceChecker(t)
+	mockChecker := mocks.NewMockGatekeeper(t)
 	mockExecutor := mocks.NewMockJobExecutor(t)
 
 	// Allow resource checks
 	mockChecker.EXPECT().
-		CanScheduleJob().
-		Return(true).
+		CanStartJob(mock.AnythingOfType("int64")).
+		Return(interfaces.GateDecision{Allowed: true}).
 		Maybe()
 
 	// Mock successful execution

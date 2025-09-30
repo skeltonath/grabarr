@@ -23,51 +23,6 @@ func (_m *MockJobExecutor) EXPECT() *MockJobExecutor_Expecter {
 	return &MockJobExecutor_Expecter{mock: &_m.Mock}
 }
 
-// CanExecute provides a mock function with no fields
-func (_m *MockJobExecutor) CanExecute() bool {
-	ret := _m.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for CanExecute")
-	}
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
-// MockJobExecutor_CanExecute_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanExecute'
-type MockJobExecutor_CanExecute_Call struct {
-	*mock.Call
-}
-
-// CanExecute is a helper method to define mock.On call
-func (_e *MockJobExecutor_Expecter) CanExecute() *MockJobExecutor_CanExecute_Call {
-	return &MockJobExecutor_CanExecute_Call{Call: _e.mock.On("CanExecute")}
-}
-
-func (_c *MockJobExecutor_CanExecute_Call) Run(run func()) *MockJobExecutor_CanExecute_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockJobExecutor_CanExecute_Call) Return(_a0 bool) *MockJobExecutor_CanExecute_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockJobExecutor_CanExecute_Call) RunAndReturn(run func() bool) *MockJobExecutor_CanExecute_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Execute provides a mock function with given fields: ctx, job
 func (_m *MockJobExecutor) Execute(ctx context.Context, job *models.Job) error {
 	ret := _m.Called(ctx, job)

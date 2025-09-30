@@ -17,12 +17,11 @@ type Config struct {
 	Server        ServerConfig        `yaml:"server"`
 	Downloads     DownloadsConfig     `yaml:"downloads"`
 	Rclone        RcloneConfig        `yaml:"rclone"`
-	Resources     ResourcesConfig     `yaml:"resources"`
+	Gatekeeper    GatekeeperConfig    `yaml:"gatekeeper"`
 	Jobs          JobsConfig          `yaml:"jobs"`
 	Database      DatabaseConfig      `yaml:"database"`
 	Notifications NotificationsConfig `yaml:"notifications"`
 	Logging       LoggingConfig       `yaml:"logging"`
-	Monitoring    MonitoringConfig    `yaml:"monitoring"`
 
 	mu       sync.RWMutex
 	watchers []chan<- struct{}
@@ -48,21 +47,26 @@ type RcloneConfig struct {
 	DaemonAddr            string        `yaml:"daemon_addr"`
 }
 
-type ResourcesConfig struct {
-	Bandwidth BandwidthConfig `yaml:"bandwidth"`
-	Disk      DiskConfig      `yaml:"disk"`
+type GatekeeperConfig struct {
+	Seedbox   SeedboxConfig   `yaml:"seedbox"`
+	CacheDisk CacheDiskConfig `yaml:"cache_disk"`
+	Rules     GatekeeperRules `yaml:"rules"`
 }
 
-type BandwidthConfig struct {
-	MaxUsagePercent int           `yaml:"max_usage_percent"`
-	CheckInterval   time.Duration `yaml:"check_interval"`
+type SeedboxConfig struct {
+	BandwidthLimitMbps int           `yaml:"bandwidth_limit_mbps"`
+	CheckInterval      time.Duration `yaml:"check_interval"`
 }
 
-type DiskConfig struct {
-	CacheDrivePath    string        `yaml:"cache_drive_path"`
-	CacheDriveMinFree string        `yaml:"cache_drive_min_free"`
-	ArrayMinFree      string        `yaml:"array_min_free"`
-	CheckInterval     time.Duration `yaml:"check_interval"`
+type CacheDiskConfig struct {
+	Path             string        `yaml:"path"`
+	MaxUsagePercent  int           `yaml:"max_usage_percent"`
+	CheckInterval    time.Duration `yaml:"check_interval"`
+}
+
+type GatekeeperRules struct {
+	BlockJobsDuringSync  bool `yaml:"block_jobs_during_sync"`
+	RequireFilesizeCheck bool `yaml:"require_filesize_check"`
 }
 
 type JobsConfig struct {
@@ -97,9 +101,6 @@ type LoggingConfig struct {
 	File   string `yaml:"file"`
 }
 
-type MonitoringConfig struct {
-	ResourceCheckInterval time.Duration `yaml:"resource_check_interval"`
-}
 
 var (
 	globalConfig *Config
@@ -263,12 +264,11 @@ func (c *Config) reload(configPath string) error {
 	// Update all fields
 	c.Server = newConfig.Server
 	c.Rclone = newConfig.Rclone
-	c.Resources = newConfig.Resources
+	c.Gatekeeper = newConfig.Gatekeeper
 	c.Jobs = newConfig.Jobs
 	c.Database = newConfig.Database
 	c.Notifications = newConfig.Notifications
 	c.Logging = newConfig.Logging
-	c.Monitoring = newConfig.Monitoring
 
 	slog.Info("configuration reloaded successfully")
 	return nil
@@ -315,11 +315,11 @@ func (c *Config) GetDownloads() DownloadsConfig {
 	return c.Downloads
 }
 
-// GetResources returns a copy of the resources configuration
-func (c *Config) GetResources() ResourcesConfig {
+// GetGatekeeper returns a copy of the gatekeeper configuration
+func (c *Config) GetGatekeeper() GatekeeperConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.Resources
+	return c.Gatekeeper
 }
 
 // GetDatabase returns a copy of the database configuration
@@ -343,9 +343,3 @@ func (c *Config) GetLogging() LoggingConfig {
 	return c.Logging
 }
 
-// GetMonitoring returns a copy of the monitoring configuration
-func (c *Config) GetMonitoring() MonitoringConfig {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Monitoring
-}

@@ -16,8 +16,8 @@ func (h *Handlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check resource status
-	if h.monitor != nil {
-		resourceStatus := h.monitor.GetResourceStatus()
+	if h.gatekeeper != nil {
+		resourceStatus := h.gatekeeper.GetResourceStatus()
 		health["resources"] = resourceStatus
 	}
 
@@ -25,17 +25,23 @@ func (h *Handlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetMetrics(w http.ResponseWriter, r *http.Request) {
-	if h.monitor == nil {
-		h.writeError(w, http.StatusServiceUnavailable, "Monitoring not available", nil)
-		return
-	}
+	metrics := make(map[string]interface{})
 
-	metrics := h.monitor.GetMetrics()
+	// Add resource status
+	if h.gatekeeper != nil {
+		metrics["resources"] = h.gatekeeper.GetResourceStatus()
+	}
 
 	// Add job queue metrics
 	summary, err := h.queue.GetSummary()
 	if err == nil {
 		metrics["jobs"] = summary
+	}
+
+	// Add sync metrics
+	syncSummary, err := h.syncService.GetSyncSummary()
+	if err == nil {
+		metrics["syncs"] = syncSummary
 	}
 
 	h.writeSuccess(w, http.StatusOK, metrics, "")
@@ -54,9 +60,14 @@ func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
 		status["jobs"] = summary
 	}
 
+	// Get sync summary
+	if syncSummary, err := h.syncService.GetSyncSummary(); err == nil {
+		status["syncs"] = syncSummary
+	}
+
 	// Get resource status
-	if h.monitor != nil {
-		status["resources"] = h.monitor.GetResourceStatus()
+	if h.gatekeeper != nil {
+		status["resources"] = h.gatekeeper.GetResourceStatus()
 	}
 
 	h.writeSuccess(w, http.StatusOK, status, "")

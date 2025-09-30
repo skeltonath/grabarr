@@ -19,11 +19,12 @@ type SyncService struct {
 	config     *config.Config
 	repository interfaces.SyncRepository
 	client     interfaces.RCloneClient
+	gatekeeper interfaces.Gatekeeper
 	ctx        context.Context
 	cancel     context.CancelFunc
 }
 
-func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository) *SyncService {
+func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository, gatekeeper interfaces.Gatekeeper) *SyncService {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
@@ -33,20 +34,17 @@ func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository) *SyncSer
 		config:     cfg,
 		repository: repo,
 		client:     client,
+		gatekeeper: gatekeeper,
 		ctx:        ctx,
 		cancel:     cancel,
 	}
 }
 
 func (s *SyncService) StartSync(ctx context.Context, remotePath string) (*models.SyncJob, error) {
-	// Check if we've reached the max concurrent syncs
-	activeCount, err := s.repository.GetActiveSyncJobsCount()
-	if err != nil {
-		return nil, fmt.Errorf("failed to check active sync count: %w", err)
-	}
-
-	if activeCount >= MaxConcurrentSyncs {
-		return nil, fmt.Errorf("maximum concurrent syncs (%d) reached, please wait for existing sync to complete", MaxConcurrentSyncs)
+	// Check gatekeeper before starting sync
+	decision := s.gatekeeper.CanStartSync()
+	if !decision.Allowed {
+		return nil, fmt.Errorf("cannot start sync: %s", decision.Reason)
 	}
 
 	// Check if daemon is responsive

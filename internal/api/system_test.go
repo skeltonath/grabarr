@@ -15,25 +15,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHealthCheck_WithMonitor(t *testing.T) {
+func TestHealthCheck_WithGatekeeper(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
-	mockMonitor := mocks.NewMockResourceMonitor(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	cfg := &config.Config{}
 
-	resourceStatus := interfaces.ResourceStatus{
-		BandwidthAvailable: true,
-		BandwidthUsage:     45.5,
-		DiskSpaceAvailable: true,
-		CacheDiskFree:      1024 * 1024 * 1024 * 10, // 10GB
-		ArrayDiskFree:      1024 * 1024 * 1024 * 100, // 100GB
+	resourceStatus := interfaces.GatekeeperResourceStatus{
+		BandwidthUsageMbps: 250.5,
+		BandwidthLimitMbps: 500,
+		CacheUsagePercent:  45.2,
+		CacheMaxPercent:    80,
+		CacheFreeBytes:     1024 * 1024 * 1024 * 10,  // 10GB
+		CacheTotalBytes:    1024 * 1024 * 1024 * 100, // 100GB
+		ActiveSyncs:        0,
 	}
 
-	mockMonitor.EXPECT().
+	mockGatekeeper.EXPECT().
 		GetResourceStatus().
 		Return(resourceStatus).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockMonitor, cfg, nil)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/health", nil)
 	rec := httptest.NewRecorder()
@@ -58,7 +60,7 @@ func TestHealthCheck_WithMonitor(t *testing.T) {
 	assert.NotNil(t, data["resources"])
 }
 
-func TestHealthCheck_WithoutMonitor(t *testing.T) {
+func TestHealthCheck_WithoutGatekeeper(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
 	cfg := &config.Config{}
 
@@ -85,18 +87,20 @@ func TestHealthCheck_WithoutMonitor(t *testing.T) {
 
 func TestGetMetrics_Success(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
-	mockMonitor := mocks.NewMockResourceMonitor(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
-	metrics := map[string]interface{}{
-		"cpu_percent":    45.5,
-		"memory_percent": 60.2,
-		"disk_percent":   75.0,
+	resourceStatus := interfaces.GatekeeperResourceStatus{
+		BandwidthUsageMbps: 250.5,
+		BandwidthLimitMbps: 500,
+		CacheUsagePercent:  45.2,
+		CacheMaxPercent:    80,
 	}
 
-	mockMonitor.EXPECT().
-		GetMetrics().
-		Return(metrics).
+	mockGatekeeper.EXPECT().
+		GetResourceStatus().
+		Return(resourceStatus).
 		Once()
 
 	summary := &models.JobSummary{
@@ -113,7 +117,20 @@ func TestGetMetrics_Success(t *testing.T) {
 		Return(summary, nil).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockMonitor, cfg, nil)
+	syncSummary := &models.SyncSummary{
+		TotalSyncs:     10,
+		QueuedSyncs:    2,
+		RunningSyncs:   1,
+		CompletedSyncs: 6,
+		FailedSyncs:    1,
+	}
+
+	mockSync.EXPECT().
+		GetSyncSummary().
+		Return(syncSummary, nil).
+		Once()
+
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -130,43 +147,25 @@ func TestGetMetrics_Success(t *testing.T) {
 
 	data, ok := response.Data.(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, 45.5, data["cpu_percent"])
+	assert.NotNil(t, data["resources"])
 	assert.NotNil(t, data["jobs"])
-}
-
-func TestGetMetrics_WithoutMonitor(t *testing.T) {
-	mockQueue := mocks.NewMockJobQueue(t)
-	cfg := &config.Config{}
-
-	handlers := NewHandlers(mockQueue, nil, cfg, nil)
-
-	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
-	rec := httptest.NewRecorder()
-
-	handlers.GetMetrics(rec, req)
-
-	assert.Equal(t, 503, rec.Code)
-
-	var response APIResponse
-	err := json.NewDecoder(rec.Body).Decode(&response)
-	require.NoError(t, err)
-
-	assert.False(t, response.Success)
-	assert.Equal(t, "Monitoring not available", response.Error)
+	assert.NotNil(t, data["syncs"])
 }
 
 func TestGetMetrics_JobSummaryError(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
-	mockMonitor := mocks.NewMockResourceMonitor(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
-	metrics := map[string]interface{}{
-		"cpu_percent": 45.5,
+	resourceStatus := interfaces.GatekeeperResourceStatus{
+		BandwidthUsageMbps: 250.5,
+		BandwidthLimitMbps: 500,
 	}
 
-	mockMonitor.EXPECT().
-		GetMetrics().
-		Return(metrics).
+	mockGatekeeper.EXPECT().
+		GetResourceStatus().
+		Return(resourceStatus).
 		Once()
 
 	mockQueue.EXPECT().
@@ -174,7 +173,12 @@ func TestGetMetrics_JobSummaryError(t *testing.T) {
 		Return(nil, errors.New("database error")).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockMonitor, cfg, nil)
+	mockSync.EXPECT().
+		GetSyncSummary().
+		Return(nil, errors.New("database error")).
+		Once()
+
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -196,7 +200,8 @@ func TestGetMetrics_JobSummaryError(t *testing.T) {
 
 func TestGetStatus_Full(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
-	mockMonitor := mocks.NewMockResourceMonitor(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
 	summary := &models.JobSummary{
@@ -213,20 +218,30 @@ func TestGetStatus_Full(t *testing.T) {
 		Return(summary, nil).
 		Once()
 
-	resourceStatus := interfaces.ResourceStatus{
-		BandwidthAvailable: true,
-		BandwidthUsage:     30.5,
-		DiskSpaceAvailable: true,
-		CacheDiskFree:      1024 * 1024 * 1024 * 5,  // 5GB
-		ArrayDiskFree:      1024 * 1024 * 1024 * 50, // 50GB
+	syncSummary := &models.SyncSummary{
+		TotalSyncs:   5,
+		QueuedSyncs:  1,
+		RunningSyncs: 0,
 	}
 
-	mockMonitor.EXPECT().
+	mockSync.EXPECT().
+		GetSyncSummary().
+		Return(syncSummary, nil).
+		Once()
+
+	resourceStatus := interfaces.GatekeeperResourceStatus{
+		BandwidthUsageMbps: 150.5,
+		BandwidthLimitMbps: 500,
+		CacheUsagePercent:  30.5,
+		CacheMaxPercent:    80,
+	}
+
+	mockGatekeeper.EXPECT().
 		GetResourceStatus().
 		Return(resourceStatus).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockMonitor, cfg, nil)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rec := httptest.NewRecorder()
@@ -265,7 +280,13 @@ func TestGetStatus_WithoutMonitor(t *testing.T) {
 		Return(summary, nil).
 		Once()
 
-	handlers := NewHandlers(mockQueue, nil, cfg, nil)
+	mockSync := mocks.NewMockSyncService(t)
+	mockSync.EXPECT().
+		GetSyncSummary().
+		Return(&models.SyncSummary{}, nil).
+		Once()
+
+	handlers := NewHandlers(mockQueue, nil, cfg, mockSync)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rec := httptest.NewRecorder()
@@ -288,7 +309,8 @@ func TestGetStatus_WithoutMonitor(t *testing.T) {
 
 func TestGetStatus_JobSummaryError(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
-	mockMonitor := mocks.NewMockResourceMonitor(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
 	mockQueue.EXPECT().
@@ -296,18 +318,24 @@ func TestGetStatus_JobSummaryError(t *testing.T) {
 		Return(nil, errors.New("database error")).
 		Once()
 
-	resourceStatus := interfaces.ResourceStatus{
-		BandwidthAvailable: false,
-		BandwidthUsage:     95.0,
-		DiskSpaceAvailable: false,
+	mockSync.EXPECT().
+		GetSyncSummary().
+		Return(nil, errors.New("database error")).
+		Once()
+
+	resourceStatus := interfaces.GatekeeperResourceStatus{
+		BandwidthUsageMbps: 495.0,
+		BandwidthLimitMbps: 500,
+		CacheUsagePercent:  95.0,
+		CacheMaxPercent:    80,
 	}
 
-	mockMonitor.EXPECT().
+	mockGatekeeper.EXPECT().
 		GetResourceStatus().
 		Return(resourceStatus).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockMonitor, cfg, nil)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rec := httptest.NewRecorder()

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"grabarr/internal/config"
+	"grabarr/internal/interfaces"
 	"grabarr/internal/mocks"
 	"grabarr/internal/models"
 
@@ -22,13 +23,15 @@ func TestNewSyncService(t *testing.T) {
 		},
 	}
 	mockRepo := mocks.NewMockSyncRepository(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
 
-	service := NewSyncService(cfg, mockRepo)
+	service := NewSyncService(cfg, mockRepo, mockGatekeeper)
 
 	assert.NotNil(t, service)
 	assert.Equal(t, cfg, service.config)
 	assert.Equal(t, mockRepo, service.repository)
 	assert.NotNil(t, service.client)
+	assert.Equal(t, mockGatekeeper, service.gatekeeper)
 }
 
 func TestStartSync_Success(t *testing.T) {
@@ -39,6 +42,7 @@ func TestStartSync_Success(t *testing.T) {
 	}
 	mockRepo := mocks.NewMockSyncRepository(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
 
 	serviceCtx, serviceCancel := context.WithCancel(context.Background())
 	defer serviceCancel()
@@ -47,6 +51,7 @@ func TestStartSync_Success(t *testing.T) {
 		config:     cfg,
 		repository: mockRepo,
 		client:     mockClient,
+		gatekeeper: mockGatekeeper,
 		ctx:        serviceCtx,
 		cancel:     serviceCancel,
 	}
@@ -54,10 +59,10 @@ func TestStartSync_Success(t *testing.T) {
 	ctx := context.Background()
 	remotePath := "/remote/path/to/sync"
 
-	// Mock active count check
-	mockRepo.EXPECT().
-		GetActiveSyncJobsCount().
-		Return(0, nil).
+	// Mock gatekeeper check
+	mockGatekeeper.EXPECT().
+		CanStartSync().
+		Return(interfaces.GateDecision{Allowed: true}).
 		Once()
 
 	// Mock daemon ping
@@ -115,71 +120,80 @@ func TestStartSync_MaxConcurrentReached(t *testing.T) {
 	cfg := &config.Config{}
 	mockRepo := mocks.NewMockSyncRepository(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+
+	// Mock gatekeeper blocking the sync
+	mockGatekeeper.EXPECT().
+		CanStartSync().
+		Return(interfaces.GateDecision{Allowed: false, Reason: "Another sync is already running"}).
+		Once()
 
 	service := &SyncService{
 		config:     cfg,
 		repository: mockRepo,
 		client:     mockClient,
+		gatekeeper: mockGatekeeper,
 	}
 
 	ctx := context.Background()
-
-	// Mock active count at max
-	mockRepo.EXPECT().
-		GetActiveSyncJobsCount().
-		Return(MaxConcurrentSyncs, nil).
-		Once()
 
 	syncJob, err := service.StartSync(ctx, "/remote/path")
 
 	assert.Error(t, err)
 	assert.Nil(t, syncJob)
-	assert.Contains(t, err.Error(), "maximum concurrent syncs")
+	assert.Contains(t, err.Error(), "cannot start sync")
+	assert.Contains(t, err.Error(), "Another sync is already running")
 }
 
-func TestStartSync_ActiveCountError(t *testing.T) {
+func TestStartSync_GatekeeperBlocked(t *testing.T) {
 	cfg := &config.Config{}
 	mockRepo := mocks.NewMockSyncRepository(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+
+	// Mock gatekeeper blocking for bandwidth reasons
+	mockGatekeeper.EXPECT().
+		CanStartSync().
+		Return(interfaces.GateDecision{Allowed: false, Reason: "Bandwidth limit exceeded"}).
+		Once()
 
 	service := &SyncService{
 		config:     cfg,
 		repository: mockRepo,
 		client:     mockClient,
+		gatekeeper: mockGatekeeper,
 	}
 
 	ctx := context.Background()
-
-	// Mock active count check fails
-	mockRepo.EXPECT().
-		GetActiveSyncJobsCount().
-		Return(0, errors.New("database error")).
-		Once()
 
 	syncJob, err := service.StartSync(ctx, "/remote/path")
 
 	assert.Error(t, err)
 	assert.Nil(t, syncJob)
-	assert.Contains(t, err.Error(), "failed to check active sync count")
+	assert.Contains(t, err.Error(), "cannot start sync")
+	assert.Contains(t, err.Error(), "Bandwidth limit exceeded")
 }
 
 func TestStartSync_DaemonNotResponsive(t *testing.T) {
 	cfg := &config.Config{}
 	mockRepo := mocks.NewMockSyncRepository(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+
+	// Mock gatekeeper allowing the sync
+	mockGatekeeper.EXPECT().
+		CanStartSync().
+		Return(interfaces.GateDecision{Allowed: true}).
+		Once()
 
 	service := &SyncService{
 		config:     cfg,
 		repository: mockRepo,
 		client:     mockClient,
+		gatekeeper: mockGatekeeper,
 	}
 
 	ctx := context.Background()
-
-	mockRepo.EXPECT().
-		GetActiveSyncJobsCount().
-		Return(0, nil).
-		Once()
 
 	// Mock daemon not responsive
 	mockClient.EXPECT().
@@ -202,19 +216,22 @@ func TestStartSync_CreateJobError(t *testing.T) {
 	}
 	mockRepo := mocks.NewMockSyncRepository(t)
 	mockClient := mocks.NewMockRCloneClient(t)
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+
+	// Mock gatekeeper allowing the sync
+	mockGatekeeper.EXPECT().
+		CanStartSync().
+		Return(interfaces.GateDecision{Allowed: true}).
+		Once()
 
 	service := &SyncService{
 		config:     cfg,
 		repository: mockRepo,
 		client:     mockClient,
+		gatekeeper: mockGatekeeper,
 	}
 
 	ctx := context.Background()
-
-	mockRepo.EXPECT().
-		GetActiveSyncJobsCount().
-		Return(0, nil).
-		Once()
 
 	mockClient.EXPECT().
 		Ping(ctx).

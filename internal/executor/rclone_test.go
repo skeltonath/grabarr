@@ -21,14 +21,14 @@ func TestNewRCloneExecutor(t *testing.T) {
 			DaemonAddr: "localhost:5572",
 		},
 	}
-	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockMonitor := mocks.NewMockGatekeeper(t)
 	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := NewRCloneExecutor(cfg, mockMonitor, mockRepo)
 
 	assert.NotNil(t, executor)
 	assert.Equal(t, cfg, executor.config)
-	assert.Equal(t, mockMonitor, executor.monitor)
+	assert.Equal(t, mockMonitor, executor.gatekeeper)
 	assert.NotNil(t, executor.client)
 	assert.NotNil(t, executor.progressChan)
 	assert.Equal(t, mockRepo, executor.repo)
@@ -40,13 +40,13 @@ func TestExecute_Success(t *testing.T) {
 			RemoteName: "seedbox",
 		},
 	}
-	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockMonitor := mocks.NewMockGatekeeper(t)
 	mockClient := mocks.NewMockRCloneClient(t)
 	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		config:       cfg,
-		monitor:      mockMonitor,
+		gatekeeper:      mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
 		repo:         mockRepo,
@@ -104,13 +104,13 @@ func TestExecute_Success(t *testing.T) {
 
 func TestExecute_DaemonNotResponsive(t *testing.T) {
 	cfg := &config.Config{}
-	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockMonitor := mocks.NewMockGatekeeper(t)
 	mockClient := mocks.NewMockRCloneClient(t)
 	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		config:       cfg,
-		monitor:      mockMonitor,
+		gatekeeper:      mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
 		repo:         mockRepo,
@@ -142,13 +142,13 @@ func TestExecute_CopyFails(t *testing.T) {
 			RemoteName: "seedbox",
 		},
 	}
-	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockMonitor := mocks.NewMockGatekeeper(t)
 	mockClient := mocks.NewMockRCloneClient(t)
 	mockRepo := mocks.NewMockJobRepository(t)
 
 	executor := &RCloneExecutor{
 		config:       cfg,
-		monitor:      mockMonitor,
+		gatekeeper:      mockMonitor,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       mockClient,
 		repo:         mockRepo,
@@ -184,11 +184,11 @@ func TestPrepareCopyRequest_File(t *testing.T) {
 			RemoteName: "seedbox",
 		},
 	}
-	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockMonitor := mocks.NewMockGatekeeper(t)
 
 	executor := &RCloneExecutor{
 		config:  cfg,
-		monitor: mockMonitor,
+		gatekeeper: mockMonitor,
 	}
 
 	job := &models.Job{
@@ -214,11 +214,11 @@ func TestPrepareCopyRequest_Directory(t *testing.T) {
 			RemoteName: "remote",
 		},
 	}
-	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockMonitor := mocks.NewMockGatekeeper(t)
 
 	executor := &RCloneExecutor{
 		config:  cfg,
-		monitor: mockMonitor,
+		gatekeeper: mockMonitor,
 	}
 
 	job := &models.Job{
@@ -242,11 +242,11 @@ func TestPrepareCopyRequest_NestedPath(t *testing.T) {
 			RemoteName: "seedbox",
 		},
 	}
-	mockMonitor := mocks.NewMockResourceChecker(t)
+	mockMonitor := mocks.NewMockGatekeeper(t)
 
 	executor := &RCloneExecutor{
 		config:  cfg,
-		monitor: mockMonitor,
+		gatekeeper: mockMonitor,
 	}
 
 	job := &models.Job{
@@ -518,40 +518,6 @@ func TestUpdateJobProgress_ChannelSend(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("updateJobProgress blocked on channel send")
 	}
-}
-
-func TestCanExecute_ResourcesAvailable(t *testing.T) {
-	mockMonitor := mocks.NewMockResourceChecker(t)
-
-	executor := &RCloneExecutor{
-		monitor: mockMonitor,
-	}
-
-	mockMonitor.EXPECT().
-		CanScheduleJob().
-		Return(true).
-		Once()
-
-	result := executor.CanExecute()
-
-	assert.True(t, result)
-}
-
-func TestCanExecute_ResourcesUnavailable(t *testing.T) {
-	mockMonitor := mocks.NewMockResourceChecker(t)
-
-	executor := &RCloneExecutor{
-		monitor: mockMonitor,
-	}
-
-	mockMonitor.EXPECT().
-		CanScheduleJob().
-		Return(false).
-		Once()
-
-	result := executor.CanExecute()
-
-	assert.False(t, result)
 }
 
 func TestGetProgressChannel(t *testing.T) {

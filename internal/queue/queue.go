@@ -28,20 +28,20 @@ type queue struct {
 	schedulerCancel context.CancelFunc
 
 	// Resource management
-	resourceChecker interfaces.ResourceChecker
+	gatekeeper interfaces.Gatekeeper
 
 	// Cleanup
 	lastCleanup time.Time
 }
 
-func New(repo *repository.Repository, config *config.Config, resourceChecker interfaces.ResourceChecker) interfaces.JobQueue {
+func New(repo *repository.Repository, config *config.Config, gatekeeper interfaces.Gatekeeper) interfaces.JobQueue {
 	return &queue{
-		repo:            repo,
-		config:          config,
-		activeJobs:      make(map[int64]context.CancelFunc),
-		jobQueue:        make(chan *models.Job, 1000), // Buffered channel for job queue
-		resourceChecker: resourceChecker,
-		lastCleanup:     time.Now(),
+		repo:        repo,
+		config:      config,
+		activeJobs:  make(map[int64]context.CancelFunc),
+		jobQueue:    make(chan *models.Job, 1000), // Buffered channel for job queue
+		gatekeeper:  gatekeeper,
+		lastCleanup: time.Now(),
 	}
 }
 
@@ -266,7 +266,7 @@ func (q *queue) scheduler() {
 			q.processQueue()
 		case job := <-q.jobQueue:
 			// Process job immediately if resources allow
-			if q.canScheduleNewJob() && q.resourceChecker.CanScheduleJob() {
+			if q.canScheduleNewJob() && q.canStartJobNow(job) {
 				q.scheduleJob(job)
 			} else {
 				// Put job back in queue for later
@@ -286,15 +286,26 @@ func (q *queue) scheduler() {
 }
 
 func (q *queue) processQueue() {
-	if !q.canScheduleNewJob() || !q.resourceChecker.CanScheduleJob() {
+	if !q.canScheduleNewJob() {
 		return
 	}
 
 	// Try to process jobs from the queue
-	for q.canScheduleNewJob() && q.resourceChecker.CanScheduleJob() {
+	for q.canScheduleNewJob() {
 		select {
 		case job := <-q.jobQueue:
-			q.scheduleJob(job)
+			if q.canStartJobNow(job) {
+				q.scheduleJob(job)
+			} else {
+				// Put back in queue
+				select {
+				case q.jobQueue <- job:
+				default:
+					job.Status = models.JobStatusPending
+					q.repo.UpdateJob(job)
+				}
+				return
+			}
 		default:
 			// No jobs in queue, try to load from database
 			jobs, err := q.repo.GetJobs(models.JobFilter{
@@ -314,7 +325,7 @@ func (q *queue) processQueue() {
 
 			// Add jobs to queue
 			for _, job := range jobs {
-				if q.canScheduleNewJob() && q.resourceChecker.CanScheduleJob() {
+				if q.canScheduleNewJob() && q.canStartJobNow(job) {
 					q.scheduleJob(job)
 				} else {
 					break
@@ -323,6 +334,19 @@ func (q *queue) processQueue() {
 			return
 		}
 	}
+}
+
+// canStartJobNow checks with gatekeeper if a job can start now
+func (q *queue) canStartJobNow(job *models.Job) bool {
+	decision := q.gatekeeper.CanStartJob(job.EstimatedSize)
+	if !decision.Allowed {
+		slog.Debug("job blocked by gatekeeper",
+			"job_id", job.ID,
+			"reason", decision.Reason,
+			"details", decision.Details)
+		return false
+	}
+	return true
 }
 
 func (q *queue) canScheduleNewJob() bool {

@@ -16,19 +16,19 @@ import (
 
 type RCloneExecutor struct {
 	config       *config.Config
-	monitor      interfaces.ResourceChecker
+	gatekeeper   interfaces.Gatekeeper
 	progressChan chan models.JobProgress
 	client       interfaces.RCloneClient
 	repo         interfaces.JobRepository
 }
 
-func NewRCloneExecutor(cfg *config.Config, monitor interfaces.ResourceChecker, repo interfaces.JobRepository) *RCloneExecutor {
+func NewRCloneExecutor(cfg *config.Config, gatekeeper interfaces.Gatekeeper, repo interfaces.JobRepository) *RCloneExecutor {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
 	return &RCloneExecutor{
 		config:       cfg,
-		monitor:      monitor,
+		gatekeeper:   gatekeeper,
 		progressChan: make(chan models.JobProgress, 100),
 		client:       client,
 		repo:         repo,
@@ -198,9 +198,4 @@ func (r *RCloneExecutor) updateJobProgress(job *models.Job, status *models.RClon
 
 func (r *RCloneExecutor) GetProgressChannel() <-chan models.JobProgress {
 	return r.progressChan
-}
-
-func (r *RCloneExecutor) CanExecute() bool {
-	// Check if we have available resources
-	return r.monitor.CanScheduleJob()
 }
