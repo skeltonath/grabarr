@@ -21,7 +21,7 @@ YELLOW=\033[0;33m
 BLUE=\033[0;34m
 NC=\033[0m # No Color
 
-.PHONY: help build run clean test test-verbose test-coverage test-race test-coverage-summary test-ci fmt vet deps gen-mocks
+.PHONY: help build run clean test test-verbose test-coverage test-race test-coverage-summary test-ci fmt vet deps gen-mocks gen-bruno
 .PHONY: docker-build docker-run docker-stop docker-logs docker-shell
 .PHONY: deploy deploy-logs deploy-restart setup-config
 
@@ -61,6 +61,11 @@ gen-mocks: ## Generate mocks using mockery
 	fi
 	@mockery --all --dir internal/interfaces --output internal/mocks --case underscore
 	@echo "$(GREEN)✓ Mocks generated$(NC)"
+
+gen-bruno: ## Generate Bruno API collection from code
+	@echo "$(GREEN)Generating Bruno API collection...$(NC)"
+	@go run ./cmd/bruno-gen
+	@echo "$(GREEN)✓ Bruno collection generated in bruno_auto/$(NC)"
 
 ## Testing Targets
 
