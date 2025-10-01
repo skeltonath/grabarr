@@ -89,9 +89,13 @@ func run() error {
 		slog.Warn("failed to recover interrupted syncs", "error", err)
 	}
 
-	// Start job queue
+	// Start job queue and executor
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Start the progress monitor
+	jobExecutor.Start(ctx)
+	defer jobExecutor.Stop()
 
 	if err := jobQueue.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start job queue: %w", err)

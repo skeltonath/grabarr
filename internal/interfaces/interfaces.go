@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"grabarr/internal/models"
+	"grabarr/internal/rclone"
 )
 
 // JobQueue manages the job queue, scheduling, and execution
@@ -81,6 +82,7 @@ type RCloneClient interface {
 	Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error)
 	CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error)
 	GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error)
+	GetCoreStats(ctx context.Context) (*rclone.CoreStats, error)
 	ListJobs(ctx context.Context) (*models.RCloneJobListResponse, error)
 	StopJob(ctx context.Context, jobID int64) error
 	Ping(ctx context.Context) error

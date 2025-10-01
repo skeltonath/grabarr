@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"grabarr/internal/config"
 	"grabarr/internal/mocks"
@@ -44,12 +43,14 @@ func TestExecute_Success(t *testing.T) {
 	mockClient := mocks.NewMockRCloneClient(t)
 	mockRepo := mocks.NewMockJobRepository(t)
 
+	progressMonitor := NewProgressMonitor(mockClient, mockRepo)
 	executor := &RCloneExecutor{
-		config:       cfg,
-		gatekeeper:   mockMonitor,
-		progressChan: make(chan models.JobProgress, 100),
-		client:       mockClient,
-		repo:         mockRepo,
+		config:          cfg,
+		gatekeeper:      mockMonitor,
+		progressChan:    make(chan models.JobProgress, 100),
+		client:          mockClient,
+		repo:            mockRepo,
+		progressMonitor: progressMonitor,
 	}
 
 	job := &models.Job{
@@ -108,12 +109,14 @@ func TestExecute_DaemonNotResponsive(t *testing.T) {
 	mockClient := mocks.NewMockRCloneClient(t)
 	mockRepo := mocks.NewMockJobRepository(t)
 
+	progressMonitor := NewProgressMonitor(mockClient, mockRepo)
 	executor := &RCloneExecutor{
-		config:       cfg,
-		gatekeeper:   mockMonitor,
-		progressChan: make(chan models.JobProgress, 100),
-		client:       mockClient,
-		repo:         mockRepo,
+		config:          cfg,
+		gatekeeper:      mockMonitor,
+		progressChan:    make(chan models.JobProgress, 100),
+		client:          mockClient,
+		repo:            mockRepo,
+		progressMonitor: progressMonitor,
 	}
 
 	job := &models.Job{
@@ -146,12 +149,14 @@ func TestExecute_CopyFails(t *testing.T) {
 	mockClient := mocks.NewMockRCloneClient(t)
 	mockRepo := mocks.NewMockJobRepository(t)
 
+	progressMonitor := NewProgressMonitor(mockClient, mockRepo)
 	executor := &RCloneExecutor{
-		config:       cfg,
-		gatekeeper:   mockMonitor,
-		progressChan: make(chan models.JobProgress, 100),
-		client:       mockClient,
-		repo:         mockRepo,
+		config:          cfg,
+		gatekeeper:      mockMonitor,
+		progressChan:    make(chan models.JobProgress, 100),
+		client:          mockClient,
+		repo:            mockRepo,
+		progressMonitor: progressMonitor,
 	}
 
 	job := &models.Job{
@@ -418,106 +423,6 @@ func TestMonitorJob_StatusCheckError(t *testing.T) {
 	err := executor.monitorJob(ctx, job, rcloneJobID)
 
 	assert.NoError(t, err)
-}
-
-func TestUpdateJobProgress_WithBytes(t *testing.T) {
-	executor := &RCloneExecutor{
-		progressChan: make(chan models.JobProgress, 100),
-	}
-
-	job := &models.Job{
-		ID: 1,
-	}
-
-	status := &models.RCloneJobStatus{
-		Output: models.RCloneOutput{
-			Bytes:          5000,
-			TotalBytes:     10000,
-			Transfers:      1,
-			TotalTransfers: 2,
-			Speed:          1000,
-		},
-	}
-
-	executor.updateJobProgress(job, status)
-
-	assert.Equal(t, int64(10000), job.Progress.TotalBytes)
-	assert.Equal(t, int64(5000), job.Progress.TransferredBytes)
-	assert.Equal(t, float64(50), job.Progress.Percentage)
-	assert.Equal(t, 2, job.Progress.FilesTotal)
-	assert.Equal(t, 1, job.Progress.FilesCompleted)
-	assert.Equal(t, int64(1000), job.Progress.TransferSpeed)
-}
-
-func TestUpdateJobProgress_ETACalculation(t *testing.T) {
-	executor := &RCloneExecutor{
-		progressChan: make(chan models.JobProgress, 100),
-	}
-
-	job := &models.Job{
-		ID: 1,
-	}
-
-	status := &models.RCloneJobStatus{
-		Output: models.RCloneOutput{
-			Bytes:      2500,
-			TotalBytes: 10000,
-			Speed:      1000, // 1000 bytes/sec
-		},
-	}
-
-	before := time.Now()
-	executor.updateJobProgress(job, status)
-	after := time.Now().Add(10 * time.Second)
-
-	require.NotNil(t, job.Progress.ETA)
-	assert.True(t, job.Progress.ETA.After(before))
-	assert.True(t, job.Progress.ETA.Before(after))
-
-	// ETA should be roughly 7.5 seconds from now (7500 bytes remaining / 1000 bytes/sec)
-	expectedETA := time.Now().Add(7 * time.Second)
-	assert.WithinDuration(t, expectedETA, *job.Progress.ETA, 2*time.Second)
-}
-
-func TestUpdateJobProgress_ChannelSend(t *testing.T) {
-	executor := &RCloneExecutor{
-		progressChan: make(chan models.JobProgress, 1), // Small buffer
-	}
-
-	job := &models.Job{
-		ID: 1,
-	}
-
-	status := &models.RCloneJobStatus{
-		Output: models.RCloneOutput{
-			Bytes:      1000,
-			TotalBytes: 2000,
-		},
-	}
-
-	// First send should succeed
-	executor.updateJobProgress(job, status)
-
-	// Read from channel
-	progress := <-executor.progressChan
-	assert.Equal(t, int64(1000), progress.TransferredBytes)
-
-	// Fill the channel
-	executor.updateJobProgress(job, status)
-
-	// This should not block (non-blocking send)
-	done := make(chan bool)
-	go func() {
-		executor.updateJobProgress(job, status)
-		done <- true
-	}()
-
-	select {
-	case <-done:
-		// Success - didn't block
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("updateJobProgress blocked on channel send")
-	}
 }
 
 func TestGetProgressChannel(t *testing.T) {

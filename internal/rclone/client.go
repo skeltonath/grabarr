@@ -84,6 +84,46 @@ type JobListResponse struct {
 	JobIDs []int64 `json:"jobids"`
 }
 
+// CoreStats represents global transfer statistics from /core/stats
+type CoreStats struct {
+	Bytes               int64              `json:"bytes"`
+	Checks              int64              `json:"checks"`
+	DeletedDirs         int64              `json:"deletedDirs"`
+	Deletes             int64              `json:"deletes"`
+	ElapsedTime         float64            `json:"elapsedTime"`
+	Errors              int64              `json:"errors"`
+	ETA                 *int64             `json:"eta"`
+	FatalError          bool               `json:"fatalError"`
+	LastError           string             `json:"lastError"`
+	Renames             int64              `json:"renames"`
+	RetryError          bool               `json:"retryError"`
+	ServerSideCopies    int64              `json:"serverSideCopies"`
+	ServerSideCopyBytes int64              `json:"serverSideCopyBytes"`
+	ServerSideMoveBytes int64              `json:"serverSideMoveBytes"`
+	ServerSideMoves     int64              `json:"serverSideMoves"`
+	Speed               float64            `json:"speed"`
+	TotalBytes          int64              `json:"totalBytes"`
+	TotalChecks         int64              `json:"totalChecks"`
+	TotalTransfers      int64              `json:"totalTransfers"`
+	TransferTime        float64            `json:"transferTime"`
+	Transfers           int64              `json:"transfers"`
+	Transferring        []TransferringFile `json:"transferring"`
+}
+
+// TransferringFile represents a file currently being transferred
+type TransferringFile struct {
+	Bytes      int64   `json:"bytes"`
+	DstFs      string  `json:"dstFs"`
+	ETA        *int64  `json:"eta"`
+	Group      string  `json:"group"`
+	Name       string  `json:"name"`
+	Percentage int     `json:"percentage"`
+	Size       int64   `json:"size"`
+	Speed      float64 `json:"speed"`
+	SpeedAvg   float64 `json:"speedAvg"`
+	SrcFs      string  `json:"srcFs"`
+}
+
 // Copy initiates a copy operation for files or directories with optional filtering
 func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
 	req := SyncCopyRequest{
@@ -161,6 +201,16 @@ func (c *Client) StopJob(ctx context.Context, jobID int64) error {
 // Ping checks if the rclone daemon is responsive
 func (c *Client) Ping(ctx context.Context) error {
 	return c.makeRequest(ctx, "POST", "/core/pid", nil, nil)
+}
+
+// GetCoreStats gets global transfer statistics from /core/stats
+func (c *Client) GetCoreStats(ctx context.Context) (*CoreStats, error) {
+	var stats CoreStats
+	err := c.makeRequest(ctx, "POST", "/core/stats", nil, &stats)
+	if err != nil {
+		return nil, err
+	}
+	return &stats, nil
 }
 
 // makeRequest makes an HTTP request to the rclone daemon

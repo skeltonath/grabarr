@@ -15,24 +15,37 @@ import (
 )
 
 type RCloneExecutor struct {
-	config       *config.Config
-	gatekeeper   interfaces.Gatekeeper
-	progressChan chan models.JobProgress
-	client       interfaces.RCloneClient
-	repo         interfaces.JobRepository
+	config          *config.Config
+	gatekeeper      interfaces.Gatekeeper
+	progressChan    chan models.JobProgress
+	client          interfaces.RCloneClient
+	repo            interfaces.JobRepository
+	progressMonitor *ProgressMonitor
 }
 
 func NewRCloneExecutor(cfg *config.Config, gatekeeper interfaces.Gatekeeper, repo interfaces.JobRepository) *RCloneExecutor {
 	rcloneConfig := cfg.GetRClone()
 	client := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
+	progressMonitor := NewProgressMonitor(client, repo)
 
 	return &RCloneExecutor{
-		config:       cfg,
-		gatekeeper:   gatekeeper,
-		progressChan: make(chan models.JobProgress, 100),
-		client:       client,
-		repo:         repo,
+		config:          cfg,
+		gatekeeper:      gatekeeper,
+		progressChan:    make(chan models.JobProgress, 100),
+		client:          client,
+		repo:            repo,
+		progressMonitor: progressMonitor,
 	}
+}
+
+// Start starts the progress monitor
+func (r *RCloneExecutor) Start(ctx context.Context) {
+	r.progressMonitor.Start(ctx)
+}
+
+// Stop stops the progress monitor
+func (r *RCloneExecutor) Stop() {
+	r.progressMonitor.Stop()
 }
 
 func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
@@ -54,6 +67,10 @@ func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
 	}
 
 	slog.Info("copy operation started", "job_id", job.ID, "rclone_job_id", copyResp.JobID)
+
+	// Register with progress monitor
+	r.progressMonitor.Register(copyResp.JobID, job)
+	defer r.progressMonitor.Unregister(copyResp.JobID)
 
 	// Monitor the job progress
 	return r.monitorJob(ctx, job, copyResp.JobID)
@@ -95,12 +112,9 @@ func (r *RCloneExecutor) prepareCopyRequest(job *models.Job) (string, string, ma
 }
 
 func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rcloneJobID int64) error {
-	ticker := time.NewTicker(1 * time.Second)
+	// Check completion every 5 seconds (progress is handled by the global monitor)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-
-	// Track when we last persisted progress to database
-	lastPersist := time.Now()
-	persistInterval := 2 * time.Second
 
 	for {
 		select {
@@ -116,22 +130,8 @@ func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rclone
 		case <-ticker.C:
 			status, err := r.client.GetJobStatus(ctx, rcloneJobID)
 			if err != nil {
-				slog.Error("failed to get job status", "job_id", job.ID, "rclone_job_id", rcloneJobID, "error", err)
+				slog.Warn("failed to get job status", "job_id", job.ID, "rclone_job_id", rcloneJobID, "error", err)
 				continue
-			}
-
-			// Update progress in memory
-			r.updateJobProgress(job, status)
-
-			// Persist to database periodically (every 2 seconds)
-			now := time.Now()
-			if now.Sub(lastPersist) >= persistInterval {
-				if err := r.repo.UpdateJob(job); err != nil {
-					slog.Error("failed to persist job progress", "job_id", job.ID, "error", err)
-				} else {
-					lastPersist = now
-					slog.Debug("persisted job progress", "job_id", job.ID, "percentage", job.Progress.Percentage)
-				}
 			}
 
 			// Check if job is finished
@@ -149,51 +149,6 @@ func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rclone
 			}
 		}
 	}
-}
-
-func (r *RCloneExecutor) updateJobProgress(job *models.Job, status *models.RCloneJobStatus) {
-	progress := models.JobProgress{
-		LastUpdateTime: time.Now(),
-	}
-
-	// Extract progress information from status
-	output := status.Output
-	if output.TotalBytes > 0 {
-		progress.TotalBytes = output.TotalBytes
-		progress.TransferredBytes = output.Bytes
-		progress.Percentage = float64(output.Bytes) / float64(output.TotalBytes) * 100
-	}
-
-	if output.TotalTransfers > 0 {
-		progress.FilesTotal = int(output.TotalTransfers)
-		progress.FilesCompleted = int(output.Transfers)
-	}
-
-	progress.TransferSpeed = int64(output.Speed)
-
-	// Estimate ETA if we have transfer speed
-	if output.Speed > 0 && output.TotalBytes > 0 {
-		remainingBytes := output.TotalBytes - output.Bytes
-		etaSeconds := float64(remainingBytes) / output.Speed
-		eta := time.Now().Add(time.Duration(etaSeconds) * time.Second)
-		progress.ETA = &eta
-	}
-
-	// Update job progress
-	job.UpdateProgress(progress)
-
-	// Send progress update (non-blocking)
-	select {
-	case r.progressChan <- progress:
-	default:
-	}
-
-	slog.Debug("updated job progress",
-		"job_id", job.ID,
-		"percentage", progress.Percentage,
-		"transferred", progress.TransferredBytes,
-		"total", progress.TotalBytes,
-		"speed", progress.TransferSpeed)
 }
 
 func (r *RCloneExecutor) GetProgressChannel() <-chan models.JobProgress {

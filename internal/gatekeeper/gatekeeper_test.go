@@ -7,6 +7,7 @@ import (
 
 	"grabarr/internal/config"
 	"grabarr/internal/models"
+	"grabarr/internal/rclone"
 )
 
 // Mock sync repository
@@ -63,6 +64,10 @@ func (m *mockRCloneClient) StopJob(ctx context.Context, jobID int64) error {
 
 func (m *mockRCloneClient) Ping(ctx context.Context) error {
 	return nil
+}
+
+func (m *mockRCloneClient) GetCoreStats(ctx context.Context) (*rclone.CoreStats, error) {
+	return &rclone.CoreStats{}, nil
 }
 
 func createTestConfig() *config.Config {
