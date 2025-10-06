@@ -299,32 +299,17 @@ func (g *Gatekeeper) updateResourceStatus() {
 }
 
 func (g *Gatekeeper) checkBandwidthUsage() (float64, error) {
-	// Query rclone daemon for current transfer stats
+	// Query rclone daemon for current transfer stats using /core/stats
 	ctx, cancel := context.WithTimeout(g.ctx, 5*time.Second)
 	defer cancel()
 
-	jobs, err := g.rcloneClient.ListJobs(ctx)
+	stats, err := g.rcloneClient.GetCoreStats(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to list rclone jobs: %w", err)
+		return 0, fmt.Errorf("failed to get core stats: %w", err)
 	}
 
-	// Sum up bandwidth from all active jobs
-	var totalBytesPerSecond float64
-	for _, jobID := range jobs.JobIDs {
-		status, err := g.rcloneClient.GetJobStatus(ctx, jobID)
-		if err != nil {
-			slog.Warn("failed to get job status", "job_id", jobID, "error", err)
-			continue
-		}
-
-		if !status.Finished {
-			// Speed is in bytes per second
-			totalBytesPerSecond += status.Output.Speed
-		}
-	}
-
-	// Convert bytes per second to Mbps
-	mbps := (totalBytesPerSecond * 8) / 1_000_000
+	// Speed is in bytes per second, convert to Mbps
+	mbps := (stats.Speed * 8) / 1_000_000
 
 	return mbps, nil
 }

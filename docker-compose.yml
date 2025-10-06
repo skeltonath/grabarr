@@ -9,8 +9,8 @@ services:
     user: "99:100"  # Use Unraid nobody user
     volumes:
       # Configuration and data persistence
-      - /mnt/user/appdata/grabarr/config:/config
-      - /mnt/user/appdata/grabarr/data:/data
+      - /mnt/apps/appdata/grabarr/config:/config
+      - /mnt/apps/appdata/grabarr/data:/data
 
       # Unraid mount points
       - /mnt/user:/unraid/user:rw        # Main array access
