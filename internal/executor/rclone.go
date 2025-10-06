@@ -76,6 +76,17 @@ func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
 	return r.monitorJob(ctx, job, copyResp.JobID)
 }
 
+// escapeGlobChars escapes special glob characters for rclone filters
+func escapeGlobChars(s string) string {
+	// Characters that need escaping in rclone glob patterns
+	specialChars := []string{"[", "]", "*", "?", "{", "}"}
+	result := s
+	for _, char := range specialChars {
+		result = strings.ReplaceAll(result, char, "\\"+char)
+	}
+	return result
+}
+
 func (r *RCloneExecutor) prepareCopyRequest(job *models.Job) (string, string, map[string]interface{}) {
 	rcloneConfig := r.config.GetRClone()
 
@@ -94,10 +105,12 @@ func (r *RCloneExecutor) prepareCopyRequest(job *models.Job) (string, string, ma
 
 	// Universal filter that works for files and directories
 	targetName := filepath.Base(job.RemotePath)
+	// Escape glob special characters for rclone filters
+	escapedName := escapeGlobChars(targetName)
 	filter := map[string]interface{}{
 		"IncludeRule": []string{
-			targetName,         // Match exact file
-			targetName + "/**", // Match directory contents
+			escapedName,         // Match exact file
+			escapedName + "/**", // Match directory contents
 		},
 	}
 

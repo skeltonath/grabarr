@@ -446,3 +446,85 @@ func TestGetProgressChannel(t *testing.T) {
 	received := <-result
 	assert.Equal(t, testProgress.TransferredBytes, received.TransferredBytes)
 }
+
+func TestEscapeGlobChars(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no special chars",
+			input:    "normal-file.mkv",
+			expected: "normal-file.mkv",
+		},
+		{
+			name:     "square brackets",
+			input:    "file[TGx].mkv",
+			expected: "file\\[TGx\\].mkv",
+		},
+		{
+			name:     "asterisk",
+			input:    "file*.mkv",
+			expected: "file\\*.mkv",
+		},
+		{
+			name:     "question mark",
+			input:    "file?.mkv",
+			expected: "file\\?.mkv",
+		},
+		{
+			name:     "curly braces",
+			input:    "file{1080p}.mkv",
+			expected: "file\\{1080p\\}.mkv",
+		},
+		{
+			name:     "multiple special chars",
+			input:    "The.Morning.Show.S01E02.1080p.WEBRip.X264-EVO[TGx]",
+			expected: "The.Morning.Show.S01E02.1080p.WEBRip.X264-EVO\\[TGx\\]",
+		},
+		{
+			name:     "all special chars",
+			input:    "file[]*?{}.mkv",
+			expected: "file\\[\\]\\*\\?\\{\\}.mkv",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := escapeGlobChars(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestPrepareCopyRequest_WithSpecialChars(t *testing.T) {
+	cfg := &config.Config{
+		Rclone: config.RcloneConfig{
+			RemoteName: "seedbox",
+		},
+	}
+	mockMonitor := mocks.NewMockGatekeeper(t)
+
+	executor := &RCloneExecutor{
+		config:     cfg,
+		gatekeeper: mockMonitor,
+	}
+
+	job := &models.Job{
+		RemotePath: "/downloads/The.Morning.Show.S01E02[TGx]",
+		LocalPath:  "/local/downloads",
+	}
+
+	srcFs, dstFs, filter := executor.prepareCopyRequest(job)
+
+	assert.Equal(t, "seedbox:/downloads/", srcFs)
+	assert.Equal(t, "/local/downloads/", dstFs)
+	assert.NotNil(t, filter)
+
+	includeRules, ok := filter["IncludeRule"].([]string)
+	require.True(t, ok)
+	// Verify brackets are escaped
+	assert.Contains(t, includeRules, "The.Morning.Show.S01E02\\[TGx\\]")
+	assert.Contains(t, includeRules, "The.Morning.Show.S01E02\\[TGx\\]/**")
+}
