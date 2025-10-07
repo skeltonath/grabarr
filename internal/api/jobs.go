@@ -51,14 +51,6 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check gatekeeper before creating job
-	decision := h.gatekeeper.CanStartJob(req.FileSize)
-	if !decision.Allowed {
-		h.writeError(w, http.StatusServiceUnavailable,
-			fmt.Sprintf("Cannot start job: %s", decision.Reason), nil)
-		return
-	}
-
 	// Create job model
 	job := &models.Job{
 		Name:          req.Name,
