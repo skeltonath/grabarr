@@ -131,6 +131,15 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 		DstFs:  dstFs,
 		Filter: filter,
 		Async:  true, // Always use async to avoid timeouts on large transfers
+		Config: map[string]interface{}{
+			"Checkers":   2,      // Reduce parallel stat operations
+			"Transfers":  2,      // Reduce parallel file operations
+			"BufferSize": "8M",   // Larger buffers, fewer I/O ops
+			"UseMmap":    true,   // Memory-mapped I/O
+			"FastList":   true,   // Single directory read instead of many
+			"NoTraverse": true,   // Skip destination traversal (good for full syncs)
+			"BwLimit":    "60M",  // Throttle transfer speed
+		},
 	}
 
 	var resp CopyResponse
@@ -146,7 +155,14 @@ func (c *Client) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string
 		Filter: filter,
 		Async:  true, // Always use async to avoid timeouts on large transfers
 		Config: map[string]interface{}{
-			"IgnoreExisting": true, // Skip files that already exist on destination
+			"IgnoreExisting": true,   // Skip files that already exist on destination
+			"Checkers":       2,      // Reduce parallel stat operations
+			"Transfers":      2,      // Reduce parallel file operations
+			"BufferSize":     "8M",   // Larger buffers, fewer I/O ops
+			"UseMmap":        true,   // Memory-mapped I/O
+			"FastList":       true,   // Single directory read instead of many
+			"NoTraverse":     true,   // Skip destination traversal (good for full syncs)
+			"BwLimit":        "60M",  // Throttle transfer speed
 		},
 	}
 
