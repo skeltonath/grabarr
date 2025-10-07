@@ -24,10 +24,11 @@ func TestCreateJob_Success(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 
+	// Gatekeeper check happens in the queue, not in the API handler
 	mockGatekeeper.EXPECT().
 		CanStartJob(mock.AnythingOfType("int64")).
 		Return(interfaces.GateDecision{Allowed: true, Reason: "All checks passed"}).
-		Once()
+		Maybe()
 
 	mockQueue.EXPECT().
 		Enqueue(mock.AnythingOfType("*models.Job")).
