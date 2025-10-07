@@ -1,0 +1,15 @@
+meta {
+  name: GetSyncs
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/sync
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

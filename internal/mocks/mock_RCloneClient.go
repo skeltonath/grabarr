@@ -86,67 +86,6 @@ func (_c *MockRCloneClient_Copy_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
-// CopyWithIgnoreExisting provides a mock function with given fields: ctx, srcFs, dstFs, filter
-func (_m *MockRCloneClient) CopyWithIgnoreExisting(ctx context.Context, srcFs string, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
-	ret := _m.Called(ctx, srcFs, dstFs, filter)
-
-	if len(ret) == 0 {
-		panic("no return value specified for CopyWithIgnoreExisting")
-	}
-
-	var r0 *models.RCloneCopyResponse
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, map[string]interface{}) (*models.RCloneCopyResponse, error)); ok {
-		return rf(ctx, srcFs, dstFs, filter)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, map[string]interface{}) *models.RCloneCopyResponse); ok {
-		r0 = rf(ctx, srcFs, dstFs, filter)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*models.RCloneCopyResponse)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, map[string]interface{}) error); ok {
-		r1 = rf(ctx, srcFs, dstFs, filter)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockRCloneClient_CopyWithIgnoreExisting_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CopyWithIgnoreExisting'
-type MockRCloneClient_CopyWithIgnoreExisting_Call struct {
-	*mock.Call
-}
-
-// CopyWithIgnoreExisting is a helper method to define mock.On call
-//   - ctx context.Context
-//   - srcFs string
-//   - dstFs string
-//   - filter map[string]interface{}
-func (_e *MockRCloneClient_Expecter) CopyWithIgnoreExisting(ctx interface{}, srcFs interface{}, dstFs interface{}, filter interface{}) *MockRCloneClient_CopyWithIgnoreExisting_Call {
-	return &MockRCloneClient_CopyWithIgnoreExisting_Call{Call: _e.mock.On("CopyWithIgnoreExisting", ctx, srcFs, dstFs, filter)}
-}
-
-func (_c *MockRCloneClient_CopyWithIgnoreExisting_Call) Run(run func(ctx context.Context, srcFs string, dstFs string, filter map[string]interface{})) *MockRCloneClient_CopyWithIgnoreExisting_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(map[string]interface{}))
-	})
-	return _c
-}
-
-func (_c *MockRCloneClient_CopyWithIgnoreExisting_Call) Return(_a0 *models.RCloneCopyResponse, _a1 error) *MockRCloneClient_CopyWithIgnoreExisting_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockRCloneClient_CopyWithIgnoreExisting_Call) RunAndReturn(run func(context.Context, string, string, map[string]interface{}) (*models.RCloneCopyResponse, error)) *MockRCloneClient_CopyWithIgnoreExisting_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetCoreStats provides a mock function with given fields: ctx
 func (_m *MockRCloneClient) GetCoreStats(ctx context.Context) (*rclone.CoreStats, error) {
 	ret := _m.Called(ctx)

@@ -192,7 +192,7 @@ func (s *SyncService) executeSyncJob(ctx context.Context, syncJob *models.SyncJo
 	srcFs, dstFs, filter := s.prepareSyncRequest(syncJob)
 
 	// Start the copy operation
-	copyResp, err := s.client.CopyWithIgnoreExisting(ctx, srcFs, dstFs, filter)
+	copyResp, err := s.client.Copy(ctx, srcFs, dstFs, filter)
 	if err != nil {
 		slog.Error("failed to start sync operation", "sync_id", syncJob.ID, "error", err)
 		syncJob.MarkFailed(fmt.Sprintf("Failed to start sync: %v", err))

@@ -1,0 +1,19 @@
+meta {
+  name: GetJob
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/jobs/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 1
+}
+
+settings {
+  encodeUrl: true
+}

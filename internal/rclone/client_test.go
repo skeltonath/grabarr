@@ -50,35 +50,6 @@ func TestClient_Copy(t *testing.T) {
 	assert.Equal(t, int64(12345), resp.JobID)
 }
 
-func TestClient_CopyWithIgnoreExisting(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req SyncCopyRequest
-		err := json.NewDecoder(r.Body).Decode(&req)
-		require.NoError(t, err)
-
-		assert.Equal(t, "remote:/source", req.SrcFs)
-		assert.Equal(t, "/dest", req.DstFs)
-		assert.True(t, req.Async)
-		assert.NotNil(t, req.Config)
-
-		// Verify IgnoreExisting is set
-		ignoreExisting, ok := req.Config["IgnoreExisting"]
-		assert.True(t, ok)
-		assert.True(t, ignoreExisting.(bool))
-
-		resp := CopyResponse{JobID: 54321}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL)
-	filter := map[string]interface{}{}
-
-	resp, err := client.CopyWithIgnoreExisting(context.Background(), "remote:/source", "/dest", filter)
-	require.NoError(t, err)
-	assert.Equal(t, int64(54321), resp.JobID)
-}
-
 func TestClient_GetJobStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)

@@ -83,10 +83,10 @@ func TestStartSync_Success(t *testing.T) {
 		Return(nil).
 		Once()
 
-	// Mock the CopyWithIgnoreExisting call that will happen in the goroutine
+	// Mock the Copy call that will happen in the goroutine
 	// We use Maybe() because timing is unpredictable in goroutines
 	mockClient.EXPECT().
-		CopyWithIgnoreExisting(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Copy(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.RCloneCopyResponse{JobID: 999}, nil).
 		Maybe()
 
@@ -114,7 +114,7 @@ func TestStartSync_Success(t *testing.T) {
 	assert.Equal(t, "/local/downloads", syncJob.LocalPath)
 	assert.Equal(t, models.SyncStatusQueued, syncJob.Status)
 
-	// Give goroutine time to start (it will fail on CopyWithIgnoreExisting but that's expected)
+	// Give goroutine time to start (it will fail on Copy but that's expected)
 	time.Sleep(50 * time.Millisecond)
 }
 
@@ -612,7 +612,7 @@ func TestRecoverInterruptedSyncs_Success(t *testing.T) {
 
 	// Mock the async executeSyncJob calls (they'll happen in goroutines)
 	mockClient.EXPECT().
-		CopyWithIgnoreExisting(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Copy(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.RCloneCopyResponse{JobID: 123}, nil).
 		Maybe()
 

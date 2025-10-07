@@ -38,9 +38,6 @@ func (m *mockRCloneClient) Copy(ctx context.Context, srcFs, dstFs string, filter
 	return nil, nil
 }
 
-func (m *mockRCloneClient) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
-	return nil, nil
-}
 
 func (m *mockRCloneClient) GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error) {
 	return &models.RCloneJobStatus{

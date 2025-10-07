@@ -80,7 +80,6 @@ type JobRepository interface {
 // RCloneClient provides an interface to interact with RClone daemon
 type RCloneClient interface {
 	Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error)
-	CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error)
 	GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error)
 	GetCoreStats(ctx context.Context) (*rclone.CoreStats, error)
 	ListJobs(ctx context.Context) (*models.RCloneJobListResponse, error)

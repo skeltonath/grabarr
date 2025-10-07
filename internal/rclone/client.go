@@ -132,13 +132,24 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 		Filter: filter,
 		Async:  true, // Always use async to avoid timeouts on large transfers
 		Config: map[string]interface{}{
-			"Checkers":   2,      // Reduce parallel stat operations
-			"Transfers":  2,      // Reduce parallel file operations
-			"BufferSize": "8M",   // Larger buffers, fewer I/O ops
-			"UseMmap":    true,   // Memory-mapped I/O
-			"FastList":   true,   // Single directory read instead of many
-			"NoTraverse": true,   // Skip destination traversal (good for full syncs)
-			"BwLimit":    "60M",  // Throttle transfer speed
+			// Limit concurrency
+			"Transfers":          2,       // Two files at once
+			"Checkers":           2,       // Two parallel stat operations
+
+			// Bandwidth control
+			"BwLimit":            "60M",   // Overall cap (adjust if safe)
+			"BwLimitFile":        "30M",   // Per-file cap to smooth bursts
+
+			// Disk I/O tuning
+			"BufferSize":         "8M",    // Smallish read buffer
+			"UseMmap":            true,    // Efficient reads from remote
+			"MultiThreadStreams": 1,       // Disable multi-threaded reads
+			"MultiThreadCutoff":  "10G",   // Effectively disables it
+
+			// Behavior
+			"IgnoreExisting":     true,    // Skip anything already present
+			"NoTraverse":         true,    // Don't scan full dest tree
+			"UpdateOlder":        true,    // Only replace older files (safe add-only)
 		},
 	}
 
@@ -147,29 +158,6 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 	return &models.RCloneCopyResponse{JobID: resp.JobID}, err
 }
 
-// CopyWithIgnoreExisting initiates a copy operation that skips existing files
-func (c *Client) CopyWithIgnoreExisting(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
-	req := SyncCopyRequest{
-		SrcFs:  srcFs,
-		DstFs:  dstFs,
-		Filter: filter,
-		Async:  true, // Always use async to avoid timeouts on large transfers
-		Config: map[string]interface{}{
-			"IgnoreExisting": true,   // Skip files that already exist on destination
-			"Checkers":       2,      // Reduce parallel stat operations
-			"Transfers":      2,      // Reduce parallel file operations
-			"BufferSize":     "8M",   // Larger buffers, fewer I/O ops
-			"UseMmap":        true,   // Memory-mapped I/O
-			"FastList":       true,   // Single directory read instead of many
-			"NoTraverse":     true,   // Skip destination traversal (good for full syncs)
-			"BwLimit":        "60M",  // Throttle transfer speed
-		},
-	}
-
-	var resp CopyResponse
-	err := c.makeRequest(ctx, "POST", "/sync/copy", req, &resp)
-	return &models.RCloneCopyResponse{JobID: resp.JobID}, err
-}
 
 // GetJobStatus gets the status of a specific job
 func (c *Client) GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error) {

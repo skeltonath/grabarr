@@ -1,0 +1,19 @@
+meta {
+  name: CancelSync
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/sync/:id/cancel
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 1
+}
+
+settings {
+  encodeUrl: true
+}
