@@ -133,15 +133,15 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 		Async:  true, // Always use async to avoid timeouts on large transfers
 		Config: map[string]interface{}{
 			// Limit concurrency
-			"Transfers":          2,       // Two files at once
-			"Checkers":           2,       // Two parallel stat operations
+			"Transfers":          1,       // Two files at once
+			"Checkers":           1,       // Two parallel stat operations
 
 			// Bandwidth control
-			"BwLimit":            "60M",   // Overall cap (adjust if safe)
-			"BwLimitFile":        "30M",   // Per-file cap to smooth bursts
+			"BwLimit":            "8M",   // Overall cap (adjust if safe)
+			"BwLimitFile":        "4M",   // Per-file cap to smooth bursts
 
 			// Disk I/O tuning
-			"BufferSize":         "8M",    // Smallish read buffer
+			"BufferSize":         "32M",    // Smallish read buffer
 			"UseMmap":            true,    // Efficient reads from remote
 			"MultiThreadStreams": 1,       // Disable multi-threaded reads
 			"MultiThreadCutoff":  "10G",   // Effectively disables it
