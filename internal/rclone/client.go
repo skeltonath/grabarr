@@ -132,28 +132,23 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 		Filter: filter,
 		Async:  true, // Always use async to avoid timeouts on large transfers
 		Config: map[string]interface{}{
-			// Limit concurrency
-			"Transfers": 2, // Two files at once
-			"Checkers":  2, // Two parallel stat operations
+			"Transfers":           1,
+			"Checkers":            1,
 
-			// Bandwidth control
-			"BwLimit":     "8M", // Overall cap (adjust if safe)
-			"BwLimitFile": "4M", // Per-file cap to smooth bursts
+			"BwLimit":             "8M",
+			"BwLimitFile":         "8M",
 
-			// SFTP-specific optimizations
-			"SftpChunkSize":   "128k", // Larger chunks for better throughput (default 32k)
-			"SftpConcurrency": 64,     // Outstanding requests per file (default)
+			"SftpChunkSize":       "256k", 
+			"SftpConcurrency":     2,
 
-			// Disk I/O tuning
-			"BufferSize":         "32M", // Smallish read buffer
-			"UseMmap":            true,  // Efficient reads from local disk
-			"MultiThreadStreams": 1,     // Disable multi-threaded reads
-			"MultiThreadCutoff":  "10G", // Effectively disables it
+			"BufferSize":          "32M",
+			"UseMmap":             true,
+			"MultiThreadStreams":  1,
+			"MultiThreadCutoff":   "10G",
 
-			// Behavior
-			"IgnoreExisting": true, // Skip anything already present
-			"NoTraverse":     true, // Don't scan full dest tree
-			"UpdateOlder":    true, // Only replace older files (safe add-only)
+			"IgnoreExisting":      true,
+			"NoTraverse":          true,
+			"UpdateOlder":         true,
 		},
 	}
 
