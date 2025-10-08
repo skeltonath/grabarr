@@ -114,12 +114,12 @@ func (s *SyncService) GetSyncSummary() (*models.SyncSummary, error) {
 }
 
 func (s *SyncService) RecoverInterruptedSyncs() error {
-	// Find all sync jobs that are in RUNNING state (interrupted by shutdown/crash)
+	// Find all sync jobs that are in RUNNING or QUEUED state (interrupted by shutdown/crash)
 	syncs, err := s.repository.GetSyncJobs(models.SyncFilter{
-		Status: []models.SyncStatus{models.SyncStatusRunning},
+		Status: []models.SyncStatus{models.SyncStatusRunning, models.SyncStatusQueued},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get running syncs: %w", err)
+		return fmt.Errorf("failed to get interrupted syncs: %w", err)
 	}
 
 	if len(syncs) == 0 {
@@ -129,16 +129,18 @@ func (s *SyncService) RecoverInterruptedSyncs() error {
 	slog.Info("recovering interrupted sync jobs", "count", len(syncs))
 
 	for _, sync := range syncs {
-		// Reset to queued status
-		sync.Status = models.SyncStatusQueued
-		sync.UpdatedAt = time.Now()
+		// Reset to queued status if it was running
+		if sync.Status == models.SyncStatusRunning {
+			sync.Status = models.SyncStatusQueued
+			sync.UpdatedAt = time.Now()
 
-		if err := s.repository.UpdateSyncJob(sync); err != nil {
-			slog.Error("failed to recover sync job", "sync_id", sync.ID, "error", err)
-			continue
+			if err := s.repository.UpdateSyncJob(sync); err != nil {
+				slog.Error("failed to recover sync job", "sync_id", sync.ID, "error", err)
+				continue
+			}
 		}
 
-		slog.Info("recovered interrupted sync", "sync_id", sync.ID, "remote_path", sync.RemotePath)
+		slog.Info("recovered interrupted sync", "sync_id", sync.ID, "remote_path", sync.RemotePath, "status", sync.Status)
 
 		// Restart the sync
 		go s.executeSyncJob(s.ctx, sync)
