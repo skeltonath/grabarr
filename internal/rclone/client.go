@@ -135,8 +135,8 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 			"Transfers":           1,
 			"Checkers":            1,
 
-			"BwLimit":             "12M",
-			"BwLimitFile":         "12M",
+			"BwLimit":             "10M",
+			"BwLimitFile":         "10M",
 
 			"SftpChunkSize":       "256k",
 			"SftpConcurrency":     2,
