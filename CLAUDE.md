@@ -5,6 +5,10 @@ Grabarr - Go-based download management service for managing downloads from remot
 
 ## Key Infrastructure
 - **Development Machine**: Local macOS with Docker
+- **Seedbox**: Whatbox (SSH key authentication)
+  - SSH: `ssh whatbox`
+  - Script location: `~/bin/qbt-grabarr.sh` (source in `scripts/qbt-grabarr.sh`)
+  - qBittorrent "Run on completion" command: `~/bin/qbt-grabarr.sh "%N" "%Z" "%L" "%F"`
 - **Production Server**: Unraid server at `millions.local`
   - SSH: `root@millions.local`
   - Container user: 99:100 (nobody:users)
@@ -23,7 +27,10 @@ Grabarr - Go-based download management service for managing downloads from remot
 6. Deploy using docker-compose:
    ```bash
    # Copy files to unraid appdata directory first (config goes in config subdirectory!)
+   scp grabarr_rsa root@millions.local:/mnt/user/appdata/grabarr/config/grabarr_rsa
+   ssh root@millions.local "chmod 600 /mnt/user/appdata/grabarr/config/grabarr_rsa && chown 99:100 /mnt/user/appdata/grabarr/config/grabarr_rsa"
    scp config.yaml root@millions.local:/mnt/user/appdata/grabarr/config/
+   scp rclone.conf root@millions.local:/mnt/user/appdata/grabarr/config/
    scp docker-compose.yml root@millions.local:/mnt/user/appdata/grabarr/
 
    # Deploy
