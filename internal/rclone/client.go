@@ -124,32 +124,44 @@ type TransferringFile struct {
 	SrcFs      string  `json:"srcFs"`
 }
 
-// Copy initiates a copy operation for files or directories with optional filtering
-func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
+// defaultConfig returns the default rclone configuration for sync operations
+func defaultConfig() map[string]interface{} {
+	return map[string]interface{}{
+		"Transfers": 1,
+		"Checkers":  1,
+
+		"BwLimit":     "10M",
+		"BwLimitFile": "10M",
+
+		"SftpChunkSize":   "256k",
+		"SftpConcurrency": 2,
+
+		"BufferSize":         "32M",
+		"UseMmap":            true,
+		"MultiThreadStreams": 1,
+		"MultiThreadCutoff":  "10G",
+
+		"IgnoreExisting": true,
+		"NoTraverse":     true,
+		"UpdateOlder":    true,
+	}
+}
+
+// Copy initiates a copy operation for files or directories with optional filtering and config
+// If config is nil or empty, defaultConfig() will be used
+func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}, config map[string]interface{}) (*models.RCloneCopyResponse, error) {
+	// Use provided config if available, otherwise use defaults
+	finalConfig := config
+	if finalConfig == nil || len(finalConfig) == 0 {
+		finalConfig = defaultConfig()
+	}
+
 	req := SyncCopyRequest{
 		SrcFs:  srcFs,
 		DstFs:  dstFs,
 		Filter: filter,
 		Async:  true, // Always use async to avoid timeouts on large transfers
-		Config: map[string]interface{}{
-			"Transfers": 2,
-			"Checkers":  4,
-
-			"BwLimit":     "50M",
-			"BwLimitFile": "25M",
-
-			"SftpChunkSize":   "512k",
-			"SftpConcurrency": 4,
-
-			"BufferSize":         "32M",
-			"UseMmap":            true,
-			"MultiThreadStreams": 2,
-			"MultiThreadCutoff":  "10G",
-
-			"IgnoreExisting": true,
-			"NoTraverse":     true,
-			"UpdateOlder":    true,
-		},
+		Config: finalConfig,
 	}
 
 	var resp CopyResponse

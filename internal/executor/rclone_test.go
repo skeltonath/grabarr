@@ -71,7 +71,7 @@ func TestExecute_Success(t *testing.T) {
 
 	// Mock Copy success
 	mockClient.EXPECT().
-		Copy(ctx, "seedbox:/downloads/", "/local/downloads/", mock.Anything).
+		Copy(ctx, "seedbox:/downloads/", "/local/downloads/", mock.Anything, mock.Anything).
 		Return(&models.RCloneCopyResponse{JobID: 123}, nil).
 		Once()
 
@@ -173,7 +173,7 @@ func TestExecute_CopyFails(t *testing.T) {
 		Once()
 
 	mockClient.EXPECT().
-		Copy(ctx, mock.Anything, mock.Anything, mock.Anything).
+		Copy(ctx, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("copy failed")).
 		Once()
 

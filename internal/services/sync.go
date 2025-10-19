@@ -42,7 +42,7 @@ func NewSyncService(cfg *config.Config, repo interfaces.SyncRepository, gatekeep
 	}
 }
 
-func (s *SyncService) StartSync(ctx context.Context, remotePath string) (*models.SyncJob, error) {
+func (s *SyncService) StartSync(ctx context.Context, remotePath string, downloadConfig *models.DownloadConfig) (*models.SyncJob, error) {
 	// Check gatekeeper before starting sync
 	decision := s.gatekeeper.CanStartSync()
 	if !decision.Allowed {
@@ -57,9 +57,10 @@ func (s *SyncService) StartSync(ctx context.Context, remotePath string) (*models
 	// Create sync job
 	downloadsConfig := s.config.GetDownloads()
 	syncJob := &models.SyncJob{
-		RemotePath: remotePath,
-		LocalPath:  downloadsConfig.LocalPath,
-		Status:     models.SyncStatusQueued,
+		RemotePath:     remotePath,
+		LocalPath:      downloadsConfig.LocalPath,
+		Status:         models.SyncStatusQueued,
+		DownloadConfig: downloadConfig,
 		Progress: models.SyncProgress{
 			LastUpdateTime: time.Now(),
 		},
@@ -193,8 +194,15 @@ func (s *SyncService) executeSyncJob(ctx context.Context, syncJob *models.SyncJo
 	// Prepare the copy operation with --ignore-existing
 	srcFs, dstFs, filter := s.prepareSyncRequest(syncJob)
 
+	// Convert download config to rclone config map
+	var rcloneConfig map[string]interface{}
+	if syncJob.DownloadConfig != nil {
+		rcloneConfig = syncJob.DownloadConfig.ToRCloneConfig()
+		slog.Info("using custom download config", "sync_id", syncJob.ID, "config", rcloneConfig)
+	}
+
 	// Start the copy operation
-	copyResp, err := s.client.Copy(ctx, srcFs, dstFs, filter)
+	copyResp, err := s.client.Copy(ctx, srcFs, dstFs, filter, rcloneConfig)
 	if err != nil {
 		slog.Error("failed to start sync operation", "sync_id", syncJob.ID, "error", err)
 		syncJob.MarkFailed(fmt.Sprintf("Failed to start sync: %v", err))

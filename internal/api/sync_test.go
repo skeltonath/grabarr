@@ -31,7 +31,7 @@ func TestCreateSync_Success(t *testing.T) {
 	}
 
 	mockSync.EXPECT().
-		StartSync(mock.Anything, "/remote/path").
+		StartSync(mock.Anything, "/remote/path", mock.Anything).
 		Return(expectedSyncJob, nil).
 		Once()
 
@@ -97,7 +97,7 @@ func TestCreateSync_MaxConcurrentReached(t *testing.T) {
 	mockSync := mocks.NewMockSyncService(t)
 
 	mockSync.EXPECT().
-		StartSync(mock.Anything, "/remote/path").
+		StartSync(mock.Anything, "/remote/path", mock.Anything).
 		Return(nil, errors.New("maximum concurrent syncs (1) reached, please wait for existing sync to complete")).
 		Once()
 
@@ -123,7 +123,7 @@ func TestCreateSync_StartError(t *testing.T) {
 	mockSync := mocks.NewMockSyncService(t)
 
 	mockSync.EXPECT().
-		StartSync(mock.Anything, "/remote/path").
+		StartSync(mock.Anything, "/remote/path", mock.Anything).
 		Return(nil, errors.New("internal error")).
 		Once()
 

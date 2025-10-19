@@ -59,8 +59,15 @@ func (r *RCloneExecutor) Execute(ctx context.Context, job *models.Job) error {
 	// Prepare the copy operation using universal filter approach
 	srcFs, dstFs, filter := r.prepareCopyRequest(job)
 
+	// Convert download config to rclone config map
+	var rcloneConfig map[string]interface{}
+	if job.DownloadConfig != nil {
+		rcloneConfig = job.DownloadConfig.ToRCloneConfig()
+		slog.Info("using custom download config", "job_id", job.ID, "config", rcloneConfig)
+	}
+
 	// Single copy operation - works for both files and directories!
-	copyResp, err := r.client.Copy(ctx, srcFs, dstFs, filter)
+	copyResp, err := r.client.Copy(ctx, srcFs, dstFs, filter, rcloneConfig)
 
 	if err != nil {
 		return fmt.Errorf("failed to start copy operation: %w", err)

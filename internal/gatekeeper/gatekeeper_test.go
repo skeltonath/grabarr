@@ -1,70 +1,15 @@
 package gatekeeper
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"grabarr/internal/config"
-	"grabarr/internal/models"
+	"grabarr/internal/mocks"
 	"grabarr/internal/rclone"
+
+	"github.com/stretchr/testify/mock"
 )
-
-// Mock sync repository
-type mockSyncRepo struct {
-	activeSyncsCount int
-	err              error
-}
-
-func (m *mockSyncRepo) GetActiveSyncJobsCount() (int, error) {
-	return m.activeSyncsCount, m.err
-}
-
-func (m *mockSyncRepo) CreateSyncJob(syncJob *models.SyncJob) error  { return nil }
-func (m *mockSyncRepo) GetSyncJob(id int64) (*models.SyncJob, error) { return nil, nil }
-func (m *mockSyncRepo) GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error) {
-	return nil, nil
-}
-func (m *mockSyncRepo) UpdateSyncJob(syncJob *models.SyncJob) error  { return nil }
-func (m *mockSyncRepo) DeleteSyncJob(id int64) error                 { return nil }
-func (m *mockSyncRepo) GetSyncSummary() (*models.SyncSummary, error) { return nil, nil }
-
-// Mock rclone client
-type mockRCloneClient struct {
-	jobs []int64
-}
-
-func (m *mockRCloneClient) Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error) {
-	return nil, nil
-}
-
-func (m *mockRCloneClient) GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error) {
-	return &models.RCloneJobStatus{
-		Finished: false,
-		Success:  false,
-		Output: models.RCloneOutput{
-			Speed: 0,
-		},
-	}, nil
-}
-
-func (m *mockRCloneClient) ListJobs(ctx context.Context) (*models.RCloneJobListResponse, error) {
-	return &models.RCloneJobListResponse{
-		JobIDs: m.jobs,
-	}, nil
-}
-
-func (m *mockRCloneClient) StopJob(ctx context.Context, jobID int64) error {
-	return nil
-}
-
-func (m *mockRCloneClient) Ping(ctx context.Context) error {
-	return nil
-}
-
-func (m *mockRCloneClient) GetCoreStats(ctx context.Context) (*rclone.CoreStats, error) {
-	return &rclone.CoreStats{}, nil
-}
 
 func createTestConfig() *config.Config {
 	return &config.Config{
@@ -88,8 +33,11 @@ func createTestConfig() *config.Config {
 
 func TestCanStartJob_NoSyncs_Success(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 0}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(0, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -102,8 +50,11 @@ func TestCanStartJob_NoSyncs_Success(t *testing.T) {
 
 func TestCanStartJob_SyncRunning_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 1}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(1, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -120,8 +71,11 @@ func TestCanStartJob_SyncRunning_Blocked(t *testing.T) {
 
 func TestCanStartJob_BandwidthExceeded_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 0}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(0, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -141,8 +95,11 @@ func TestCanStartJob_BandwidthExceeded_Blocked(t *testing.T) {
 
 func TestCanStartJob_CacheUsageHigh_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 0}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(0, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -162,8 +119,12 @@ func TestCanStartJob_CacheUsageHigh_Blocked(t *testing.T) {
 
 func TestCanStartSync_NoSyncs_Success(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 0}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(0, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
+	rcloneClient.EXPECT().GetCoreStats(mock.Anything).Return(&rclone.CoreStats{}, nil).Maybe()
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -176,8 +137,11 @@ func TestCanStartSync_NoSyncs_Success(t *testing.T) {
 
 func TestCanStartSync_SyncRunning_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 1}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(1, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -194,8 +158,11 @@ func TestCanStartSync_SyncRunning_Blocked(t *testing.T) {
 
 func TestCanStartSync_BandwidthExceeded_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 0}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(0, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -215,8 +182,11 @@ func TestCanStartSync_BandwidthExceeded_Blocked(t *testing.T) {
 
 func TestCanStartSync_CacheUsageHigh_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 0}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(0, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 
@@ -236,8 +206,11 @@ func TestCanStartSync_CacheUsageHigh_Blocked(t *testing.T) {
 
 func TestGetResourceStatus(t *testing.T) {
 	cfg := createTestConfig()
-	syncRepo := &mockSyncRepo{activeSyncsCount: 2}
-	rcloneClient := &mockRCloneClient{}
+
+	syncRepo := mocks.NewMockSyncRepository(t)
+	syncRepo.EXPECT().GetActiveSyncJobsCount().Return(2, nil)
+
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 	gk.bandwidthUsage = 250.5
@@ -270,8 +243,8 @@ func TestRulesCanBeDisabled(t *testing.T) {
 	cfg := createTestConfig()
 	cfg.Gatekeeper.Rules.BlockJobsDuringSync = false
 
-	syncRepo := &mockSyncRepo{activeSyncsCount: 1}
-	rcloneClient := &mockRCloneClient{}
+	syncRepo := mocks.NewMockSyncRepository(t)
+	rcloneClient := mocks.NewMockRCloneClient(t)
 
 	gk := New(cfg, syncRepo, rcloneClient)
 

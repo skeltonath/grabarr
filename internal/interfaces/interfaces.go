@@ -54,7 +54,7 @@ type GatekeeperResourceStatus struct {
 
 // SyncService manages sync operations
 type SyncService interface {
-	StartSync(ctx context.Context, remotePath string) (*models.SyncJob, error)
+	StartSync(ctx context.Context, remotePath string, downloadConfig *models.DownloadConfig) (*models.SyncJob, error)
 	GetSyncJob(id int64) (*models.SyncJob, error)
 	GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error)
 	CancelSync(ctx context.Context, id int64) error
@@ -80,7 +80,7 @@ type JobRepository interface {
 
 // RCloneClient provides an interface to interact with RClone daemon
 type RCloneClient interface {
-	Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}) (*models.RCloneCopyResponse, error)
+	Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}, config map[string]interface{}) (*models.RCloneCopyResponse, error)
 	GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error)
 	GetCoreStats(ctx context.Context) (*rclone.CoreStats, error)
 	ListJobs(ctx context.Context) (*models.RCloneJobListResponse, error)

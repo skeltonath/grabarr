@@ -19,24 +19,25 @@ const (
 )
 
 type Job struct {
-	ID               int64       `json:"id" db:"id"`
-	Name             string      `json:"name" db:"name"`
-	RemotePath       string      `json:"remote_path" db:"remote_path"`
-	LocalPath        string      `json:"local_path" db:"local_path"`
-	Status           JobStatus   `json:"status" db:"status"`
-	Priority         int         `json:"priority" db:"priority"`
-	Retries          int         `json:"retries" db:"retries"`
-	MaxRetries       int         `json:"max_retries" db:"max_retries"`
-	ErrorMessage     string      `json:"error_message,omitempty" db:"error_message"`
-	Progress         JobProgress `json:"progress" db:"progress"`
-	Metadata         JobMetadata `json:"metadata" db:"metadata"`
-	CreatedAt        time.Time   `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at" db:"updated_at"`
-	StartedAt        *time.Time  `json:"started_at,omitempty" db:"started_at"`
-	CompletedAt      *time.Time  `json:"completed_at,omitempty" db:"completed_at"`
-	EstimatedSize    int64       `json:"estimated_size,omitempty" db:"estimated_size"`
-	TransferredBytes int64       `json:"transferred_bytes" db:"transferred_bytes"`
-	TransferSpeed    int64       `json:"transfer_speed,omitempty" db:"transfer_speed"`
+	ID               int64           `json:"id" db:"id"`
+	Name             string          `json:"name" db:"name"`
+	RemotePath       string          `json:"remote_path" db:"remote_path"`
+	LocalPath        string          `json:"local_path" db:"local_path"`
+	Status           JobStatus       `json:"status" db:"status"`
+	Priority         int             `json:"priority" db:"priority"`
+	Retries          int             `json:"retries" db:"retries"`
+	MaxRetries       int             `json:"max_retries" db:"max_retries"`
+	ErrorMessage     string          `json:"error_message,omitempty" db:"error_message"`
+	Progress         JobProgress     `json:"progress" db:"progress"`
+	Metadata         JobMetadata     `json:"metadata" db:"metadata"`
+	DownloadConfig   *DownloadConfig `json:"download_config,omitempty" db:"download_config"`
+	CreatedAt        time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at" db:"updated_at"`
+	StartedAt        *time.Time      `json:"started_at,omitempty" db:"started_at"`
+	CompletedAt      *time.Time      `json:"completed_at,omitempty" db:"completed_at"`
+	EstimatedSize    int64           `json:"estimated_size,omitempty" db:"estimated_size"`
+	TransferredBytes int64           `json:"transferred_bytes" db:"transferred_bytes"`
+	TransferSpeed    int64           `json:"transfer_speed,omitempty" db:"transfer_speed"`
 }
 
 type JobProgress struct {

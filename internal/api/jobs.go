@@ -13,13 +13,14 @@ import (
 )
 
 type CreateJobRequest struct {
-	Name          string             `json:"name"`
-	RemotePath    string             `json:"remote_path"`
-	Priority      int                `json:"priority,omitempty"`
-	MaxRetries    int                `json:"max_retries,omitempty"`
-	EstimatedSize int64              `json:"estimated_size,omitempty"`
-	FileSize      int64              `json:"file_size,omitempty"`
-	Metadata      models.JobMetadata `json:"metadata,omitempty"`
+	Name           string                 `json:"name"`
+	RemotePath     string                 `json:"remote_path"`
+	Priority       int                    `json:"priority,omitempty"`
+	MaxRetries     int                    `json:"max_retries,omitempty"`
+	EstimatedSize  int64                  `json:"estimated_size,omitempty"`
+	FileSize       int64                  `json:"file_size,omitempty"`
+	Metadata       models.JobMetadata     `json:"metadata,omitempty"`
+	DownloadConfig *models.DownloadConfig `json:"download_config,omitempty"`
 }
 
 func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
@@ -53,14 +54,15 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 
 	// Create job model
 	job := &models.Job{
-		Name:          req.Name,
-		RemotePath:    req.RemotePath,
-		LocalPath:     downloadsConfig.LocalPath,
-		Priority:      req.Priority,
-		MaxRetries:    req.MaxRetries,
-		EstimatedSize: req.EstimatedSize,
-		Metadata:      req.Metadata,
-		Status:        models.JobStatusQueued,
+		Name:           req.Name,
+		RemotePath:     req.RemotePath,
+		LocalPath:      downloadsConfig.LocalPath,
+		Priority:       req.Priority,
+		MaxRetries:     req.MaxRetries,
+		EstimatedSize:  req.EstimatedSize,
+		Metadata:       req.Metadata,
+		DownloadConfig: req.DownloadConfig,
+		Status:         models.JobStatusQueued,
 		Progress: models.JobProgress{
 			LastUpdateTime: time.Now(),
 		},

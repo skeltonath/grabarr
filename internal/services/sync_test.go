@@ -86,7 +86,7 @@ func TestStartSync_Success(t *testing.T) {
 	// Mock the Copy call that will happen in the goroutine
 	// We use Maybe() because timing is unpredictable in goroutines
 	mockClient.EXPECT().
-		Copy(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Copy(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.RCloneCopyResponse{JobID: 999}, nil).
 		Maybe()
 
@@ -106,7 +106,7 @@ func TestStartSync_Success(t *testing.T) {
 		Return(nil).
 		Maybe()
 
-	syncJob, err := service.StartSync(ctx, remotePath)
+	syncJob, err := service.StartSync(ctx, remotePath, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, syncJob)
@@ -139,7 +139,7 @@ func TestStartSync_MaxConcurrentReached(t *testing.T) {
 
 	ctx := context.Background()
 
-	syncJob, err := service.StartSync(ctx, "/remote/path")
+	syncJob, err := service.StartSync(ctx, "/remote/path", nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, syncJob)
@@ -168,7 +168,7 @@ func TestStartSync_GatekeeperBlocked(t *testing.T) {
 
 	ctx := context.Background()
 
-	syncJob, err := service.StartSync(ctx, "/remote/path")
+	syncJob, err := service.StartSync(ctx, "/remote/path", nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, syncJob)
@@ -203,7 +203,7 @@ func TestStartSync_DaemonNotResponsive(t *testing.T) {
 		Return(errors.New("connection refused")).
 		Once()
 
-	syncJob, err := service.StartSync(ctx, "/remote/path")
+	syncJob, err := service.StartSync(ctx, "/remote/path", nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, syncJob)
@@ -246,7 +246,7 @@ func TestStartSync_CreateJobError(t *testing.T) {
 		Return(errors.New("database write error")).
 		Once()
 
-	syncJob, err := service.StartSync(ctx, "/remote/path")
+	syncJob, err := service.StartSync(ctx, "/remote/path", nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, syncJob)
@@ -612,7 +612,7 @@ func TestRecoverInterruptedSyncs_Success(t *testing.T) {
 
 	// Mock the async executeSyncJob calls (they'll happen in goroutines)
 	mockClient.EXPECT().
-		Copy(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Copy(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.RCloneCopyResponse{JobID: 123}, nil).
 		Maybe()
 

@@ -59,7 +59,7 @@ gen-mocks: ## Generate mocks using mockery
 		echo "$(YELLOW)Installing mockery...$(NC)"; \
 		go install github.com/vektra/mockery/v2@latest; \
 	fi
-	@mockery --all --dir internal/interfaces --output internal/mocks --case underscore
+	@mockery
 	@echo "$(GREEN)✓ Mocks generated$(NC)"
 
 gen-bruno: ## Generate Bruno API collection from code

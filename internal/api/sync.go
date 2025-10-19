@@ -11,7 +11,8 @@ import (
 )
 
 type CreateSyncRequest struct {
-	RemotePath string `json:"remote_path"`
+	RemotePath     string                 `json:"remote_path"`
+	DownloadConfig *models.DownloadConfig `json:"download_config,omitempty"`
 }
 
 func (h *Handlers) CreateSync(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +29,7 @@ func (h *Handlers) CreateSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start the sync
-	syncJob, err := h.syncService.StartSync(r.Context(), req.RemotePath)
+	syncJob, err := h.syncService.StartSync(r.Context(), req.RemotePath, req.DownloadConfig)
 	if err != nil {
 		if err.Error() == "maximum concurrent syncs (1) reached, please wait for existing sync to complete" {
 			h.writeError(w, http.StatusConflict, err.Error(), nil)

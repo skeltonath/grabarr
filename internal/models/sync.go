@@ -18,18 +18,19 @@ const (
 )
 
 type SyncJob struct {
-	ID           int64        `json:"id" db:"id"`
-	RemotePath   string       `json:"remote_path" db:"remote_path"`
-	LocalPath    string       `json:"local_path" db:"local_path"`
-	Status       SyncStatus   `json:"status" db:"status"`
-	ErrorMessage string       `json:"error_message,omitempty" db:"error_message"`
-	Progress     SyncProgress `json:"progress" db:"progress"`
-	Stats        SyncStats    `json:"stats" db:"stats"`
-	CreatedAt    time.Time    `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at" db:"updated_at"`
-	StartedAt    *time.Time   `json:"started_at,omitempty" db:"started_at"`
-	CompletedAt  *time.Time   `json:"completed_at,omitempty" db:"completed_at"`
-	RCloneJobID  *int64       `json:"rclone_job_id,omitempty" db:"rclone_job_id"`
+	ID             int64           `json:"id" db:"id"`
+	RemotePath     string          `json:"remote_path" db:"remote_path"`
+	LocalPath      string          `json:"local_path" db:"local_path"`
+	Status         SyncStatus      `json:"status" db:"status"`
+	ErrorMessage   string          `json:"error_message,omitempty" db:"error_message"`
+	Progress       SyncProgress    `json:"progress" db:"progress"`
+	Stats          SyncStats       `json:"stats" db:"stats"`
+	DownloadConfig *DownloadConfig `json:"download_config,omitempty" db:"download_config"`
+	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
+	StartedAt      *time.Time      `json:"started_at,omitempty" db:"started_at"`
+	CompletedAt    *time.Time      `json:"completed_at,omitempty" db:"completed_at"`
+	RCloneJobID    *int64          `json:"rclone_job_id,omitempty" db:"rclone_job_id"`
 }
 
 type SyncProgress struct {
