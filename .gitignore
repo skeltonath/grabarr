@@ -56,6 +56,10 @@ Thumbs.db
 config.yaml
 rclone.conf
 
+# SSH keys
+grabarr_rsa
+grabarr_rsa.pub
+
 # Data directory
 data/
 
