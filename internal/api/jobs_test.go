@@ -441,6 +441,94 @@ func TestCancelJob_Error(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
+func TestRetryJob_Success(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+
+	mockQueue.EXPECT().
+		RetryJob(int64(123)).
+		Return(nil).
+		Once()
+
+	cfg := &config.Config{}
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	rec := httptest.NewRecorder()
+
+	handlers.RetryJob(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response APIResponse
+	err := json.NewDecoder(rec.Body).Decode(&response)
+	require.NoError(t, err)
+	assert.True(t, response.Success)
+	assert.Equal(t, "Job retried successfully", response.Message)
+}
+
+func TestRetryJob_InvalidJobID(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+	cfg := &config.Config{}
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/jobs/invalid/retry", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
+	rec := httptest.NewRecorder()
+
+	handlers.RetryJob(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestRetryJob_NotFailed(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+
+	mockQueue.EXPECT().
+		RetryJob(int64(123)).
+		Return(errors.New("job is not in failed status (current status: completed)")).
+		Once()
+
+	cfg := &config.Config{}
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	rec := httptest.NewRecorder()
+
+	handlers.RetryJob(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestRetryJob_MaxRetriesExceeded(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+
+	mockQueue.EXPECT().
+		RetryJob(int64(123)).
+		Return(errors.New("job has exceeded maximum retry attempts (3/3)")).
+		Once()
+
+	cfg := &config.Config{}
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil)
+
+	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	rec := httptest.NewRecorder()
+
+	handlers.RetryJob(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestGetJobSummary_Success(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
 

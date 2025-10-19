@@ -289,6 +289,52 @@ func (_c *MockJobQueue_GetSummary_Call) RunAndReturn(run func() (*models.JobSumm
 	return _c
 }
 
+// RetryJob provides a mock function with given fields: id
+func (_m *MockJobQueue) RetryJob(id int64) error {
+	ret := _m.Called(id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RetryJob")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(id)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockJobQueue_RetryJob_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RetryJob'
+type MockJobQueue_RetryJob_Call struct {
+	*mock.Call
+}
+
+// RetryJob is a helper method to define mock.On call
+//   - id int64
+func (_e *MockJobQueue_Expecter) RetryJob(id interface{}) *MockJobQueue_RetryJob_Call {
+	return &MockJobQueue_RetryJob_Call{Call: _e.mock.On("RetryJob", id)}
+}
+
+func (_c *MockJobQueue_RetryJob_Call) Run(run func(id int64)) *MockJobQueue_RetryJob_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int64))
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_RetryJob_Call) Return(_a0 error) *MockJobQueue_RetryJob_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockJobQueue_RetryJob_Call) RunAndReturn(run func(int64) error) *MockJobQueue_RetryJob_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SetJobExecutor provides a mock function with given fields: executor
 func (_m *MockJobQueue) SetJobExecutor(executor interfaces.JobExecutor) {
 	_m.Called(executor)

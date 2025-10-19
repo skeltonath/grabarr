@@ -230,6 +230,46 @@ func (q *queue) CancelJob(id int64) error {
 	return nil
 }
 
+func (q *queue) RetryJob(id int64) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Get the job from database
+	job, err := q.repo.GetJob(id)
+	if err != nil {
+		return fmt.Errorf("failed to get job: %w", err)
+	}
+
+	// Only allow retry for failed jobs
+	if job.Status != models.JobStatusFailed {
+		return fmt.Errorf("job is not in failed status (current status: %s)", job.Status)
+	}
+
+	// Check if job can still be retried
+	if !job.CanRetry() {
+		return fmt.Errorf("job has exceeded maximum retry attempts (%d/%d)", job.Retries, job.MaxRetries)
+	}
+
+	// Reset job status to queued
+	job.Status = models.JobStatusQueued
+	job.ErrorMessage = ""
+
+	// Update job in database
+	if err := q.repo.UpdateJob(job); err != nil {
+		return fmt.Errorf("failed to update job status: %w", err)
+	}
+
+	// Re-enqueue the job
+	select {
+	case q.jobQueue <- job:
+		slog.Info("job retried", "job_id", id, "retries", job.Retries)
+	default:
+		return fmt.Errorf("job queue is full, cannot retry job")
+	}
+
+	return nil
+}
+
 func (q *queue) GetSummary() (*models.JobSummary, error) {
 	return q.repo.GetJobSummary()
 }

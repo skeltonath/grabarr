@@ -15,6 +15,7 @@ type JobQueue interface {
 	GetJob(id int64) (*models.Job, error)
 	GetJobs(filter models.JobFilter) ([]*models.Job, error)
 	CancelJob(id int64) error
+	RetryJob(id int64) error
 	GetSummary() (*models.JobSummary, error)
 	SetJobExecutor(executor JobExecutor)
 }

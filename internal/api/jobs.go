@@ -185,6 +185,22 @@ func (h *Handlers) CancelJob(w http.ResponseWriter, r *http.Request) {
 	h.writeSuccess(w, http.StatusOK, nil, "Job cancelled successfully")
 }
 
+func (h *Handlers) RetryJob(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid job ID", err)
+		return
+	}
+
+	if err := h.queue.RetryJob(id); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Failed to retry job", err)
+		return
+	}
+
+	h.writeSuccess(w, http.StatusOK, nil, "Job retried successfully")
+}
+
 func (h *Handlers) GetJobSummary(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.queue.GetSummary()
 	if err != nil {

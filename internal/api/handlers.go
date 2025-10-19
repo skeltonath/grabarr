@@ -46,6 +46,7 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/jobs/{id:[0-9]+}", h.GetJob).Methods("GET")
 	api.HandleFunc("/jobs/{id:[0-9]+}", h.DeleteJob).Methods("DELETE")
 	api.HandleFunc("/jobs/{id:[0-9]+}/cancel", h.CancelJob).Methods("POST")
+	api.HandleFunc("/jobs/{id:[0-9]+}/retry", h.RetryJob).Methods("POST")
 	api.HandleFunc("/jobs/summary", h.GetJobSummary).Methods("GET")
 
 	// Sync endpoints
