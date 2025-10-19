@@ -132,18 +132,18 @@ func (c *Client) Copy(ctx context.Context, srcFs, dstFs string, filter map[strin
 		Filter: filter,
 		Async:  true, // Always use async to avoid timeouts on large transfers
 		Config: map[string]interface{}{
-			"Transfers":           1,
-			"Checkers":            1,
+			"Transfers":           2,
+			"Checkers":            4,
 
-			"BwLimit":             "10M",
-			"BwLimitFile":         "10M",
+			"BwLimit":             "50M",
+			"BwLimitFile":         "25M",
 
-			"SftpChunkSize":       "256k",
-			"SftpConcurrency":     2,
+			"SftpChunkSize":       "512k",
+			"SftpConcurrency":     4,
 
 			"BufferSize":          "32M",
 			"UseMmap":             true,
-			"MultiThreadStreams":  1,
+			"MultiThreadStreams":  2,
 			"MultiThreadCutoff":   "10G",
 
 			"IgnoreExisting":      true,
