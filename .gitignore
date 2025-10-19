@@ -47,6 +47,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+scripts/qbt-grabarr.env
 
 # Docker
 .dockerignore

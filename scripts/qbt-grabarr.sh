@@ -3,12 +3,29 @@
 # Usage: qbt-grabarr.sh "%N" "%Z" "%L" "%F"
 # %N = Torrent name, %Z = Size, %L = Category, %F = Content path
 #
+# Required environment variables:
+# GRABARR_API_URL - Grabarr API endpoint URL
+# GRABARR_CF_CLIENT_ID - Cloudflare Access Client ID
+# GRABARR_CF_CLIENT_SECRET - Cloudflare Access Client Secret
+#
 # Optional environment variables for custom download config:
 # GRABARR_TRANSFERS - Number of parallel transfers (default: 1)
 # GRABARR_BW_LIMIT - Overall bandwidth limit (default: 10M)
 # GRABARR_BW_LIMIT_FILE - Per-file bandwidth limit (default: 10M)
 # GRABARR_CHECKERS - Number of checkers (default: 1)
 # GRABARR_MULTI_THREAD_STREAMS - Multi-thread streams (default: 1)
+
+# Load environment variables from config file if it exists
+if [[ -f ~/bin/qbt-grabarr.env ]]; then
+    source ~/bin/qbt-grabarr.env
+fi
+
+# Validate required environment variables
+if [[ -z "$GRABARR_API_URL" ]] || [[ -z "$GRABARR_CF_CLIENT_ID" ]] || [[ -z "$GRABARR_CF_CLIENT_SECRET" ]]; then
+    echo "Error: Missing required environment variables"
+    echo "Please set GRABARR_API_URL, GRABARR_CF_CLIENT_ID, and GRABARR_CF_CLIENT_SECRET"
+    exit 1
+fi
 
 NAME="$1"
 SIZE="$2"
@@ -39,4 +56,4 @@ JSON=$(cat <<JSONEOF
 JSONEOF
 )
 
-curl -X POST https://hooks.dppeppel.me/grabarr/api/v1/jobs   -H "Content-Type: application/json"   -H "CF-Access-Client-Id: 4f5a0916c664d4e5ca803c9232854c6a.access"   -H "CF-Access-Client-Secret: dadf31e21480d113c6c0211649c6ae22de9d3c4dc704ec6868463e40c2e1910d"   -d "$JSON"
+curl -X POST "$GRABARR_API_URL"   -H "Content-Type: application/json"   -H "CF-Access-Client-Id: $GRABARR_CF_CLIENT_ID"   -H "CF-Access-Client-Secret: $GRABARR_CF_CLIENT_SECRET"   -d "$JSON"
