@@ -1,3 +1,7 @@
+-- Migration note for existing databases:
+-- If upgrading from a version without download_config, run:
+-- ALTER TABLE jobs ADD COLUMN download_config TEXT;
+
 -- Jobs table
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -11,6 +15,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     error_message TEXT,
     progress TEXT, -- JSON blob
     metadata TEXT, -- JSON blob
+    download_config TEXT, -- JSON blob
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     started_at DATETIME,
@@ -73,6 +78,7 @@ CREATE TABLE IF NOT EXISTS sync_jobs (
     error_message TEXT,
     progress TEXT, -- JSON blob
     stats TEXT, -- JSON blob
+    download_config TEXT, -- JSON blob
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     started_at DATETIME,

@@ -55,6 +55,48 @@ func (r *Repository) initSchema() error {
 		return fmt.Errorf("failed to execute schema: %w", err)
 	}
 
+	// Run migrations for existing databases
+	if err := r.runMigrations(); err != nil {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	return nil
+}
+
+// runMigrations applies database migrations for schema changes
+func (r *Repository) runMigrations() error {
+	// Migration 1: Add download_config column to jobs table
+	var hasJobsDownloadConfig bool
+	row := r.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name='download_config'")
+	if err := row.Scan(&hasJobsDownloadConfig); err != nil {
+		return fmt.Errorf("failed to check for download_config column in jobs: %w", err)
+	}
+
+	if !hasJobsDownloadConfig {
+		slog.Info("migrating database: adding download_config column to jobs table")
+		_, err := r.db.Exec("ALTER TABLE jobs ADD COLUMN download_config TEXT")
+		if err != nil {
+			return fmt.Errorf("failed to add download_config column to jobs: %w", err)
+		}
+		slog.Info("migration complete: download_config column added to jobs table")
+	}
+
+	// Migration 2: Add download_config column to sync_jobs table
+	var hasSyncJobsDownloadConfig bool
+	row = r.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('sync_jobs') WHERE name='download_config'")
+	if err := row.Scan(&hasSyncJobsDownloadConfig); err != nil {
+		return fmt.Errorf("failed to check for download_config column in sync_jobs: %w", err)
+	}
+
+	if !hasSyncJobsDownloadConfig {
+		slog.Info("migrating database: adding download_config column to sync_jobs table")
+		_, err := r.db.Exec("ALTER TABLE sync_jobs ADD COLUMN download_config TEXT")
+		if err != nil {
+			return fmt.Errorf("failed to add download_config column to sync_jobs: %w", err)
+		}
+		slog.Info("migration complete: download_config column added to sync_jobs table")
+	}
+
 	return nil
 }
 
@@ -63,13 +105,13 @@ func (r *Repository) CreateJob(job *models.Job) error {
 	query := `
 		INSERT INTO jobs (
 			name, remote_path, local_path, status, priority, max_retries,
-			progress, metadata, estimated_size
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			progress, metadata, download_config, estimated_size
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.Exec(query,
 		job.Name, job.RemotePath, job.LocalPath, job.Status, job.Priority,
-		job.MaxRetries, job.Progress, job.Metadata, job.EstimatedSize)
+		job.MaxRetries, job.Progress, job.Metadata, job.DownloadConfig, job.EstimatedSize)
 	if err != nil {
 		return fmt.Errorf("failed to create job: %w", err)
 	}
@@ -89,7 +131,7 @@ func (r *Repository) CreateJob(job *models.Job) error {
 func (r *Repository) GetJob(id int64) (*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
-			   error_message, progress, metadata, created_at, updated_at, started_at,
+			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
 			   completed_at, estimated_size, transferred_bytes, transfer_speed
 		FROM jobs WHERE id = ?
 	`
@@ -97,11 +139,12 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 	var job models.Job
 	var errorMessage sql.NullString
 	var startedAt, completedAt sql.NullTime
+	var downloadConfig sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&job.ID, &job.Name, &job.RemotePath, &job.LocalPath, &job.Status,
 		&job.Priority, &job.Retries, &job.MaxRetries, &errorMessage,
-		&job.Progress, &job.Metadata, &job.CreatedAt, &job.UpdatedAt,
+		&job.Progress, &job.Metadata, &downloadConfig, &job.CreatedAt, &job.UpdatedAt,
 		&startedAt, &completedAt, &job.EstimatedSize, &job.TransferredBytes,
 		&job.TransferSpeed)
 	if err != nil {
@@ -113,6 +156,14 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 
 	if errorMessage.Valid {
 		job.ErrorMessage = errorMessage.String
+	}
+	if downloadConfig.Valid && downloadConfig.String != "" {
+		// Download config is stored as JSON, use the Scan method
+		job.DownloadConfig = &models.DownloadConfig{}
+		if err := job.DownloadConfig.Scan(downloadConfig.String); err != nil {
+			slog.Warn("failed to parse download_config, ignoring", "job_id", id, "error", err)
+			job.DownloadConfig = nil
+		}
 	}
 	if startedAt.Valid {
 		job.StartedAt = &startedAt.Time
@@ -127,7 +178,7 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
-			   error_message, progress, metadata, created_at, updated_at, started_at,
+			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
 			   completed_at, estimated_size, transferred_bytes, transfer_speed
 		FROM jobs
 	`
@@ -195,11 +246,12 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 		var job models.Job
 		var errorMessage sql.NullString
 		var startedAt, completedAt sql.NullTime
+		var downloadConfig sql.NullString
 
 		err := rows.Scan(
 			&job.ID, &job.Name, &job.RemotePath, &job.LocalPath, &job.Status,
 			&job.Priority, &job.Retries, &job.MaxRetries, &errorMessage,
-			&job.Progress, &job.Metadata, &job.CreatedAt, &job.UpdatedAt,
+			&job.Progress, &job.Metadata, &downloadConfig, &job.CreatedAt, &job.UpdatedAt,
 			&startedAt, &completedAt, &job.EstimatedSize, &job.TransferredBytes,
 			&job.TransferSpeed)
 		if err != nil {
@@ -208,6 +260,13 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 
 		if errorMessage.Valid {
 			job.ErrorMessage = errorMessage.String
+		}
+		if downloadConfig.Valid && downloadConfig.String != "" {
+			job.DownloadConfig = &models.DownloadConfig{}
+			if err := job.DownloadConfig.Scan(downloadConfig.String); err != nil {
+				slog.Warn("failed to parse download_config, ignoring", "job_id", job.ID, "error", err)
+				job.DownloadConfig = nil
+			}
 		}
 		if startedAt.Valid {
 			job.StartedAt = &startedAt.Time
@@ -394,13 +453,13 @@ func (r *Repository) SetConfig(key, value string) error {
 func (r *Repository) CreateSyncJob(syncJob *models.SyncJob) error {
 	query := `
 		INSERT INTO sync_jobs (
-			remote_path, local_path, status, progress, stats
-		) VALUES (?, ?, ?, ?, ?)
+			remote_path, local_path, status, progress, stats, download_config
+		) VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.Exec(query,
 		syncJob.RemotePath, syncJob.LocalPath, syncJob.Status,
-		syncJob.Progress, syncJob.Stats)
+		syncJob.Progress, syncJob.Stats, syncJob.DownloadConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create sync job: %w", err)
 	}
@@ -420,7 +479,7 @@ func (r *Repository) CreateSyncJob(syncJob *models.SyncJob) error {
 func (r *Repository) GetSyncJob(id int64) (*models.SyncJob, error) {
 	query := `
 		SELECT id, remote_path, local_path, status, error_message,
-			   progress, stats, created_at, updated_at, started_at,
+			   progress, stats, download_config, created_at, updated_at, started_at,
 			   completed_at, rclone_job_id
 		FROM sync_jobs WHERE id = ?
 	`
@@ -429,10 +488,11 @@ func (r *Repository) GetSyncJob(id int64) (*models.SyncJob, error) {
 	var errorMessage sql.NullString
 	var startedAt, completedAt sql.NullTime
 	var rcloneJobID sql.NullInt64
+	var downloadConfig sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&syncJob.ID, &syncJob.RemotePath, &syncJob.LocalPath, &syncJob.Status,
-		&errorMessage, &syncJob.Progress, &syncJob.Stats, &syncJob.CreatedAt,
+		&errorMessage, &syncJob.Progress, &syncJob.Stats, &downloadConfig, &syncJob.CreatedAt,
 		&syncJob.UpdatedAt, &startedAt, &completedAt, &rcloneJobID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -443,6 +503,13 @@ func (r *Repository) GetSyncJob(id int64) (*models.SyncJob, error) {
 
 	if errorMessage.Valid {
 		syncJob.ErrorMessage = errorMessage.String
+	}
+	if downloadConfig.Valid && downloadConfig.String != "" {
+		syncJob.DownloadConfig = &models.DownloadConfig{}
+		if err := syncJob.DownloadConfig.Scan(downloadConfig.String); err != nil {
+			slog.Warn("failed to parse download_config, ignoring", "sync_id", id, "error", err)
+			syncJob.DownloadConfig = nil
+		}
 	}
 	if startedAt.Valid {
 		syncJob.StartedAt = &startedAt.Time
@@ -460,7 +527,7 @@ func (r *Repository) GetSyncJob(id int64) (*models.SyncJob, error) {
 func (r *Repository) GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error) {
 	query := `
 		SELECT id, remote_path, local_path, status, error_message,
-			   progress, stats, created_at, updated_at, started_at,
+			   progress, stats, download_config, created_at, updated_at, started_at,
 			   completed_at, rclone_job_id
 		FROM sync_jobs
 	`
@@ -514,10 +581,11 @@ func (r *Repository) GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, e
 		var errorMessage sql.NullString
 		var startedAt, completedAt sql.NullTime
 		var rcloneJobID sql.NullInt64
+		var downloadConfig sql.NullString
 
 		err := rows.Scan(
 			&syncJob.ID, &syncJob.RemotePath, &syncJob.LocalPath, &syncJob.Status,
-			&errorMessage, &syncJob.Progress, &syncJob.Stats, &syncJob.CreatedAt,
+			&errorMessage, &syncJob.Progress, &syncJob.Stats, &downloadConfig, &syncJob.CreatedAt,
 			&syncJob.UpdatedAt, &startedAt, &completedAt, &rcloneJobID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan sync job: %w", err)
@@ -525,6 +593,13 @@ func (r *Repository) GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, e
 
 		if errorMessage.Valid {
 			syncJob.ErrorMessage = errorMessage.String
+		}
+		if downloadConfig.Valid && downloadConfig.String != "" {
+			syncJob.DownloadConfig = &models.DownloadConfig{}
+			if err := syncJob.DownloadConfig.Scan(downloadConfig.String); err != nil {
+				slog.Warn("failed to parse download_config, ignoring", "sync_id", syncJob.ID, "error", err)
+				syncJob.DownloadConfig = nil
+			}
 		}
 		if startedAt.Valid {
 			syncJob.StartedAt = &startedAt.Time
