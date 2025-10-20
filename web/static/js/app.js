@@ -98,6 +98,21 @@ class GrabarrDashboard {
         document.getElementById('modal-delete-btn').addEventListener('click', () => {
             this.deleteJob();
         });
+
+        // Confirmation modal controls
+        document.getElementById('confirm-cancel-btn').addEventListener('click', () => {
+            this.closeConfirmModal(false);
+        });
+        document.getElementById('confirm-ok-btn').addEventListener('click', () => {
+            this.closeConfirmModal(true);
+        });
+
+        // Confirmation modal background click
+        document.getElementById('confirm-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'confirm-modal') {
+                this.closeConfirmModal(false);
+            }
+        });
     }
 
     startAutoRefresh() {
@@ -383,7 +398,14 @@ class GrabarrDashboard {
     async cancelJob() {
         if (!this.currentModalJobId) return;
 
-        if (!confirm('Are you sure you want to cancel this job?')) return;
+        const confirmed = await this.showConfirm(
+            'Cancel Job',
+            'Are you sure you want to cancel this job?'
+        );
+
+        if (!confirmed) return;
+
+        const cancelBtn = document.getElementById('modal-cancel-btn');
 
         try {
             this.showLoading(true);
@@ -397,7 +419,7 @@ class GrabarrDashboard {
             if (data.success) {
                 this.closeModal('job-modal');
                 this.loadDashboard();
-                this.showSuccess('Job cancelled successfully');
+                this.showSuccess('Job cancelled successfully', cancelBtn);
             } else {
                 this.showError('Failed to cancel job');
             }
@@ -412,7 +434,14 @@ class GrabarrDashboard {
     async retryJob() {
         if (!this.currentModalJobId) return;
 
-        if (!confirm('Are you sure you want to retry this job?')) return;
+        const confirmed = await this.showConfirm(
+            'Retry Job',
+            'Are you sure you want to retry this job?'
+        );
+
+        if (!confirmed) return;
+
+        const retryBtn = document.getElementById('modal-retry-btn');
 
         try {
             this.showLoading(true);
@@ -426,7 +455,7 @@ class GrabarrDashboard {
             if (data.success) {
                 this.closeModal('job-modal');
                 this.loadDashboard();
-                this.showSuccess('Job retried successfully');
+                this.showSuccess('Job retried successfully', retryBtn);
             } else {
                 this.showError(data.error || 'Failed to retry job');
             }
@@ -441,7 +470,14 @@ class GrabarrDashboard {
     async deleteJob() {
         if (!this.currentModalJobId) return;
 
-        if (!confirm('Are you sure you want to delete this job? This action cannot be undone.')) return;
+        const confirmed = await this.showConfirm(
+            'Delete Job',
+            'Are you sure you want to delete this job? This action cannot be undone.'
+        );
+
+        if (!confirmed) return;
+
+        const deleteBtn = document.getElementById('modal-delete-btn');
 
         try {
             this.showLoading(true);
@@ -455,7 +491,7 @@ class GrabarrDashboard {
             if (data.success) {
                 this.closeModal('job-modal');
                 this.loadDashboard();
-                this.showSuccess('Job deleted successfully');
+                this.showSuccess('Job deleted successfully', deleteBtn);
             } else {
                 this.showError('Failed to delete job');
             }
@@ -486,13 +522,84 @@ class GrabarrDashboard {
     }
 
     showError(message) {
-        // Simple alert for now - could be enhanced with a toast notification
-        alert(`Error: ${message}`);
+        this.showToast(message, 'error');
     }
 
-    showSuccess(message) {
-        // Simple alert for now - could be enhanced with a toast notification
-        alert(message);
+    showSuccess(message, button) {
+        if (button) {
+            this.showButtonSuccess(button);
+        }
+    }
+
+    showToast(message, type = 'error') {
+        const container = document.getElementById('toast-container');
+
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+
+        // Icon based on type
+        const icon = type === 'error' ? '⚠️' : '✓';
+
+        toast.innerHTML = `
+            <span class="toast-icon">${icon}</span>
+            <span class="toast-message">${this.escapeHtml(message)}</span>
+            <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+        `;
+
+        container.appendChild(toast);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.add('removing');
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, 300); // Match animation duration
+            }
+        }, 5000);
+    }
+
+    showButtonSuccess(button) {
+        // Save original content and state
+        const originalText = button.innerHTML;
+        const originalDisabled = button.disabled;
+
+        // Update button to success state
+        button.innerHTML = '✓';
+        button.classList.add('btn-success-state');
+        button.disabled = true;
+
+        // Restore after 2 seconds
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.classList.remove('btn-success-state');
+            button.disabled = originalDisabled;
+        }, 2000);
+    }
+
+    showConfirm(title, message) {
+        return new Promise((resolve) => {
+            // Set the modal content
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-body').textContent = message;
+
+            // Store the resolve function
+            this.confirmResolve = resolve;
+
+            // Show the modal
+            this.openModal('confirm-modal');
+        });
+    }
+
+    closeConfirmModal(confirmed) {
+        this.closeModal('confirm-modal');
+        if (this.confirmResolve) {
+            this.confirmResolve(confirmed);
+            this.confirmResolve = null;
+        }
     }
 
     // Utility functions
