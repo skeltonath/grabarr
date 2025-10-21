@@ -583,3 +583,255 @@ func TestRepository_JobAttempts(t *testing.T) {
 	assert.Len(t, attempts, 1)
 	assert.Equal(t, models.JobStatusCompleted, attempts[0].Status)
 }
+
+func TestRepository_JobWithDownloadConfig(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	// Create custom download config
+	transfers := 4
+	bwLimit := "50M"
+	downloadConfig := &models.DownloadConfig{
+		Transfers: &transfers,
+		BwLimit:   &bwLimit,
+	}
+
+	// Create a job with custom download config
+	job := &models.Job{
+		Name:           "test-job-with-config",
+		RemotePath:     "/remote/path",
+		LocalPath:      "/local/path",
+		Status:         models.JobStatusQueued,
+		Priority:       5,
+		MaxRetries:     3,
+		Progress:       models.JobProgress{},
+		Metadata:       models.JobMetadata{Category: "movies"},
+		DownloadConfig: downloadConfig,
+	}
+
+	err := repo.CreateJob(job)
+	require.NoError(t, err)
+	assert.NotZero(t, job.ID)
+
+	// Retrieve the job and verify download config is persisted
+	retrieved, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, retrieved.DownloadConfig)
+	assert.Equal(t, 4, *retrieved.DownloadConfig.Transfers)
+	assert.Equal(t, "50M", *retrieved.DownloadConfig.BwLimit)
+
+	// Test that job without download config returns nil
+	job2 := &models.Job{
+		Name:       "test-job-no-config",
+		RemotePath: "/remote/path2",
+		LocalPath:  "/local/path",
+		Status:     models.JobStatusQueued,
+		MaxRetries: 3,
+		Progress:   models.JobProgress{},
+		Metadata:   models.JobMetadata{},
+	}
+	err = repo.CreateJob(job2)
+	require.NoError(t, err)
+
+	retrieved2, err := repo.GetJob(job2.ID)
+	require.NoError(t, err)
+	assert.Nil(t, retrieved2.DownloadConfig)
+}
+
+func TestRepository_GetJobsWithDownloadConfig(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	// Create job with download config
+	transfers := 8
+	downloadConfig := &models.DownloadConfig{
+		Transfers: &transfers,
+	}
+
+	job1 := &models.Job{
+		Name:           "job-with-config",
+		RemotePath:     "/remote/1",
+		LocalPath:      "/local",
+		Status:         models.JobStatusQueued,
+		MaxRetries:     3,
+		Progress:       models.JobProgress{},
+		Metadata:       models.JobMetadata{},
+		DownloadConfig: downloadConfig,
+	}
+	err := repo.CreateJob(job1)
+	require.NoError(t, err)
+
+	// Create job without download config
+	job2 := &models.Job{
+		Name:       "job-without-config",
+		RemotePath: "/remote/2",
+		LocalPath:  "/local",
+		Status:     models.JobStatusQueued,
+		MaxRetries: 3,
+		Progress:   models.JobProgress{},
+		Metadata:   models.JobMetadata{},
+	}
+	err = repo.CreateJob(job2)
+	require.NoError(t, err)
+
+	// Get all jobs
+	jobs, err := repo.GetJobs(models.JobFilter{})
+	require.NoError(t, err)
+	assert.Len(t, jobs, 2)
+
+	// Verify download config is correctly retrieved
+	var jobWithConfig, jobWithoutConfig *models.Job
+	for _, job := range jobs {
+		if job.ID == job1.ID {
+			jobWithConfig = job
+		} else if job.ID == job2.ID {
+			jobWithoutConfig = job
+		}
+	}
+
+	require.NotNil(t, jobWithConfig)
+	require.NotNil(t, jobWithoutConfig)
+
+	assert.NotNil(t, jobWithConfig.DownloadConfig)
+	assert.Equal(t, 8, *jobWithConfig.DownloadConfig.Transfers)
+
+	assert.Nil(t, jobWithoutConfig.DownloadConfig)
+}
+
+func TestRepository_MigrationAddsDownloadConfig(t *testing.T) {
+	// Create a database with the old schema (without download_config)
+	repo, err := New(":memory:")
+	require.NoError(t, err)
+	defer repo.Close()
+
+	// The migration should have already run during New()
+	// Verify the column exists
+	var columnExists int
+	err = repo.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name='download_config'").Scan(&columnExists)
+	require.NoError(t, err)
+	assert.Equal(t, 1, columnExists, "download_config column should exist after migration")
+
+	// Verify we can create and retrieve jobs with download_config
+	transfers := 2
+	job := &models.Job{
+		Name:       "test-migration",
+		RemotePath: "/remote",
+		LocalPath:  "/local",
+		Status:     models.JobStatusQueued,
+		MaxRetries: 3,
+		Progress:   models.JobProgress{},
+		Metadata:   models.JobMetadata{},
+		DownloadConfig: &models.DownloadConfig{
+			Transfers: &transfers,
+		},
+	}
+
+	err = repo.CreateJob(job)
+	require.NoError(t, err)
+
+	retrieved, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, retrieved.DownloadConfig)
+	assert.Equal(t, 2, *retrieved.DownloadConfig.Transfers)
+}
+
+func TestRepository_SyncJobWithDownloadConfig(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	// Create custom download config
+	transfers := 3
+	bwLimit := "25M"
+	downloadConfig := &models.DownloadConfig{
+		Transfers: &transfers,
+		BwLimit:   &bwLimit,
+	}
+
+	// Create a sync job with custom download config
+	syncJob := &models.SyncJob{
+		RemotePath:     "/remote/sync",
+		LocalPath:      "/local/sync",
+		Status:         models.SyncStatusQueued,
+		Progress:       models.SyncProgress{},
+		Stats:          models.SyncStats{},
+		DownloadConfig: downloadConfig,
+	}
+
+	err := repo.CreateSyncJob(syncJob)
+	require.NoError(t, err)
+	assert.NotZero(t, syncJob.ID)
+
+	// Retrieve the sync job and verify download config is persisted
+	retrieved, err := repo.GetSyncJob(syncJob.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, retrieved.DownloadConfig)
+	assert.Equal(t, 3, *retrieved.DownloadConfig.Transfers)
+	assert.Equal(t, "25M", *retrieved.DownloadConfig.BwLimit)
+
+	// Test that sync job without download config returns nil
+	syncJob2 := &models.SyncJob{
+		RemotePath: "/remote/sync2",
+		LocalPath:  "/local/sync",
+		Status:     models.SyncStatusQueued,
+		Progress:   models.SyncProgress{},
+		Stats:      models.SyncStats{},
+	}
+	err = repo.CreateSyncJob(syncJob2)
+	require.NoError(t, err)
+
+	retrieved2, err := repo.GetSyncJob(syncJob2.ID)
+	require.NoError(t, err)
+	assert.Nil(t, retrieved2.DownloadConfig)
+}
+
+func TestRepository_GetSyncJobsWithDownloadConfig(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	// Create sync job with download config
+	transfers := 5
+	downloadConfig := &models.DownloadConfig{
+		Transfers: &transfers,
+	}
+
+	syncJob1 := &models.SyncJob{
+		RemotePath:     "/remote/sync1",
+		LocalPath:      "/local",
+		Status:         models.SyncStatusQueued,
+		Progress:       models.SyncProgress{},
+		Stats:          models.SyncStats{},
+		DownloadConfig: downloadConfig,
+	}
+	err := repo.CreateSyncJob(syncJob1)
+	require.NoError(t, err)
+
+	// Create sync job without download config
+	syncJob2 := &models.SyncJob{
+		RemotePath: "/remote/sync2",
+		LocalPath:  "/local",
+		Status:     models.SyncStatusQueued,
+		Progress:   models.SyncProgress{},
+		Stats:      models.SyncStats{},
+	}
+	err = repo.CreateSyncJob(syncJob2)
+	require.NoError(t, err)
+
+	// Get all sync jobs
+	syncJobs, err := repo.GetSyncJobs(models.SyncFilter{})
+	require.NoError(t, err)
+	assert.Len(t, syncJobs, 2)
+
+	// Verify download config is correctly retrieved
+	var syncWithConfig, syncWithoutConfig *models.SyncJob
+	for _, sync := range syncJobs {
+		if sync.ID == syncJob1.ID {
+			syncWithConfig = sync
+		} else if sync.ID == syncJob2.ID {
+			syncWithoutConfig = sync
+		}
+	}
+
+	require.NotNil(t, syncWithConfig)
+	require.NotNil(t, syncWithoutConfig)
+
+	assert.NotNil(t, syncWithConfig.DownloadConfig)
+	assert.Equal(t, 5, *syncWithConfig.DownloadConfig.Transfers)
+
+	assert.Nil(t, syncWithoutConfig.DownloadConfig)
+}

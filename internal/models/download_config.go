@@ -22,10 +22,10 @@ type DownloadConfig struct {
 	SftpConcurrency *int    `json:"sftp_concurrency,omitempty"`
 
 	// Buffer and threading settings
-	BufferSize          *string `json:"buffer_size,omitempty"`
-	UseMmap             *bool   `json:"use_mmap,omitempty"`
-	MultiThreadStreams  *int    `json:"multi_thread_streams,omitempty"`
-	MultiThreadCutoff   *string `json:"multi_thread_cutoff,omitempty"`
+	BufferSize         *string `json:"buffer_size,omitempty"`
+	UseMmap            *bool   `json:"use_mmap,omitempty"`
+	MultiThreadStreams *int    `json:"multi_thread_streams,omitempty"`
+	MultiThreadCutoff  *string `json:"multi_thread_cutoff,omitempty"`
 
 	// Sync behavior settings
 	IgnoreExisting *bool `json:"ignore_existing,omitempty"`
@@ -50,19 +50,19 @@ func DefaultDownloadConfig() *DownloadConfig {
 	updateOlder := true
 
 	return &DownloadConfig{
-		Transfers:           &transfers,
-		Checkers:            &checkers,
-		BwLimit:             &bwLimit,
-		BwLimitFile:         &bwLimitFile,
-		SftpChunkSize:       &sftpChunkSize,
-		SftpConcurrency:     &sftpConcurrency,
-		BufferSize:          &bufferSize,
-		UseMmap:             &useMmap,
-		MultiThreadStreams:  &multiThreadStreams,
-		MultiThreadCutoff:   &multiThreadCutoff,
-		IgnoreExisting:      &ignoreExisting,
-		NoTraverse:          &noTraverse,
-		UpdateOlder:         &updateOlder,
+		Transfers:          &transfers,
+		Checkers:           &checkers,
+		BwLimit:            &bwLimit,
+		BwLimitFile:        &bwLimitFile,
+		SftpChunkSize:      &sftpChunkSize,
+		SftpConcurrency:    &sftpConcurrency,
+		BufferSize:         &bufferSize,
+		UseMmap:            &useMmap,
+		MultiThreadStreams: &multiThreadStreams,
+		MultiThreadCutoff:  &multiThreadCutoff,
+		IgnoreExisting:     &ignoreExisting,
+		NoTraverse:         &noTraverse,
+		UpdateOlder:        &updateOlder,
 	}
 }
 
