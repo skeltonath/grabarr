@@ -133,9 +133,6 @@ func defaultConfig() map[string]interface{} {
 		"BwLimit":     "10M",
 		"BwLimitFile": "10M",
 
-		"SftpChunkSize":   "256k",
-		"SftpConcurrency": 2,
-
 		"BufferSize":         "32M",
 		"UseMmap":            true,
 		"MultiThreadStreams": 1,
