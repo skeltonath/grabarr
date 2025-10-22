@@ -72,7 +72,6 @@ type CacheDiskConfig struct {
 }
 
 type GatekeeperRules struct {
-	BlockJobsDuringSync  bool `yaml:"block_jobs_during_sync"`
 	RequireFilesizeCheck bool `yaml:"require_filesize_check"`
 }
 

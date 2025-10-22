@@ -18,7 +18,6 @@ import (
 	"grabarr/internal/queue"
 	"grabarr/internal/rclone"
 	"grabarr/internal/repository"
-	"grabarr/internal/services"
 
 	"github.com/gorilla/mux"
 )
@@ -64,7 +63,7 @@ func run() error {
 	rcloneClient := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
 
 	// Initialize gatekeeper
-	gk := gatekeeper.New(cfg, repo, rcloneClient)
+	gk := gatekeeper.New(cfg, rcloneClient)
 	if err := gk.Start(); err != nil {
 		return fmt.Errorf("failed to start gatekeeper: %w", err)
 	}
@@ -79,15 +78,6 @@ func run() error {
 	// Initialize job executor (using rsync as default)
 	jobExecutor := executor.NewRsyncExecutor(cfg, gk, repo)
 	jobQueue.SetJobExecutor(jobExecutor)
-
-	// Initialize sync service
-	syncService := services.NewSyncService(cfg, repo, gk, notifier)
-	slog.Info("sync service initialized")
-
-	// Recover interrupted syncs
-	if err := syncService.RecoverInterruptedSyncs(); err != nil {
-		slog.Warn("failed to recover interrupted syncs", "error", err)
-	}
 
 	// Start job queue and executor
 	ctx, cancel := context.WithCancel(context.Background())
@@ -117,7 +107,7 @@ func run() error {
 	router := mux.NewRouter()
 
 	// Setup API handlers
-	handlers := api.NewHandlers(jobQueue, gk, cfg, syncService)
+	handlers := api.NewHandlers(jobQueue, gk, cfg)
 	handlers.RegisterRoutes(router)
 
 	// Log registered routes for debugging
@@ -174,11 +164,6 @@ func run() error {
 		slog.Error("HTTP server shutdown error", "error", err)
 	}
 
-	// Stop sync service first (marks syncs as queued)
-	if err := syncService.Shutdown(); err != nil {
-		slog.Error("sync service shutdown error", "error", err)
-	}
-
 	// Stop job queue (marks jobs as queued)
 	if err := jobQueue.Stop(); err != nil {
 		slog.Error("job queue shutdown error", "error", err)
@@ -189,23 +174,16 @@ func run() error {
 
 	// Send final notification if any jobs were interrupted
 	jobSummary, jobErr := jobQueue.GetSummary()
-	syncSummary, syncErr := syncService.GetSyncSummary()
 
 	interruptedJobs := 0
-	interruptedSyncs := 0
 
 	if jobErr == nil {
 		interruptedJobs = jobSummary.QueuedJobs
 	}
-	if syncErr == nil {
-		interruptedSyncs = syncSummary.QueuedSyncs
-	}
 
-	totalInterrupted := interruptedJobs + interruptedSyncs
-
-	if totalInterrupted > 0 && notifier.IsEnabled() {
-		message := fmt.Sprintf("Grabarr is shutting down. %d job(s) and %d sync(s) have been queued for restart.",
-			interruptedJobs, interruptedSyncs)
+	if interruptedJobs > 0 && notifier.IsEnabled() {
+		message := fmt.Sprintf("Grabarr is shutting down. %d job(s) have been queued for restart.",
+			interruptedJobs)
 		notifier.NotifySystemAlert(
 			"Service Shutdown",
 			message,

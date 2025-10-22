@@ -15,9 +15,8 @@ import (
 
 // Gatekeeper manages resource constraints and enforces operational rules
 type Gatekeeper struct {
-	config         *config.Config
-	syncRepository interfaces.SyncRepository
-	rcloneClient   interfaces.RCloneClient
+	config       *config.Config
+	rcloneClient interfaces.RCloneClient
 
 	mu             sync.RWMutex
 	bandwidthUsage float64 // Current bandwidth usage in Mbps
@@ -35,16 +34,15 @@ type GateDecision struct {
 	Details map[string]interface{}
 }
 
-func New(cfg *config.Config, syncRepo interfaces.SyncRepository, rcloneClient interfaces.RCloneClient) *Gatekeeper {
+func New(cfg *config.Config, rcloneClient interfaces.RCloneClient) *Gatekeeper {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Gatekeeper{
-		config:         cfg,
-		syncRepository: syncRepo,
-		rcloneClient:   rcloneClient,
-		ctx:            ctx,
-		cancel:         cancel,
-		lastCheck:      time.Now(),
+		config:       cfg,
+		rcloneClient: rcloneClient,
+		ctx:          ctx,
+		cancel:       cancel,
+		lastCheck:    time.Now(),
 	}
 }
 
@@ -72,29 +70,7 @@ func (g *Gatekeeper) CanStartJob(fileSize int64) interfaces.GateDecision {
 
 	gatekeeperCfg := g.config.GetGatekeeper()
 
-	// Rule 1: Block if any syncs are running
-	if gatekeeperCfg.Rules.BlockJobsDuringSync {
-		activeSyncs, err := g.syncRepository.GetActiveSyncJobsCount()
-		if err != nil {
-			slog.Error("failed to check active syncs", "error", err)
-			return interfaces.GateDecision{
-				Allowed: false,
-				Reason:  "Unable to verify sync status",
-			}
-		}
-
-		if activeSyncs > 0 {
-			return interfaces.GateDecision{
-				Allowed: false,
-				Reason:  "Sync operation in progress",
-				Details: map[string]interface{}{
-					"active_syncs": activeSyncs,
-				},
-			}
-		}
-	}
-
-	// Rule 2: Check bandwidth availability
+	// Rule 1: Check bandwidth availability
 	if g.bandwidthUsage >= float64(gatekeeperCfg.Seedbox.BandwidthLimitMbps) {
 		return interfaces.GateDecision{
 			Allowed: false,
@@ -106,7 +82,7 @@ func (g *Gatekeeper) CanStartJob(fileSize int64) interfaces.GateDecision {
 		}
 	}
 
-	// Rule 3: Check cache disk space
+	// Rule 2: Check cache disk space
 	cacheMaxPercent := float64(gatekeeperCfg.CacheDisk.MaxUsagePercent)
 	if g.cacheUsage >= cacheMaxPercent {
 		return interfaces.GateDecision{
@@ -119,7 +95,7 @@ func (g *Gatekeeper) CanStartJob(fileSize int64) interfaces.GateDecision {
 		}
 	}
 
-	// Rule 4: Check if filesize fits in available space
+	// Rule 3: Check if filesize fits in available space
 	if gatekeeperCfg.Rules.RequireFilesizeCheck && fileSize > 0 {
 		stat, err := g.getCacheDiskStats()
 		if err != nil {
@@ -158,76 +134,12 @@ func (g *Gatekeeper) CanStartJob(fileSize int64) interfaces.GateDecision {
 	}
 }
 
-// CanStartSync checks if a new sync operation can be started
-func (g *Gatekeeper) CanStartSync() interfaces.GateDecision {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	gatekeeperCfg := g.config.GetGatekeeper()
-
-	// Rule 1: Only one sync at a time
-	activeSyncs, err := g.syncRepository.GetActiveSyncJobsCount()
-	if err != nil {
-		slog.Error("failed to check active syncs", "error", err)
-		return interfaces.GateDecision{
-			Allowed: false,
-			Reason:  "Unable to verify sync status",
-		}
-	}
-
-	if activeSyncs > 0 {
-		return interfaces.GateDecision{
-			Allowed: false,
-			Reason:  "Another sync is already running",
-			Details: map[string]interface{}{
-				"active_syncs": activeSyncs,
-			},
-		}
-	}
-
-	// Rule 2: Check bandwidth availability
-	if g.bandwidthUsage >= float64(gatekeeperCfg.Seedbox.BandwidthLimitMbps) {
-		return interfaces.GateDecision{
-			Allowed: false,
-			Reason:  "Bandwidth limit reached",
-			Details: map[string]interface{}{
-				"current_mbps": g.bandwidthUsage,
-				"limit_mbps":   gatekeeperCfg.Seedbox.BandwidthLimitMbps,
-			},
-		}
-	}
-
-	// Rule 3: Check cache disk space (need some headroom for syncs)
-	cacheMaxPercent := float64(gatekeeperCfg.CacheDisk.MaxUsagePercent)
-	if g.cacheUsage >= cacheMaxPercent-10 { // Leave 10% buffer for syncs
-		return interfaces.GateDecision{
-			Allowed: false,
-			Reason:  "Insufficient cache space for sync",
-			Details: map[string]interface{}{
-				"current_percent":  g.cacheUsage,
-				"required_percent": cacheMaxPercent - 10,
-			},
-		}
-	}
-
-	return interfaces.GateDecision{
-		Allowed: true,
-		Reason:  "All checks passed",
-	}
-}
-
 // GetResourceStatus returns current resource status
 func (g *Gatekeeper) GetResourceStatus() interfaces.GatekeeperResourceStatus {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
 	gatekeeperCfg := g.config.GetGatekeeper()
-
-	activeSyncs := 0
-	count, err := g.syncRepository.GetActiveSyncJobsCount()
-	if err == nil {
-		activeSyncs = count
-	}
 
 	var cacheFreeBytes, cacheTotalBytes int64
 	if stat, err := g.getCacheDiskStats(); err == nil {
@@ -242,7 +154,6 @@ func (g *Gatekeeper) GetResourceStatus() interfaces.GatekeeperResourceStatus {
 		CacheMaxPercent:    gatekeeperCfg.CacheDisk.MaxUsagePercent,
 		CacheFreeBytes:     cacheFreeBytes,
 		CacheTotalBytes:    cacheTotalBytes,
-		ActiveSyncs:        activeSyncs,
 	}
 }
 

@@ -12,10 +12,9 @@ import (
 )
 
 type Handlers struct {
-	queue       interfaces.JobQueue
-	gatekeeper  interfaces.Gatekeeper
-	config      *config.Config
-	syncService interfaces.SyncService
+	queue      interfaces.JobQueue
+	gatekeeper interfaces.Gatekeeper
+	config     *config.Config
 }
 
 type APIResponse struct {
@@ -25,12 +24,11 @@ type APIResponse struct {
 	Message string      `json:"message,omitempty"`
 }
 
-func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper, cfg *config.Config, syncService interfaces.SyncService) *Handlers {
+func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper, cfg *config.Config) *Handlers {
 	return &Handlers{
-		queue:       jobQueue,
-		gatekeeper:  gatekeeper,
-		config:      cfg,
-		syncService: syncService,
+		queue:      jobQueue,
+		gatekeeper: gatekeeper,
+		config:     cfg,
 	}
 }
 
@@ -48,13 +46,6 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/jobs/{id:[0-9]+}/cancel", h.CancelJob).Methods("POST")
 	api.HandleFunc("/jobs/{id:[0-9]+}/retry", h.RetryJob).Methods("POST")
 	api.HandleFunc("/jobs/summary", h.GetJobSummary).Methods("GET")
-
-	// Sync endpoints
-	api.HandleFunc("/sync", h.CreateSync).Methods("POST")
-	api.HandleFunc("/sync", h.GetSyncs).Methods("GET")
-	api.HandleFunc("/sync/{id:[0-9]+}", h.GetSync).Methods("GET")
-	api.HandleFunc("/sync/{id:[0-9]+}/cancel", h.CancelSync).Methods("POST")
-	api.HandleFunc("/sync/summary", h.GetSyncSummary).Methods("GET")
 
 	// System endpoints
 	api.HandleFunc("/health", h.HealthCheck).Methods("GET")

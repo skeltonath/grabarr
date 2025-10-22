@@ -38,12 +38,6 @@ func (h *Handlers) GetMetrics(w http.ResponseWriter, r *http.Request) {
 		metrics["jobs"] = summary
 	}
 
-	// Add sync metrics
-	syncSummary, err := h.syncService.GetSyncSummary()
-	if err == nil {
-		metrics["syncs"] = syncSummary
-	}
-
 	h.writeSuccess(w, http.StatusOK, metrics, "")
 }
 
@@ -58,11 +52,6 @@ func (h *Handlers) GetStatus(w http.ResponseWriter, r *http.Request) {
 	// Get job summary
 	if summary, err := h.queue.GetSummary(); err == nil {
 		status["jobs"] = summary
-	}
-
-	// Get sync summary
-	if syncSummary, err := h.syncService.GetSyncSummary(); err == nil {
-		status["syncs"] = syncSummary
 	}
 
 	// Get resource status

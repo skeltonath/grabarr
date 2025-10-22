@@ -67,51 +67,6 @@ func (_c *MockGatekeeper_CanStartJob_Call) RunAndReturn(run func(int64) interfac
 	return _c
 }
 
-// CanStartSync provides a mock function with no fields
-func (_m *MockGatekeeper) CanStartSync() interfaces.GateDecision {
-	ret := _m.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for CanStartSync")
-	}
-
-	var r0 interfaces.GateDecision
-	if rf, ok := ret.Get(0).(func() interfaces.GateDecision); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(interfaces.GateDecision)
-	}
-
-	return r0
-}
-
-// MockGatekeeper_CanStartSync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanStartSync'
-type MockGatekeeper_CanStartSync_Call struct {
-	*mock.Call
-}
-
-// CanStartSync is a helper method to define mock.On call
-func (_e *MockGatekeeper_Expecter) CanStartSync() *MockGatekeeper_CanStartSync_Call {
-	return &MockGatekeeper_CanStartSync_Call{Call: _e.mock.On("CanStartSync")}
-}
-
-func (_c *MockGatekeeper_CanStartSync_Call) Run(run func()) *MockGatekeeper_CanStartSync_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockGatekeeper_CanStartSync_Call) Return(_a0 interfaces.GateDecision) *MockGatekeeper_CanStartSync_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockGatekeeper_CanStartSync_Call) RunAndReturn(run func() interfaces.GateDecision) *MockGatekeeper_CanStartSync_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetResourceStatus provides a mock function with no fields
 func (_m *MockGatekeeper) GetResourceStatus() interfaces.GatekeeperResourceStatus {
 	ret := _m.Called()

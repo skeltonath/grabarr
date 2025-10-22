@@ -124,52 +124,6 @@ func (p *PushoverNotifier) NotifyJobCompleted(job *models.Job) error {
 	return p.sendNotification(req)
 }
 
-func (p *PushoverNotifier) NotifySyncFailed(syncJob *models.SyncJob) error {
-	if !p.enabled {
-		return nil
-	}
-
-	cfg := p.config.GetNotifications().Pushover
-
-	title := "Grabarr Sync Failed"
-	message := p.buildSyncFailedMessage(syncJob)
-
-	req := pushoverRequest{
-		Token:     cfg.Token,
-		User:      cfg.User,
-		Message:   message,
-		Title:     title,
-		Priority:  1, // High priority for failures
-		Timestamp: time.Now().Unix(),
-		Sound:     "falling",
-	}
-
-	return p.sendNotification(req)
-}
-
-func (p *PushoverNotifier) NotifySyncCompleted(syncJob *models.SyncJob) error {
-	if !p.enabled {
-		return nil
-	}
-
-	cfg := p.config.GetNotifications().Pushover
-
-	title := "Grabarr Sync Completed"
-	message := p.buildSyncCompletedMessage(syncJob)
-
-	req := pushoverRequest{
-		Token:     cfg.Token,
-		User:      cfg.User,
-		Message:   message,
-		Title:     title,
-		Priority:  0, // Normal priority for completions
-		Timestamp: time.Now().Unix(),
-		Sound:     "cashregister",
-	}
-
-	return p.sendNotification(req)
-}
-
 func (p *PushoverNotifier) NotifySystemAlert(title, message string, priority int) error {
 	if !p.enabled {
 		return nil
@@ -306,66 +260,6 @@ func (p *PushoverNotifier) buildJobCompletedMessage(job *models.Job) string {
 	}
 
 	msg.WriteString(fmt.Sprintf("Job ID: %d", job.ID))
-
-	return msg.String()
-}
-
-func (p *PushoverNotifier) buildSyncFailedMessage(syncJob *models.SyncJob) string {
-	var msg strings.Builder
-
-	msg.WriteString(fmt.Sprintf("Remote Path: %s\n", syncJob.RemotePath))
-	msg.WriteString(fmt.Sprintf("Local Path: %s\n", syncJob.LocalPath))
-	msg.WriteString(fmt.Sprintf("Status: %s\n", syncJob.Status))
-
-	if syncJob.ErrorMessage != "" {
-		msg.WriteString(fmt.Sprintf("Error: %s\n", syncJob.ErrorMessage))
-	}
-
-	if syncJob.StartedAt != nil {
-		duration := time.Since(*syncJob.StartedAt)
-		msg.WriteString(fmt.Sprintf("Duration: %s\n", duration.Round(time.Second)))
-	}
-
-	if syncJob.Progress.TransferredBytes > 0 && syncJob.Progress.TotalBytes > 0 {
-		msg.WriteString(fmt.Sprintf("Progress: %.1f%% (%s/%s)\n",
-			syncJob.Progress.Percentage,
-			formatBytes(syncJob.Progress.TransferredBytes),
-			formatBytes(syncJob.Progress.TotalBytes)))
-	}
-
-	msg.WriteString(fmt.Sprintf("Sync ID: %d", syncJob.ID))
-
-	return msg.String()
-}
-
-func (p *PushoverNotifier) buildSyncCompletedMessage(syncJob *models.SyncJob) string {
-	var msg strings.Builder
-
-	msg.WriteString(fmt.Sprintf("Remote Path: %s\n", syncJob.RemotePath))
-	msg.WriteString(fmt.Sprintf("Local Path: %s\n", syncJob.LocalPath))
-
-	if syncJob.StartedAt != nil && syncJob.CompletedAt != nil {
-		duration := syncJob.CompletedAt.Sub(*syncJob.StartedAt)
-		msg.WriteString(fmt.Sprintf("Duration: %s\n", duration.Round(time.Second)))
-	}
-
-	if syncJob.Stats.TotalBytes > 0 {
-		msg.WriteString(fmt.Sprintf("Total Size: %s\n", formatBytes(syncJob.Stats.TotalBytes)))
-	}
-
-	if syncJob.Stats.FilesTransferred > 0 {
-		msg.WriteString(fmt.Sprintf("Files Transferred: %d\n", syncJob.Stats.FilesTransferred))
-	}
-
-	if syncJob.Stats.FilesSkipped > 0 {
-		msg.WriteString(fmt.Sprintf("Files Skipped: %d\n", syncJob.Stats.FilesSkipped))
-	}
-
-	if syncJob.Progress.TransferSpeed > 0 {
-		msg.WriteString(fmt.Sprintf("Avg Speed: %s/s\n", formatBytes(syncJob.Progress.TransferSpeed)))
-	}
-
-	msg.WriteString(fmt.Sprintf("Sync ID: %d", syncJob.ID))
 
 	return msg.String()
 }

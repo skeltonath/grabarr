@@ -13,33 +13,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestHandlers(t *testing.T) (*Handlers, *mocks.MockJobQueue, *mocks.MockGatekeeper, *mocks.MockSyncService) {
+func setupTestHandlers(t *testing.T) (*Handlers, *mocks.MockJobQueue, *mocks.MockGatekeeper) {
 	mockQueue := mocks.NewMockJobQueue(t)
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
-	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
-	return handlers, mockQueue, mockGatekeeper, mockSync
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	return handlers, mockQueue, mockGatekeeper
 }
 
 func TestNewHandlers(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
-	mockSync := mocks.NewMockSyncService(t)
 	cfg := &config.Config{}
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, mockSync)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
 
 	assert.NotNil(t, handlers)
 	assert.Equal(t, mockQueue, handlers.queue)
 	assert.Equal(t, mockGatekeeper, handlers.gatekeeper)
 	assert.Equal(t, cfg, handlers.config)
-	assert.Equal(t, mockSync, handlers.syncService)
 }
 
 func TestWriteSuccess(t *testing.T) {
-	h, _, _, _ := setupTestHandlers(t)
+	h, _, _ := setupTestHandlers(t)
 	w := httptest.NewRecorder()
 
 	data := map[string]string{"key": "value"}
@@ -62,7 +59,7 @@ func TestWriteSuccess(t *testing.T) {
 }
 
 func TestWriteSuccess_NilData(t *testing.T) {
-	h, _, _, _ := setupTestHandlers(t)
+	h, _, _ := setupTestHandlers(t)
 	w := httptest.NewRecorder()
 
 	h.writeSuccess(w, 204, nil, "")
@@ -78,7 +75,7 @@ func TestWriteSuccess_NilData(t *testing.T) {
 }
 
 func TestWriteError_WithError(t *testing.T) {
-	h, _, _, _ := setupTestHandlers(t)
+	h, _, _ := setupTestHandlers(t)
 	w := httptest.NewRecorder()
 
 	err := errors.New("something went wrong")
@@ -95,7 +92,7 @@ func TestWriteError_WithError(t *testing.T) {
 }
 
 func TestWriteError_WithoutError(t *testing.T) {
-	h, _, _, _ := setupTestHandlers(t)
+	h, _, _ := setupTestHandlers(t)
 	w := httptest.NewRecorder()
 
 	h.writeError(w, 400, "Bad request", nil)

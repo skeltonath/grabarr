@@ -31,7 +31,6 @@ type Gatekeeper interface {
 	Start() error
 	Stop() error
 	CanStartJob(fileSize int64) GateDecision
-	CanStartSync() GateDecision
 	GetResourceStatus() GatekeeperResourceStatus
 }
 
@@ -50,27 +49,6 @@ type GatekeeperResourceStatus struct {
 	CacheMaxPercent    int     `json:"cache_max_percent"`
 	CacheFreeBytes     int64   `json:"cache_free_bytes"`
 	CacheTotalBytes    int64   `json:"cache_total_bytes"`
-	ActiveSyncs        int     `json:"active_syncs"`
-}
-
-// SyncService manages sync operations
-type SyncService interface {
-	StartSync(ctx context.Context, remotePath string, downloadConfig *models.DownloadConfig) (*models.SyncJob, error)
-	GetSyncJob(id int64) (*models.SyncJob, error)
-	GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error)
-	CancelSync(ctx context.Context, id int64) error
-	GetSyncSummary() (*models.SyncSummary, error)
-}
-
-// SyncRepository provides database access for sync jobs
-type SyncRepository interface {
-	CreateSyncJob(syncJob *models.SyncJob) error
-	GetSyncJob(id int64) (*models.SyncJob, error)
-	GetSyncJobs(filter models.SyncFilter) ([]*models.SyncJob, error)
-	UpdateSyncJob(syncJob *models.SyncJob) error
-	DeleteSyncJob(id int64) error
-	GetSyncSummary() (*models.SyncSummary, error)
-	GetActiveSyncJobsCount() (int, error)
 }
 
 // JobRepository provides database access for jobs
@@ -94,7 +72,5 @@ type Notifier interface {
 	IsEnabled() bool
 	NotifyJobFailed(job *models.Job) error
 	NotifyJobCompleted(job *models.Job) error
-	NotifySyncFailed(syncJob *models.SyncJob) error
-	NotifySyncCompleted(syncJob *models.SyncJob) error
 	NotifySystemAlert(title, message string, priority int) error
 }

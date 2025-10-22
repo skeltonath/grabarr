@@ -28,22 +28,3 @@ func CreateTestJob(overrides ...func(*models.Job)) *models.Job {
 
 	return job
 }
-
-// CreateTestSyncJob creates a test sync job with default values
-func CreateTestSyncJob(overrides ...func(*models.SyncJob)) *models.SyncJob {
-	syncJob := &models.SyncJob{
-		RemotePath: "/remote/sync/path",
-		LocalPath:  "/local/sync/path",
-		Status:     models.SyncStatusQueued,
-		Progress: models.SyncProgress{
-			LastUpdateTime: time.Now(),
-		},
-		Stats: models.SyncStats{},
-	}
-
-	for _, override := range overrides {
-		override(syncJob)
-	}
-
-	return syncJob
-}
