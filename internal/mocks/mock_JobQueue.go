@@ -70,6 +70,52 @@ func (_c *MockJobQueue_CancelJob_Call) RunAndReturn(run func(int64) error) *Mock
 	return _c
 }
 
+// DeleteJob provides a mock function with given fields: id
+func (_m *MockJobQueue) DeleteJob(id int64) error {
+	ret := _m.Called(id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteJob")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(id)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockJobQueue_DeleteJob_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteJob'
+type MockJobQueue_DeleteJob_Call struct {
+	*mock.Call
+}
+
+// DeleteJob is a helper method to define mock.On call
+//   - id int64
+func (_e *MockJobQueue_Expecter) DeleteJob(id interface{}) *MockJobQueue_DeleteJob_Call {
+	return &MockJobQueue_DeleteJob_Call{Call: _e.mock.On("DeleteJob", id)}
+}
+
+func (_c *MockJobQueue_DeleteJob_Call) Run(run func(id int64)) *MockJobQueue_DeleteJob_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int64))
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_DeleteJob_Call) Return(_a0 error) *MockJobQueue_DeleteJob_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockJobQueue_DeleteJob_Call) RunAndReturn(run func(int64) error) *MockJobQueue_DeleteJob_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Enqueue provides a mock function with given fields: job
 func (_m *MockJobQueue) Enqueue(job *models.Job) error {
 	ret := _m.Called(job)

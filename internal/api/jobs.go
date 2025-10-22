@@ -163,7 +163,7 @@ func (h *Handlers) DeleteJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.queue.CancelJob(id); err != nil {
+	if err := h.queue.DeleteJob(id); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Failed to delete job", err)
 		return
 	}

@@ -367,7 +367,7 @@ func TestDeleteJob_Success(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
 
 	mockQueue.EXPECT().
-		CancelJob(int64(123)).
+		DeleteJob(int64(123)).
 		Return(nil).
 		Once()
 

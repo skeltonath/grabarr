@@ -230,6 +230,25 @@ func (q *queue) CancelJob(id int64) error {
 	return nil
 }
 
+func (q *queue) DeleteJob(id int64) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	// Cancel if currently running
+	if cancel, exists := q.activeJobs[id]; exists {
+		cancel()
+		delete(q.activeJobs, id)
+	}
+
+	// Delete job from database
+	if err := q.repo.DeleteJob(id); err != nil {
+		return fmt.Errorf("failed to delete job: %w", err)
+	}
+
+	slog.Info("job deleted", "job_id", id)
+	return nil
+}
+
 func (q *queue) RetryJob(id int64) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()

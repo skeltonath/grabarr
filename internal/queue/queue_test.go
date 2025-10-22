@@ -418,6 +418,39 @@ func TestCancelJob_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to get job")
 }
 
+func TestDeleteJob_Success(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := mocks.NewMockGatekeeper(t)
+
+	q := New(repo, cfg, mockChecker, nil)
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusCompleted
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	err := q.DeleteJob(job.ID)
+	assert.NoError(t, err)
+
+	// Verify job is deleted from database
+	_, err = repo.GetJob(job.ID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestDeleteJob_NotFound(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{}
+	mockChecker := mocks.NewMockGatekeeper(t)
+
+	q := New(repo, cfg, mockChecker, nil)
+
+	// Deleting a non-existent job should succeed (SQL DELETE just affects 0 rows)
+	err := q.DeleteJob(99999)
+	assert.NoError(t, err)
+}
+
 // ========================================
 // 6. Scheduling Tests
 // ========================================
