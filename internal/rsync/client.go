@@ -41,8 +41,8 @@ type Transfer struct {
 // Copy starts an rsync transfer in the background
 func (c *Client) Copy(ctx context.Context, remotePath, localPath string) (*Transfer, error) {
 	// Build rsync command
-	// rsync -avz --progress -e 'ssh -o StrictHostKeyChecking=no -i /key' user@host:/remote /local
-	sshCmd := fmt.Sprintf("ssh -o StrictHostKeyChecking=no -i %s", c.sshKeyFile)
+	// rsync -avz --progress -e 'ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=60 -i /key' user@host:/remote /local
+	sshCmd := fmt.Sprintf("ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=60 -i %s", c.sshKeyFile)
 	remoteSource := fmt.Sprintf("%s@%s:%s", c.sshUser, c.sshHost, remotePath)
 
 	cmdCtx, cancel := context.WithCancel(ctx)
