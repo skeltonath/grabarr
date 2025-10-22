@@ -39,8 +39,6 @@ func DefaultDownloadConfig() *DownloadConfig {
 	checkers := 1
 	bwLimit := "10M"
 	bwLimitFile := "10M"
-	sftpChunkSize := "256k"
-	sftpConcurrency := 2
 	bufferSize := "32M"
 	useMmap := true
 	multiThreadStreams := 1
@@ -54,8 +52,6 @@ func DefaultDownloadConfig() *DownloadConfig {
 		Checkers:           &checkers,
 		BwLimit:            &bwLimit,
 		BwLimitFile:        &bwLimitFile,
-		SftpChunkSize:      &sftpChunkSize,
-		SftpConcurrency:    &sftpConcurrency,
 		BufferSize:         &bufferSize,
 		UseMmap:            &useMmap,
 		MultiThreadStreams: &multiThreadStreams,
@@ -98,18 +94,6 @@ func (dc *DownloadConfig) MergeWithDefaults() *DownloadConfig {
 		merged.BwLimitFile = dc.BwLimitFile
 	} else {
 		merged.BwLimitFile = defaults.BwLimitFile
-	}
-
-	if dc.SftpChunkSize != nil {
-		merged.SftpChunkSize = dc.SftpChunkSize
-	} else {
-		merged.SftpChunkSize = defaults.SftpChunkSize
-	}
-
-	if dc.SftpConcurrency != nil {
-		merged.SftpConcurrency = dc.SftpConcurrency
-	} else {
-		merged.SftpConcurrency = defaults.SftpConcurrency
 	}
 
 	if dc.BufferSize != nil {
@@ -175,12 +159,6 @@ func (dc *DownloadConfig) ToRCloneConfig() map[string]interface{} {
 	}
 	if merged.BwLimitFile != nil {
 		config["BwLimitFile"] = *merged.BwLimitFile
-	}
-	if merged.SftpChunkSize != nil {
-		config["SftpChunkSize"] = *merged.SftpChunkSize
-	}
-	if merged.SftpConcurrency != nil {
-		config["SftpConcurrency"] = *merged.SftpConcurrency
 	}
 	if merged.BufferSize != nil {
 		config["BufferSize"] = *merged.BufferSize

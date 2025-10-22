@@ -1,7 +1,7 @@
 FROM golang:1.21-alpine
 
 # Install dependencies
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev rclone sshpass openssh-client curl
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev rclone rsync sshpass openssh-client curl
 
 # Create user for UID 99 (Unraid nobody)
 RUN echo "unraid:x:99:100:unraid:/home/unraid:/bin/sh" >> /etc/passwd && \

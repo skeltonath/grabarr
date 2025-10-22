@@ -76,8 +76,8 @@ func run() error {
 	// Initialize job queue
 	jobQueue := queue.New(repo, cfg, gk, notifier)
 
-	// Initialize job executor
-	jobExecutor := executor.NewRCloneExecutor(cfg, gk, repo)
+	// Initialize job executor (using rsync as default)
+	jobExecutor := executor.NewRsyncExecutor(cfg, gk, repo)
 	jobQueue.SetJobExecutor(jobExecutor)
 
 	// Initialize sync service

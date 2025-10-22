@@ -17,6 +17,7 @@ type Config struct {
 	Server        ServerConfig        `yaml:"server"`
 	Downloads     DownloadsConfig     `yaml:"downloads"`
 	Rclone        RcloneConfig        `yaml:"rclone"`
+	Rsync         RsyncConfig         `yaml:"rsync"`
 	Gatekeeper    GatekeeperConfig    `yaml:"gatekeeper"`
 	Jobs          JobsConfig          `yaml:"jobs"`
 	Database      DatabaseConfig      `yaml:"database"`
@@ -45,6 +46,12 @@ type RcloneConfig struct {
 	TransferTimeout time.Duration `yaml:"transfer_timeout"`
 	AdditionalArgs  []string      `yaml:"additional_args"`
 	DaemonAddr      string        `yaml:"daemon_addr"`
+}
+
+type RsyncConfig struct {
+	SSHHost    string `yaml:"ssh_host"`
+	SSHUser    string `yaml:"ssh_user"`
+	SSHKeyFile string `yaml:"ssh_key_file"`
 }
 
 type GatekeeperConfig struct {
@@ -291,6 +298,12 @@ func (c *Config) GetRClone() RcloneConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Rclone
+}
+
+func (c *Config) GetRsync() RsyncConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Rsync
 }
 
 // GetJobs returns a copy of the jobs configuration

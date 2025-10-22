@@ -23,12 +23,6 @@ func TestDefaultDownloadConfig(t *testing.T) {
 	require.NotNil(t, config.BwLimitFile)
 	assert.Equal(t, "10M", *config.BwLimitFile)
 
-	require.NotNil(t, config.SftpChunkSize)
-	assert.Equal(t, "256k", *config.SftpChunkSize)
-
-	require.NotNil(t, config.SftpConcurrency)
-	assert.Equal(t, 2, *config.SftpConcurrency)
-
 	require.NotNil(t, config.BufferSize)
 	assert.Equal(t, "32M", *config.BufferSize)
 
@@ -100,8 +94,6 @@ func TestDownloadConfig_MergeWithDefaults_FullCustomConfig(t *testing.T) {
 	checkers := 8
 	bwLimit := "100M"
 	bwLimitFile := "50M"
-	sftpChunkSize := "1M"
-	sftpConcurrency := 8
 	bufferSize := "64M"
 	useMmap := false
 	multiThreadStreams := 4
@@ -115,8 +107,6 @@ func TestDownloadConfig_MergeWithDefaults_FullCustomConfig(t *testing.T) {
 		Checkers:           &checkers,
 		BwLimit:            &bwLimit,
 		BwLimitFile:        &bwLimitFile,
-		SftpChunkSize:      &sftpChunkSize,
-		SftpConcurrency:    &sftpConcurrency,
 		BufferSize:         &bufferSize,
 		UseMmap:            &useMmap,
 		MultiThreadStreams: &multiThreadStreams,
@@ -141,8 +131,6 @@ func TestDownloadConfig_ToRCloneConfig_NilConfig(t *testing.T) {
 	assert.Equal(t, 1, rcloneConfig["Checkers"])
 	assert.Equal(t, "10M", rcloneConfig["BwLimit"])
 	assert.Equal(t, "10M", rcloneConfig["BwLimitFile"])
-	assert.Equal(t, "256k", rcloneConfig["SftpChunkSize"])
-	assert.Equal(t, 2, rcloneConfig["SftpConcurrency"])
 	assert.Equal(t, "32M", rcloneConfig["BufferSize"])
 	assert.Equal(t, true, rcloneConfig["UseMmap"])
 	assert.Equal(t, 1, rcloneConfig["MultiThreadStreams"])

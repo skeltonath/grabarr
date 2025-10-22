@@ -32,9 +32,7 @@ SIZE="$2"
 CATEGORY="$3"
 CONTENT_PATH="$4"
 
-# Strip /home/psychomanteum prefix for FTP compatibility
-# FTP paths are relative to the user's home directory
-CONTENT_PATH="${CONTENT_PATH#/home/psychomanteum}"
+# SFTP uses absolute paths, no need to strip prefix
 
 # Build download_config JSON if any environment variables are set
 DOWNLOAD_CONFIG=""
