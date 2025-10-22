@@ -132,21 +132,21 @@ docker-shell: ## Open shell in running container
 deploy: docker-build ## Deploy to remote server (Unraid)
 	@echo "$(GREEN)Deploying to ${REMOTE_HOST}...$(NC)"
 	@echo "$(YELLOW)Copying config files to remote...$(NC)"
-	@scp docker-compose.yml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/
-	@scp config.yaml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/user/appdata/grabarr/
+	@scp docker-compose.yml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/apps/appdata/grabarr/
+	@scp config.yaml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/apps/appdata/grabarr/
 	@echo "$(YELLOW)Transferring Docker image (this may take a few minutes)...$(NC)"
 	@docker save ${DOCKER_IMAGE}:${DOCKER_TAG} | gzip | ssh ${REMOTE_USER}@${REMOTE_HOST} "gunzip | docker load"
 	@echo "$(YELLOW)Starting service on remote...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/user/appdata/grabarr && docker-compose up -d"
+	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/apps/appdata/grabarr && docker-compose up -d"
 	@echo "$(GREEN)✓ Deployment complete$(NC)"
 
 deploy-logs: ## View remote deployment logs
 	@echo "$(GREEN)Viewing logs from ${REMOTE_HOST}...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/user/appdata/grabarr && docker-compose logs -f"
+	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/apps/appdata/grabarr && docker-compose logs -f"
 
 deploy-restart: ## Restart remote service
 	@echo "$(GREEN)Restarting service on ${REMOTE_HOST}...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/user/appdata/grabarr && docker-compose restart"
+	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/apps/appdata/grabarr && docker-compose restart"
 	@echo "$(GREEN)✓ Service restarted$(NC)"
 
 ## Utility Targets

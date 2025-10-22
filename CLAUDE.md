@@ -13,8 +13,8 @@ Grabarr - Go-based download management service for managing downloads from remot
   - SSH: `root@millions.local`
   - Container user: 99:100 (nobody:users)
   - Paths (Host -> Container):
-    - Config: `/mnt/user/appdata/grabarr/config/` -> `/config/`
-    - Data: `/mnt/user/appdata/grabarr/data/` -> `/data/`
+    - Config: `/mnt/apps/appdata/grabarr/config/` -> `/config/`
+    - Data: `/mnt/apps/appdata/grabarr/data/` -> `/data/`
     - Downloads: `/mnt/user/media/downloads/` -> `/unraid/user/media/downloads/`
     - Cache: `/mnt/cache/` -> `/unraid/cache/`
 
@@ -27,14 +27,14 @@ Grabarr - Go-based download management service for managing downloads from remot
 6. Deploy using docker-compose:
    ```bash
    # Copy files to unraid appdata directory first (config goes in config subdirectory!)
-   scp grabarr_rsa root@millions.local:/mnt/user/appdata/grabarr/config/grabarr_rsa
-   ssh root@millions.local "chmod 600 /mnt/user/appdata/grabarr/config/grabarr_rsa && chown 99:100 /mnt/user/appdata/grabarr/config/grabarr_rsa"
-   scp config.yaml root@millions.local:/mnt/user/appdata/grabarr/config/
-   scp rclone.conf root@millions.local:/mnt/user/appdata/grabarr/config/
-   scp docker-compose.yml root@millions.local:/mnt/user/appdata/grabarr/
+   scp grabarr_rsa root@millions.local:/mnt/apps/appdata/grabarr/config/grabarr_rsa
+   ssh root@millions.local "chmod 600 /mnt/apps/appdata/grabarr/config/grabarr_rsa && chown 99:100 /mnt/apps/appdata/grabarr/config/grabarr_rsa"
+   scp config.yaml root@millions.local:/mnt/apps/appdata/grabarr/config/
+   scp rclone.conf root@millions.local:/mnt/apps/appdata/grabarr/config/
+   scp docker-compose.yml root@millions.local:/mnt/apps/appdata/grabarr/
 
    # Deploy
-   ssh root@millions.local "cd /mnt/user/appdata/grabarr && docker-compose up -d"
+   ssh root@millions.local "cd /mnt/apps/appdata/grabarr && docker-compose up -d"
    ```
 
 ## Critical Docker Notes
