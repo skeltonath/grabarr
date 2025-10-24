@@ -263,14 +263,10 @@ func (q *queue) RetryJob(id int64) error {
 		return fmt.Errorf("job is not in failed status (current status: %s)", job.Status)
 	}
 
-	// Check if job can still be retried
-	if !job.CanRetry() {
-		return fmt.Errorf("job has exceeded maximum retry attempts (%d/%d)", job.Retries, job.MaxRetries)
-	}
-
-	// Reset job status to queued
+	// Manual retry resets the job completely, giving it a fresh start with max retry attempts
 	job.Status = models.JobStatusQueued
 	job.ErrorMessage = ""
+	job.Retries = 0 // Reset retry counter for manual retry
 
 	// Update job in database
 	if err := q.repo.UpdateJob(job); err != nil {

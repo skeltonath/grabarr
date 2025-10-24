@@ -507,28 +507,6 @@ func TestRetryJob_NotFailed(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-func TestRetryJob_MaxRetriesExceeded(t *testing.T) {
-	mockQueue := mocks.NewMockJobQueue(t)
-
-	mockQueue.EXPECT().
-		RetryJob(int64(123)).
-		Return(errors.New("job has exceeded maximum retry attempts (3/3)")).
-		Once()
-
-	cfg := &config.Config{}
-	mockGatekeeper := mocks.NewMockGatekeeper(t)
-	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
-
-	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "123"})
-	rec := httptest.NewRecorder()
-
-	handlers.RetryJob(rec, req)
-
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
 func TestGetJobSummary_Success(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
 

@@ -42,7 +42,7 @@ type Transfer struct {
 // Copy starts an rsync transfer in the background
 func (c *Client) Copy(ctx context.Context, remotePath, localPath string) (*Transfer, error) {
 	// Build rsync command with enhanced options for large file transfers
-	// --partial: keep partial files on failure (enables resume)
+	// --partial-dir=.rsync-partial: store partial files in dedicated directory for reliable resume
 	// --timeout=600: abort transfer if no data transferred for 10 minutes (prevents infinite hangs during verification)
 	// SSH options: UserKnownHostsFile=/dev/null prevents permission issues with .ssh directory
 	// ServerAliveCountMax=30: Allow 30 minutes (60s * 30) of no SSH response during intensive verification phase
@@ -50,7 +50,7 @@ func (c *Client) Copy(ctx context.Context, remotePath, localPath string) (*Trans
 	remoteSource := fmt.Sprintf("%s@%s:%s", c.sshUser, c.sshHost, remotePath)
 
 	cmdCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(cmdCtx, "rsync", "-avz", "--info=progress2", "--partial", "--timeout=600", "-e", sshCmd, remoteSource, localPath)
+	cmd := exec.CommandContext(cmdCtx, "rsync", "-avz", "--info=progress2", "--partial-dir=.rsync-partial", "--timeout=600", "-e", sshCmd, remoteSource, localPath)
 
 	// Get stdout pipe for progress parsing
 	stdout, err := cmd.StdoutPipe()
