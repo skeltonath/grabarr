@@ -574,59 +574,7 @@ func TestExecuteJob_Failure(t *testing.T) {
 }
 
 // ========================================
-// 8. Retry Tests
-// ========================================
-
-func TestCalculateRetryBackoff_ExponentialGrowth(t *testing.T) {
-	repo := testutil.SetupTestDB(t)
-	cfg := &config.Config{
-		Jobs: config.JobsConfig{
-			RetryBackoffBase: 10 * time.Second,
-			RetryBackoffMax:  10 * time.Minute,
-		},
-	}
-	mockChecker := mocks.NewMockGatekeeper(t)
-
-	q := New(repo, cfg, mockChecker, nil)
-	queue := q.(*queue)
-
-	tests := []struct {
-		retryCount int
-		expected   time.Duration
-	}{
-		{0, 10 * time.Second},  // 10 * 2^0 = 10
-		{1, 20 * time.Second},  // 10 * 2^1 = 20
-		{2, 40 * time.Second},  // 10 * 2^2 = 40
-		{3, 80 * time.Second},  // 10 * 2^3 = 80
-		{4, 160 * time.Second}, // 10 * 2^4 = 160
-	}
-
-	for _, tt := range tests {
-		backoff := queue.calculateRetryBackoff(tt.retryCount)
-		assert.Equal(t, tt.expected, backoff, "retry count %d", tt.retryCount)
-	}
-}
-
-func TestCalculateRetryBackoff_CappedAtMax(t *testing.T) {
-	repo := testutil.SetupTestDB(t)
-	cfg := &config.Config{
-		Jobs: config.JobsConfig{
-			RetryBackoffBase: 10 * time.Second,
-			RetryBackoffMax:  1 * time.Minute, // Cap at 1 minute
-		},
-	}
-	mockChecker := mocks.NewMockGatekeeper(t)
-
-	q := New(repo, cfg, mockChecker, nil)
-	queue := q.(*queue)
-
-	// After enough retries, should cap at max
-	backoff := queue.calculateRetryBackoff(10) // Would be 10 * 2^10 = 10240 seconds
-	assert.Equal(t, 1*time.Minute, backoff)
-}
-
-// ========================================
-// 9. Integration Test
+// 8. Integration Test
 // ========================================
 
 func TestQueueIntegration_SimpleExecution(t *testing.T) {

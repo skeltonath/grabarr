@@ -89,13 +89,13 @@ func (r *Repository) CreateJob(job *models.Job) error {
 	query := `
 		INSERT INTO jobs (
 			name, remote_path, local_path, status, priority, max_retries,
-			progress, metadata, download_config, estimated_size
+			progress, metadata, download_config, file_size
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.Exec(query,
 		job.Name, job.RemotePath, job.LocalPath, job.Status, job.Priority,
-		job.MaxRetries, job.Progress, job.Metadata, job.DownloadConfig, job.EstimatedSize)
+		job.MaxRetries, job.Progress, job.Metadata, job.DownloadConfig, job.FileSize)
 	if err != nil {
 		return fmt.Errorf("failed to create job: %w", err)
 	}
@@ -116,7 +116,7 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
 			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
-			   completed_at, estimated_size, transferred_bytes, transfer_speed
+			   completed_at, file_size, transferred_bytes, transfer_speed
 		FROM jobs WHERE id = ?
 	`
 
@@ -129,7 +129,7 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 		&job.ID, &job.Name, &job.RemotePath, &job.LocalPath, &job.Status,
 		&job.Priority, &job.Retries, &job.MaxRetries, &errorMessage,
 		&job.Progress, &job.Metadata, &downloadConfig, &job.CreatedAt, &job.UpdatedAt,
-		&startedAt, &completedAt, &job.EstimatedSize, &job.TransferredBytes,
+		&startedAt, &completedAt, &job.FileSize, &job.TransferredBytes,
 		&job.TransferSpeed)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -163,7 +163,7 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
 			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
-			   completed_at, estimated_size, transferred_bytes, transfer_speed
+			   completed_at, file_size, transferred_bytes, transfer_speed
 		FROM jobs
 	`
 
@@ -236,7 +236,7 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 			&job.ID, &job.Name, &job.RemotePath, &job.LocalPath, &job.Status,
 			&job.Priority, &job.Retries, &job.MaxRetries, &errorMessage,
 			&job.Progress, &job.Metadata, &downloadConfig, &job.CreatedAt, &job.UpdatedAt,
-			&startedAt, &completedAt, &job.EstimatedSize, &job.TransferredBytes,
+			&startedAt, &completedAt, &job.FileSize, &job.TransferredBytes,
 			&job.TransferSpeed)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan job: %w", err)

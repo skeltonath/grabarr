@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -40,13 +41,16 @@ type Transfer struct {
 
 // Copy starts an rsync transfer in the background
 func (c *Client) Copy(ctx context.Context, remotePath, localPath string) (*Transfer, error) {
-	// Build rsync command
-	// rsync -avz --progress -e 'ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=60 -i /key' user@host:/remote /local
-	sshCmd := fmt.Sprintf("ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=60 -i %s", c.sshKeyFile)
+	// Build rsync command with enhanced options for large file transfers
+	// --partial: keep partial files on failure (enables resume)
+	// --timeout=600: abort transfer if no data transferred for 10 minutes (prevents infinite hangs during verification)
+	// SSH options: UserKnownHostsFile=/dev/null prevents permission issues with .ssh directory
+	// ServerAliveCountMax=30: Allow 30 minutes (60s * 30) of no SSH response during intensive verification phase
+	sshCmd := fmt.Sprintf("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -i %s", c.sshKeyFile)
 	remoteSource := fmt.Sprintf("%s@%s:%s", c.sshUser, c.sshHost, remotePath)
 
 	cmdCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(cmdCtx, "rsync", "-avz", "--progress", "-e", sshCmd, remoteSource, localPath)
+	cmd := exec.CommandContext(cmdCtx, "rsync", "-avz", "--info=progress2", "--partial", "--timeout=600", "-e", sshCmd, remoteSource, localPath)
 
 	// Get stdout pipe for progress parsing
 	stdout, err := cmd.StdoutPipe()
@@ -131,8 +135,6 @@ func (t *Transfer) parseProgress(stdout, stderr io.Reader) {
 		return 0, nil, nil
 	})
 
-	var lastProgress *models.JobProgress
-
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -185,8 +187,6 @@ func (t *Transfer) parseProgress(stdout, stderr io.Reader) {
 				LastUpdateTime:   time.Now(),
 			}
 
-			lastProgress = progress
-
 			// Send progress update (non-blocking)
 			select {
 			case t.progressChan <- progress:
@@ -196,25 +196,16 @@ func (t *Transfer) parseProgress(stdout, stderr io.Reader) {
 		}
 	}
 
-	// If we have progress, send final 100% update
-	if lastProgress != nil && lastProgress.Percentage < 100 {
-		finalProgress := &models.JobProgress{
-			Percentage:       100,
-			TransferredBytes: lastProgress.TransferredBytes,
-			TransferSpeed:    0,
-			LastUpdateTime:   time.Now(),
-		}
-		select {
-		case t.progressChan <- finalProgress:
-		default:
-		}
-	}
-
 	// Read any stderr output for errors
 	stderrScanner := bufio.NewScanner(stderr)
+	var stderrLines []string
 	for stderrScanner.Scan() {
-		// Log errors but don't send as progress
-		// Errors will be handled via cmd.Wait() in the done channel
-		_ = stderrScanner.Text()
+		line := stderrScanner.Text()
+		stderrLines = append(stderrLines, line)
+	}
+
+	// Log stderr output if there were any errors
+	if len(stderrLines) > 0 {
+		slog.Warn("rsync stderr output", "stderr", strings.Join(stderrLines, "; "))
 	}
 }

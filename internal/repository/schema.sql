@@ -1,6 +1,6 @@
 -- Migration note for existing databases:
--- If upgrading from a version without download_config, run:
--- ALTER TABLE jobs ADD COLUMN download_config TEXT;
+-- If upgrading from a version with estimated_size, run:
+-- ALTER TABLE jobs RENAME COLUMN estimated_size TO file_size;
 
 -- Jobs table
 CREATE TABLE IF NOT EXISTS jobs (
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     started_at DATETIME,
     completed_at DATETIME,
-    estimated_size INTEGER DEFAULT 0,
+    file_size INTEGER DEFAULT 0,
     transferred_bytes INTEGER DEFAULT 0,
     transfer_speed INTEGER DEFAULT 0
 );

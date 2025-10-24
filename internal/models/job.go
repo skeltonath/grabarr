@@ -35,7 +35,7 @@ type Job struct {
 	UpdatedAt        time.Time       `json:"updated_at" db:"updated_at"`
 	StartedAt        *time.Time      `json:"started_at,omitempty" db:"started_at"`
 	CompletedAt      *time.Time      `json:"completed_at,omitempty" db:"completed_at"`
-	EstimatedSize    int64           `json:"estimated_size,omitempty" db:"estimated_size"`
+	FileSize         int64           `json:"file_size,omitempty" db:"file_size"`
 	TransferredBytes int64           `json:"transferred_bytes" db:"transferred_bytes"`
 	TransferSpeed    int64           `json:"transfer_speed,omitempty" db:"transfer_speed"`
 }

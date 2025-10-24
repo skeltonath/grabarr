@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math"
 	"sync"
 	"time"
 
@@ -411,7 +410,7 @@ func (q *queue) processQueue() {
 
 // canStartJobNow checks with gatekeeper if a job can start now
 func (q *queue) canStartJobNow(job *models.Job) bool {
-	decision := q.gatekeeper.CanStartJob(job.EstimatedSize)
+	decision := q.gatekeeper.CanStartJob(job.FileSize)
 	if !decision.Allowed {
 		slog.Debug("job blocked by gatekeeper",
 			"job_id", job.ID,
@@ -484,24 +483,14 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) {
 		attempt.Status = models.JobStatusFailed
 		attempt.ErrorMessage = err.Error()
 
-		// Handle retry logic
-		if job.CanRetry() {
-			backoff := q.calculateRetryBackoff(job.Retries)
-			slog.Info("job will be retried", "job_id", job.ID, "retry_in", backoff)
-
+		// Handle retry logic - check retries directly since job status is still "running" at this point
+		if job.Retries < job.MaxRetries {
 			job.IncrementRetry()
 			if err := q.repo.UpdateJob(job); err != nil {
 				slog.Error("failed to update job for retry", "job_id", job.ID, "error", err)
 			}
-
-			// Schedule retry
-			go func() {
-				time.Sleep(backoff)
-				select {
-				case q.jobQueue <- job:
-				case <-q.schedulerCtx.Done():
-				}
-			}()
+			slog.Info("job queued for retry", "job_id", job.ID, "attempt", job.Retries)
+			// Scheduler will pick up queued jobs automatically within 5 seconds
 		} else {
 			job.MarkFailed(err.Error())
 			if err := q.repo.UpdateJob(job); err != nil {
@@ -530,20 +519,6 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) {
 	if err := q.repo.UpdateJobAttempt(attempt); err != nil {
 		slog.Error("failed to update job attempt", "job_id", job.ID, "error", err)
 	}
-}
-
-func (q *queue) calculateRetryBackoff(retryCount int) time.Duration {
-	cfg := q.config.GetJobs()
-
-	// Exponential backoff: base * (2 ^ retryCount)
-	backoff := cfg.RetryBackoffBase * time.Duration(math.Pow(2, float64(retryCount)))
-
-	// Cap at maximum backoff
-	if backoff > cfg.RetryBackoffMax {
-		backoff = cfg.RetryBackoffMax
-	}
-
-	return backoff
 }
 
 func (q *queue) cleanupRoutine() {

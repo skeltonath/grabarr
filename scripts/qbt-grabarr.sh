@@ -32,7 +32,23 @@ SIZE="$2"
 CATEGORY="$3"
 CONTENT_PATH="$4"
 
-# SFTP uses absolute paths, no need to strip prefix
+# Intelligently determine remote path based on folder structure
+# Base path for completed downloads on seedbox
+BASE_PATH="/home/psychomanteum/downloads/completed/dp/"
+
+# Strip the base path to get relative path
+RELATIVE_PATH="${CONTENT_PATH#$BASE_PATH}"
+
+# Check if relative path contains a slash (has folder structure)
+if [[ "$RELATIVE_PATH" == *"/"* ]]; then
+    # Extract the first directory component (folder name)
+    FOLDER="${RELATIVE_PATH%%/*}"
+    # Send the folder path (without trailing slash so rsync copies the folder itself)
+    REMOTE_PATH="${BASE_PATH}${FOLDER}"
+else
+    # Single file with no folder structure, use content path as-is
+    REMOTE_PATH="$CONTENT_PATH"
+fi
 
 # Build download_config JSON if any environment variables are set
 DOWNLOAD_CONFIG=""
@@ -54,7 +70,7 @@ fi
 
 # Build the complete JSON payload
 JSON=$(cat <<JSONEOF
-{"name":"${NAME}","remote_path":"${CONTENT_PATH}","file_size":${SIZE},"metadata":{"category":"${CATEGORY}"}${DOWNLOAD_CONFIG}}
+{"name":"${NAME}","remote_path":"${REMOTE_PATH}","file_size":${SIZE},"metadata":{"category":"${CATEGORY}"}${DOWNLOAD_CONFIG}}
 JSONEOF
 )
 
