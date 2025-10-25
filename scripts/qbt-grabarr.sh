@@ -32,24 +32,6 @@ SIZE="$2"
 CATEGORY="$3"
 CONTENT_PATH="$4"
 
-# Intelligently determine remote path based on folder structure
-# Base path for completed downloads on seedbox
-BASE_PATH="/home/psychomanteum/downloads/completed/dp/"
-
-# Strip the base path to get relative path
-RELATIVE_PATH="${CONTENT_PATH#$BASE_PATH}"
-
-# Check if relative path contains a slash (has folder structure)
-if [[ "$RELATIVE_PATH" == *"/"* ]]; then
-    # Extract the first directory component (folder name)
-    FOLDER="${RELATIVE_PATH%%/*}"
-    # Send the folder path (without trailing slash so rsync copies the folder itself)
-    REMOTE_PATH="${BASE_PATH}${FOLDER}"
-else
-    # Single file with no folder structure, use content path as-is
-    REMOTE_PATH="$CONTENT_PATH"
-fi
-
 # Build download_config JSON if any environment variables are set
 DOWNLOAD_CONFIG=""
 if [[ -n "$GRABARR_TRANSFERS" ]] || [[ -n "$GRABARR_BW_LIMIT" ]] || [[ -n "$GRABARR_BW_LIMIT_FILE" ]] || \
@@ -68,10 +50,44 @@ if [[ -n "$GRABARR_TRANSFERS" ]] || [[ -n "$GRABARR_BW_LIMIT" ]] || [[ -n "$GRAB
     DOWNLOAD_CONFIG=",\"download_config\":{${CONFIG_JSON}}"
 fi
 
-# Build the complete JSON payload
-JSON=$(cat <<JSONEOF
-{"name":"${NAME}","remote_path":"${REMOTE_PATH}","file_size":${SIZE},"metadata":{"category":"${CATEGORY}"}${DOWNLOAD_CONFIG}}
+# Create jobs: one per file (whether single file or directory)
+if [[ -f "$CONTENT_PATH" ]]; then
+    # Single file - create one job
+    FILE_NAME=$(basename "$CONTENT_PATH")
+    REMOTE_PATH="$CONTENT_PATH"
+    LOCAL_PATH="$FILE_NAME"
+    FILE_SIZE="$SIZE"
+
+    # Build JSON and send
+    JSON=$(cat <<JSONEOF
+{"name":"${FILE_NAME}","remote_path":"${REMOTE_PATH}","local_path":"${LOCAL_PATH}","file_size":${FILE_SIZE},"metadata":{"category":"${CATEGORY}"}${DOWNLOAD_CONFIG}}
 JSONEOF
 )
+    curl -X POST "$GRABARR_API_URL" -H "Content-Type: application/json" -H "CF-Access-Client-Id: $GRABARR_CF_CLIENT_ID" -H "CF-Access-Client-Secret: $GRABARR_CF_CLIENT_SECRET" -d "$JSON"
 
-curl -X POST "$GRABARR_API_URL"   -H "Content-Type: application/json"   -H "CF-Access-Client-Id: $GRABARR_CF_CLIENT_ID"   -H "CF-Access-Client-Secret: $GRABARR_CF_CLIENT_SECRET"   -d "$JSON"
+elif [[ -d "$CONTENT_PATH" ]]; then
+    # Directory - create job for each file recursively
+    # Get the torrent folder name and parent directory
+    TORRENT_FOLDER=$(basename "$CONTENT_PATH")
+    PARENT_DIR=$(dirname "$CONTENT_PATH")
+
+    while IFS= read -r file_path; do
+        FILE_NAME=$(basename "$file_path")
+        REMOTE_PATH="$file_path"
+        FILE_SIZE=$(stat -c%s "$file_path" 2>/dev/null || echo "0")
+
+        # Calculate relative path from parent directory to preserve folder structure
+        # Example: /path/to/Ozark.../Season1/S01E01.mkv -> Ozark.../Season1/S01E01.mkv
+        LOCAL_PATH="${file_path#$PARENT_DIR/}"
+
+        # Build JSON and send
+        JSON=$(cat <<JSONEOF
+{"name":"${FILE_NAME}","remote_path":"${REMOTE_PATH}","local_path":"${LOCAL_PATH}","file_size":${FILE_SIZE},"metadata":{"category":"${CATEGORY}"}${DOWNLOAD_CONFIG}}
+JSONEOF
+)
+        curl -X POST "$GRABARR_API_URL" -H "Content-Type: application/json" -H "CF-Access-Client-Id: $GRABARR_CF_CLIENT_ID" -H "CF-Access-Client-Secret: $GRABARR_CF_CLIENT_SECRET" -d "$JSON"
+    done < <(find "$CONTENT_PATH" -type f)
+else
+    echo "Error: CONTENT_PATH is neither a file nor directory: $CONTENT_PATH"
+    exit 1
+fi

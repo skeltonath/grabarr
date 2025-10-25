@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"grabarr/internal/models"
@@ -15,6 +17,7 @@ import (
 type CreateJobRequest struct {
 	Name           string                 `json:"name"`
 	RemotePath     string                 `json:"remote_path"`
+	LocalPath      string                 `json:"local_path"`
 	Priority       int                    `json:"priority,omitempty"`
 	MaxRetries     int                    `json:"max_retries,omitempty"`
 	FileSize       int64                  `json:"file_size,omitempty"`
@@ -38,6 +41,21 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "remote_path is required", nil)
 		return
 	}
+	if req.LocalPath == "" {
+		h.writeError(w, http.StatusBadRequest, "local_path is required", nil)
+		return
+	}
+
+	// Validate local_path doesn't try to escape base directory
+	if filepath.IsAbs(req.LocalPath) {
+		h.writeError(w, http.StatusBadRequest, "local_path must be a relative path", nil)
+		return
+	}
+	cleanPath := filepath.Clean(req.LocalPath)
+	if strings.HasPrefix(cleanPath, "..") || strings.Contains(cleanPath, "/../") {
+		h.writeError(w, http.StatusBadRequest, "local_path cannot escape base directory", nil)
+		return
+	}
 
 	// Check category filtering
 	downloadsConfig := h.config.GetDownloads()
@@ -51,11 +69,14 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Combine base download path with relative local path
+	fullLocalPath := filepath.Join(downloadsConfig.LocalPath, req.LocalPath)
+
 	// Create job model
 	job := &models.Job{
 		Name:           req.Name,
 		RemotePath:     req.RemotePath,
-		LocalPath:      downloadsConfig.LocalPath,
+		LocalPath:      fullLocalPath,
 		Priority:       req.Priority,
 		MaxRetries:     req.MaxRetries,
 		FileSize:       req.FileSize,

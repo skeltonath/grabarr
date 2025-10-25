@@ -5,7 +5,7 @@
 BINARY_NAME=grabarr
 DOCKER_IMAGE=grabarr
 DOCKER_TAG=latest
-REMOTE_HOST=millions.local
+REMOTE_HOST=millions
 REMOTE_USER=root
 GO_VERSION=$(shell go version | cut -d' ' -f3)
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')

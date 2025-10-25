@@ -9,8 +9,8 @@ Grabarr - Go-based download management service for managing downloads from remot
   - SSH: `ssh whatbox`
   - Script location: `~/bin/qbt-grabarr.sh` (source in `scripts/qbt-grabarr.sh`)
   - qBittorrent "Run on completion" command: `~/bin/qbt-grabarr.sh "%N" "%Z" "%L" "%F"`
-- **Production Server**: Unraid server at `millions.local`
-  - SSH: `root@millions.local`
+- **Production Server**: Unraid server at `millions`
+  - SSH: `root@millions`
   - Container user: 99:100 (nobody:users)
   - Paths (Host -> Container):
     - Config: `/mnt/apps/appdata/grabarr/config/` -> `/config/`
@@ -22,19 +22,19 @@ Grabarr - Go-based download management service for managing downloads from remot
 1. Develop and test locally
 2. Build container: `docker build --platform linux/amd64 -t grabarr:latest .` (IMPORTANT: Use amd64 for unraid)
 3. Save: `docker save grabarr:latest | gzip > grabarr-latest.tar.gz`
-4. Transfer: `scp grabarr-latest.tar.gz root@millions.local:/mnt/user/tmp/` (Use /mnt/user/tmp for large files)
-5. Load on unraid: `ssh root@millions.local "docker load < /mnt/user/tmp/grabarr-latest.tar.gz"`
+4. Transfer: `scp grabarr-latest.tar.gz root@millions:/mnt/user/tmp/` (Use /mnt/user/tmp for large files)
+5. Load on unraid: `ssh root@millions "docker load < /mnt/user/tmp/grabarr-latest.tar.gz"`
 6. Deploy using docker-compose:
    ```bash
    # Copy files to unraid appdata directory first (config goes in config subdirectory!)
-   scp grabarr_rsa root@millions.local:/mnt/apps/appdata/grabarr/config/grabarr_rsa
-   ssh root@millions.local "chmod 600 /mnt/apps/appdata/grabarr/config/grabarr_rsa && chown 99:100 /mnt/apps/appdata/grabarr/config/grabarr_rsa"
-   scp config.yaml root@millions.local:/mnt/apps/appdata/grabarr/config/
-   scp rclone.conf root@millions.local:/mnt/apps/appdata/grabarr/config/
-   scp docker-compose.yml root@millions.local:/mnt/apps/appdata/grabarr/
+   scp grabarr_rsa root@millions:/mnt/apps/appdata/grabarr/config/grabarr_rsa
+   ssh root@millions "chmod 600 /mnt/apps/appdata/grabarr/config/grabarr_rsa && chown 99:100 /mnt/apps/appdata/grabarr/config/grabarr_rsa"
+   scp config.yaml root@millions:/mnt/apps/appdata/grabarr/config/
+   scp rclone.conf root@millions:/mnt/apps/appdata/grabarr/config/
+   scp docker-compose.yml root@millions:/mnt/apps/appdata/grabarr/
 
    # Deploy
-   ssh root@millions.local "cd /mnt/apps/appdata/grabarr && docker-compose up -d"
+   ssh root@millions "cd /mnt/apps/appdata/grabarr && docker-compose up -d"
    ```
 
 ## Critical Docker Notes
@@ -84,13 +84,13 @@ make test-ci                 # Run all pre-commit checks
 ## API Testing
 ```bash
 # Create job
-curl -X POST http://millions.local:8080/api/v1/jobs \
+curl -X POST http://millions:8080/api/v1/jobs \
   -H "Content-Type: application/json" \
   -d '{"name": "test", "remote_path": "/path/to/file", "metadata": {"category": "movies"}}'
 
 # Check status
-curl http://millions.local:8080/api/v1/jobs
-curl http://millions.local:8080/api/v1/status
+curl http://millions:8080/api/v1/jobs
+curl http://millions:8080/api/v1/status
 ```
 
 ## Common Troubleshooting

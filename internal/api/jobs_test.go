@@ -38,10 +38,14 @@ func TestCreateJob_Success(t *testing.T) {
 		}).
 		Once()
 
-	cfg := &config.Config{}
+	cfg := &config.Config{
+		Downloads: config.DownloadsConfig{
+			LocalPath: "/downloads/",
+		},
+	}
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
 
-	reqBody := `{"name":"test-job","remote_path":"/remote/path"}`
+	reqBody := `{"name":"test-job","remote_path":"/remote/path","local_path":"test-file.mkv"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
 	rec := httptest.NewRecorder()
 
@@ -58,6 +62,7 @@ func TestCreateJob_Success(t *testing.T) {
 	jobData, ok := response.Data.(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, float64(123), jobData["id"])
+	assert.Equal(t, "/downloads/test-file.mkv", jobData["local_path"])
 }
 
 func TestCreateJob_MissingName(t *testing.T) {
@@ -89,7 +94,7 @@ func TestCreateJob_MissingRemotePath(t *testing.T) {
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
 
-	reqBody := `{"name":"test-job"}`
+	reqBody := `{"name":"test-job","local_path":"test.mkv"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
 	rec := httptest.NewRecorder()
 
@@ -102,6 +107,72 @@ func TestCreateJob_MissingRemotePath(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, response.Success)
 	assert.Equal(t, "remote_path is required", response.Error)
+}
+
+func TestCreateJob_MissingLocalPath(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+	cfg := &config.Config{}
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+
+	reqBody := `{"name":"test-job","remote_path":"/remote/path"}`
+	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
+	rec := httptest.NewRecorder()
+
+	handlers.CreateJob(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response APIResponse
+	err := json.NewDecoder(rec.Body).Decode(&response)
+	require.NoError(t, err)
+	assert.False(t, response.Success)
+	assert.Equal(t, "local_path is required", response.Error)
+}
+
+func TestCreateJob_LocalPathEscapeAttempt(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+	cfg := &config.Config{}
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+
+	reqBody := `{"name":"test-job","remote_path":"/remote/path","local_path":"../../../etc/passwd"}`
+	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
+	rec := httptest.NewRecorder()
+
+	handlers.CreateJob(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response APIResponse
+	err := json.NewDecoder(rec.Body).Decode(&response)
+	require.NoError(t, err)
+	assert.False(t, response.Success)
+	assert.Equal(t, "local_path cannot escape base directory", response.Error)
+}
+
+func TestCreateJob_LocalPathAbsolute(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+	cfg := &config.Config{}
+	mockGatekeeper := mocks.NewMockGatekeeper(t)
+	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+
+	reqBody := `{"name":"test-job","remote_path":"/remote/path","local_path":"/absolute/path"}`
+	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
+	rec := httptest.NewRecorder()
+
+	handlers.CreateJob(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response APIResponse
+	err := json.NewDecoder(rec.Body).Decode(&response)
+	require.NoError(t, err)
+	assert.False(t, response.Success)
+	assert.Equal(t, "local_path must be a relative path", response.Error)
 }
 
 func TestCreateJob_InvalidJSON(t *testing.T) {
@@ -137,7 +208,7 @@ func TestCreateJob_CategoryNotAllowed(t *testing.T) {
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
 
-	reqBody := `{"name":"test","remote_path":"/path","metadata":{"category":"music"}}`
+	reqBody := `{"name":"test","remote_path":"/path","local_path":"test.mkv","metadata":{"category":"music"}}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
 	rec := httptest.NewRecorder()
 
@@ -164,7 +235,7 @@ func TestCreateJob_EnqueueError(t *testing.T) {
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
 
-	reqBody := `{"name":"test","remote_path":"/path"}`
+	reqBody := `{"name":"test","remote_path":"/path","local_path":"test.mkv"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
 	rec := httptest.NewRecorder()
 
