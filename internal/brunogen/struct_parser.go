@@ -163,7 +163,7 @@ func (g *Generator) getExampleForField(fieldName, typeName string) interface{} {
 		return "Example Download"
 	case strings.Contains(fieldLower, "path"):
 		if strings.Contains(fieldLower, "remote") {
-			return "/downloads/complete/example-file"
+			return "/downloads/completed/dp/example-file"
 		}
 		return "/local/path/to/file"
 	case strings.Contains(fieldLower, "priority"):

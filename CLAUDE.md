@@ -10,7 +10,7 @@ Grabarr - Go-based download management service for managing downloads from remot
   - Script location: `~/bin/qbt-grabarr.sh` (source in `scripts/qbt-grabarr.sh`)
   - qBittorrent "Run on completion" command: `~/bin/qbt-grabarr.sh "%N" "%Z" "%L" "%F"`
 - **Production Server**: Unraid server at `millions`
-  - SSH: `root@millions`
+  - SSH: `millions`
   - Container user: 99:100 (nobody:users)
   - Paths (Host -> Container):
     - Config: `/mnt/apps/appdata/grabarr/config/` -> `/config/`

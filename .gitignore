@@ -67,3 +67,6 @@ data/
 # Build directory
 build/
 dist/
+
+# Bruno directory
+bruno/

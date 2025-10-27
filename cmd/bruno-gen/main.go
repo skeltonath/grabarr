@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	outputDir := flag.String("output", "bruno_auto", "Output directory for generated Bruno collection")
+	outputDir := flag.String("output", "bruno", "Output directory for generated Bruno collection")
 	baseURL := flag.String("base-url", "{{baseUrl}}", "Base URL for API requests")
 	apiDir := flag.String("api-dir", "internal/api", "Directory containing API handler files")
 	flag.Parse()
