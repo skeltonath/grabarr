@@ -1,210 +1,184 @@
 # Grabarr
 
-A Go-based service for intelligently managing downloads from a remote seedbox using rclone. Designed to run in Docker containers on Unraid servers.
+A Go-based download orchestration service for managing file transfers from remote seedboxes. Features a modern web UI, intelligent resource management, and automatic retry logic. Designed for Docker deployment on Unraid servers.
 
 ## Features
 
-- **Intelligent Job Scheduling**: Monitors seedbox bandwidth and local disk space to optimize download timing
-- **REST API**: Complete API for job management and monitoring
-- **Retry Logic**: Automatic retry with exponential backoff for failed downloads
-- **Progress Tracking**: Real-time download progress with ETA calculations
-- **Pushover Notifications**: Alerts for job failures and completions
-- **Configuration Hot-Reload**: Update settings without container restart
-- **Persistent Storage**: SQLite database with job history and state
-- **Resource Monitoring**: Bandwidth and disk space monitoring
-- **Docker Ready**: Container-optimized with health checks
+- **Web UI Dashboard** - Modern interface with dark mode, real-time updates, and job grouping
+- **Intelligent Resource Management** - Gatekeeper system monitors bandwidth and disk space
+- **Automatic Job Scheduling** - Queues jobs based on resource availability
+- **Individual File Support** - Creates separate jobs for each file, preserving folder structure
+- **qBittorrent Integration** - Webhook script for automatic job creation
+- **REST API** - Complete API for job management and monitoring
+- **Retry Logic** - Automatic retry with configurable limits
+- **Real-time Progress** - Live download progress with speed and ETA tracking
+- **Pushover Notifications** - Alerts for job failures and system events
+- **Per-Job Configuration** - Custom bandwidth limits and transfer settings
+- **Docker Ready** - Container-optimized with health checks
 
 ## Quick Start
 
-### 1. Configuration
-
-Copy the example configuration and customize it:
+### 1. Build and Deploy
 
 ```bash
-cp config.example.yaml config.yaml
+# Clone repository
+git clone https://github.com/yourusername/grabarr
+cd grabarr
+
+# Build Docker image
+make docker-build
+
+# Deploy to remote server
+make deploy
 ```
 
-Edit `config.yaml` with your settings:
+### 2. Configure
+
+Create `config.yaml` (see [Configuration docs](docs/CONFIGURATION.md) for all options):
 
 ```yaml
-rclone:
-  remote_name: "your-seedbox"
-  remote_path: "downloads/completed/"
-  config_file: "/config/rclone.conf"
+server:
+  port: 8080
+  host: "0.0.0.0"
 
-notifications:
-  pushover:
-    token: "your-pushover-app-token"
-    user: "your-pushover-user-key"
-    enabled: true
+downloads:
+  local_path: "/unraid/user/media/downloads/"
+  allowed_categories: ["movies", "tv", "anime"]
+
+rsync:
+  ssh_host: "your-seedbox.example.com"
+  ssh_user: "your-username"
+  ssh_key_file: "/config/grabarr_rsa"
+
+gatekeeper:
+  seedbox:
+    bandwidth_limit_mbps: 500
+    check_interval: "30s"
+  cache_disk:
+    path: "/unraid/cache"
+    max_usage_percent: 80
+    check_interval: "30s"
+  rules:
+    require_filesize_check: true
+
+jobs:
+  max_concurrent: 5
+  max_retries: 5
+  cleanup_completed_after: "168h"
+  cleanup_failed_after: "720h"
+
+database:
+  path: "/data/grabarr.db"
+
+logging:
+  level: "info"
+  format: "json"
 ```
 
-### 2. RClone Configuration
+### 3. Access
 
-Set up your rclone configuration file:
+- **Web UI**: http://your-server:8080
+- **API**: http://your-server:8080/api/v1
+- **Health Check**: http://your-server:8080/api/v1/health
 
-```bash
-rclone config
-# Configure your seedbox remote
-```
+## Usage
 
-### 3. Docker Compose
-
-```yaml
-version: '3.8'
-services:
-  grabarr:
-    build: .
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./config.yaml:/config/config.yaml:ro
-      - ./rclone.conf:/config/rclone.conf:ro
-      - ./data:/data
-      - /mnt/user:/data:rw  # Unraid array
-    environment:
-      - PUSHOVER_TOKEN=your_token
-      - PUSHOVER_USER=your_user
-```
-
-### 4. Start the Service
-
-```bash
-docker-compose up -d
-```
-
-## API Usage
-
-### Queue a Download Job
+### Create a Job
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/jobs \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Movie.2023.1080p",
-    "remote_path": "Movie.2023.1080p",
-    "priority": 5,
-    "metadata": {
-      "category": "movies",
-      "qbittorrent_hash": "abc123..."
-    }
+    "name": "Movie.2024.1080p.mkv",
+    "remote_path": "/home/user/torrents/Movie.2024.1080p.mkv",
+    "file_size": 2147483648,
+    "metadata": {"category": "movies"}
   }'
 ```
 
-### Get Job Status
+### List Jobs
 
 ```bash
-curl http://localhost:8080/api/v1/jobs/1
+curl "http://localhost:8080/api/v1/jobs?status=running&limit=20"
 ```
 
-### List All Jobs
+### Monitor System
 
 ```bash
-curl "http://localhost:8080/api/v1/jobs?status=running&limit=10"
-```
+# System status with gatekeeper info
+curl http://localhost:8080/api/v1/status
 
-### System Health
-
-```bash
-curl http://localhost:8080/api/v1/health
-```
-
-## QBittorrent Integration
-
-Configure qBittorrent to call Grabarr when downloads complete:
-
-1. Go to Tools → Options → Downloads
-2. Enable "Run external program on torrent completion"
-3. Set command: `curl -X POST http://grabarr:8080/api/v1/jobs -H "Content-Type: application/json" -d '{"name":"%N","remote_path":"%N","metadata":{"qbittorrent_hash":"%I","category":"%L"}}'`
-
-## Configuration Reference
-
-### Server Settings
-- `server.port`: HTTP server port (default: 8080)
-- `server.host`: Bind address (default: "0.0.0.0")
-
-### RClone Settings
-- `rclone.remote_name`: RClone remote name
-- `rclone.remote_path`: Base path on remote
-- `rclone.local_path`: Local download directory
-- `rclone.bandwidth_limit`: Download bandwidth limit (e.g., "50M")
-
-### Resource Management
-- `resources.bandwidth.max_usage_percent`: Max bandwidth usage percentage
-- `resources.disk.cache_drive_min_free`: Minimum free space on cache drive
-- `resources.disk.array_min_free`: Minimum free space on array
-
-### Job Management
-- `jobs.max_concurrent`: Maximum concurrent downloads
-- `jobs.max_retries`: Maximum retry attempts
-- `jobs.retry_backoff_base`: Base retry delay (exponential backoff)
-
-## Monitoring
-
-### Metrics Endpoint
-
-```bash
+# Detailed metrics
 curl http://localhost:8080/api/v1/metrics
 ```
 
-Returns:
-- Bandwidth usage statistics
-- Disk space information
-- Job queue statistics
-- System performance metrics
+## Documentation
 
-### Health Check
+### Getting Started
 
-```bash
-curl http://localhost:8080/api/v1/health
-```
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Docker setup, SSH keys, and deployment workflows
+- **[Configuration Reference](docs/CONFIGURATION.md)** - Complete configuration options and examples
+- **[qBittorrent Integration](docs/QBITTORRENT.md)** - Webhook script setup and automation
 
-Returns service health status with resource availability.
+### Core Concepts
+
+- **[Gatekeeper System](docs/GATEKEEPER.md)** - Resource management and admission control
+- **[API Reference](docs/API.md)** - Complete REST API documentation
+
+### Development
+
+- **[Development Guide](docs/DEVELOPMENT.md)** - Building, testing, and contributing
+- **[Testing Guide](docs/TESTING.md)** - Testing requirements and best practices
 
 ## Development
 
-### Building
-
 ```bash
-go mod download
-go build -o grabarr ./cmd/grabarr
+# Install dependencies
+make deps
+
+# Build binary
+make build
+
+# Run tests
+make test
+
+# Run all pre-commit checks
+make test-ci
+
+# Generate mocks
+make gen-mocks
 ```
 
-### Running Locally
-
-```bash
-./grabarr
-```
-
-The service will look for configuration in:
-1. `$GRABARR_CONFIG` environment variable
-2. `/config/config.yaml`
-3. `./config.yaml`
-4. `./config.example.yaml`
-
-### Testing
-
-```bash
-go test ./...
-```
+See [Development Guide](docs/DEVELOPMENT.md) for details.
 
 ## Architecture
 
-- **API Layer**: HTTP REST API with Gorilla Mux
-- **Queue System**: In-memory job queue with persistent SQLite storage
-- **Executor**: RClone process management with progress tracking
-- **Monitor**: Resource monitoring (bandwidth, disk space)
-- **Notifications**: Pushover integration for alerts
-- **Configuration**: YAML-based config with hot-reload
-
-## License
-
-MIT License - see LICENSE file for details.
+- **Web UI**: Vanilla JavaScript with responsive CSS
+- **API Layer**: HTTP REST API (Gorilla Mux)
+- **Queue System**: In-memory queue with SQLite persistence
+- **Gatekeeper**: Resource monitoring and admission control
+- **Executor**: Rsync-based transfers with SSH key auth
+- **Repository**: SQLite database operations
+- **Notifications**: Pushover integration
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes and add tests
+4. Run `make test-ci` to verify
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+See [Development Guide](docs/DEVELOPMENT.md) for detailed guidelines.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/grabarr/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/grabarr/discussions)
+- **Documentation**: [docs/](docs/)

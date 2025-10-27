@@ -44,7 +44,6 @@ type RcloneConfig struct {
 	ConfigFile      string        `yaml:"config_file"`
 	BandwidthLimit  string        `yaml:"bandwidth_limit"`
 	TransferTimeout time.Duration `yaml:"transfer_timeout"`
-	AdditionalArgs  []string      `yaml:"additional_args"`
 	DaemonAddr      string        `yaml:"daemon_addr"`
 }
 
@@ -78,8 +77,6 @@ type GatekeeperRules struct {
 type JobsConfig struct {
 	MaxConcurrent         int           `yaml:"max_concurrent"`
 	MaxRetries            int           `yaml:"max_retries"`
-	RetryBackoffBase      time.Duration `yaml:"retry_backoff_base"`
-	RetryBackoffMax       time.Duration `yaml:"retry_backoff_max"`
 	CleanupCompletedAfter time.Duration `yaml:"cleanup_completed_after"`
 	CleanupFailedAfter    time.Duration `yaml:"cleanup_failed_after"`
 }
@@ -104,7 +101,6 @@ type PushoverConfig struct {
 type LoggingConfig struct {
 	Level  string `yaml:"level"`
 	Format string `yaml:"format"`
-	File   string `yaml:"file"`
 }
 
 var (
@@ -187,10 +183,6 @@ func (c *Config) validate() error {
 func (c *Config) ensureDirectories() error {
 	dirs := []string{
 		filepath.Dir(c.Database.Path),
-	}
-
-	if c.Logging.File != "" {
-		dirs = append(dirs, filepath.Dir(c.Logging.File))
 	}
 
 	for _, dir := range dirs {

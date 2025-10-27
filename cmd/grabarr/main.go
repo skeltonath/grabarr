@@ -242,9 +242,6 @@ func setupLogging(logConfig config.LoggingConfig) {
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	}
 
-	// TODO: Add file logging support if logConfig.File is specified
-	// For now, we only support stdout logging
-
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 }

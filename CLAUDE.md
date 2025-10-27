@@ -99,15 +99,14 @@ curl http://millions:8080/api/v1/status
 - Web UI not found: Files should be at `web/static/index.html`
 
 ## Key Dependencies
-- rclone (for file transfers)
-- sshpass (for SSH operations)
+- rsync (for file transfers with SSH key authentication)
 - SQLite (embedded database)
 - Go 1.21+
 
 ## Environment Variables
-- `PUSHOVER_TOKEN`, `PUSHOVER_USER` (notifications)
-- `SEEDBOX_HOST`, `SEEDBOX_USER`, `SEEDBOX_PASS` (SSH operations for symlink creation)
-- `GRABARR_CONFIG` (config file path override)
+- `PUSHOVER_TOKEN`, `PUSHOVER_USER` (optional, for Pushover notifications)
+- `GRABARR_CONFIG` (optional, config file path override)
+- `TZ` (optional, timezone setting, e.g., America/Los_Angeles)
 
 ## Configuration Files
 - `config.yaml` - Main application configuration
