@@ -585,10 +585,8 @@ func TestQueueIntegration_SimpleExecution(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{
 		Jobs: config.JobsConfig{
-			MaxConcurrent:    2,
-			MaxRetries:       0,
-			RetryBackoffBase: 1 * time.Second,
-			RetryBackoffMax:  1 * time.Minute,
+			MaxConcurrent: 2,
+			MaxRetries:    0,
 		},
 		Server: config.ServerConfig{
 			ShutdownTimeout: 5 * time.Second,

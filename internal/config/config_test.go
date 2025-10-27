@@ -46,8 +46,6 @@ resources:
 jobs:
   max_concurrent: 3
   max_retries: 3
-  retry_backoff_base: 30s
-  retry_backoff_max: 10m
   cleanup_completed_after: 168h
   cleanup_failed_after: 168h
 
@@ -66,7 +64,6 @@ notifications:
 logging:
   level: "info"
   format: "json"
-  file: ""
 
 monitoring:
   resource_check_interval: 30s
@@ -102,7 +99,6 @@ monitoring:
 	// Verify jobs config
 	assert.Equal(t, 3, cfg.Jobs.MaxConcurrent)
 	assert.Equal(t, 3, cfg.Jobs.MaxRetries)
-	assert.Equal(t, 30*time.Second, cfg.Jobs.RetryBackoffBase)
 }
 
 func TestConfigValidation(t *testing.T) {
@@ -195,9 +191,8 @@ func TestConfigGetters(t *testing.T) {
 	cfg := &Config{
 		Server: ServerConfig{Port: 8080, Host: "localhost"},
 		Jobs: JobsConfig{
-			MaxConcurrent:    5,
-			MaxRetries:       3,
-			RetryBackoffBase: 30 * time.Second,
+			MaxConcurrent: 5,
+			MaxRetries:    3,
 		},
 		Downloads: DownloadsConfig{
 			LocalPath:         "/downloads",
@@ -254,8 +249,6 @@ rclone:
 jobs:
   max_concurrent: 3
   max_retries: 3
-  retry_backoff_base: 30s
-  retry_backoff_max: 10m
   cleanup_completed_after: 168h
   cleanup_failed_after: 168h
 
