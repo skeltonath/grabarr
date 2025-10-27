@@ -18,10 +18,19 @@ type Handlers struct {
 }
 
 type APIResponse struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-	Message string      `json:"message,omitempty"`
+	Success    bool            `json:"success"`
+	Data       interface{}     `json:"data,omitempty"`
+	Error      string          `json:"error,omitempty"`
+	Message    string          `json:"message,omitempty"`
+	Pagination *PaginationMeta `json:"pagination,omitempty"`
+}
+
+type PaginationMeta struct {
+	Total      int `json:"total"`
+	Limit      int `json:"limit"`
+	Offset     int `json:"offset"`
+	TotalPages int `json:"total_pages"`
+	Page       int `json:"page"`
 }
 
 func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper, cfg *config.Config) *Handlers {
@@ -64,6 +73,20 @@ func (h *Handlers) writeSuccess(w http.ResponseWriter, statusCode int, data inte
 		Success: true,
 		Data:    data,
 		Message: message,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		slog.Error("failed to encode response", "error", err)
+	}
+}
+
+func (h *Handlers) writeSuccessWithPagination(w http.ResponseWriter, statusCode int, data interface{}, pagination *PaginationMeta, message string) {
+	w.WriteHeader(statusCode)
+	response := APIResponse{
+		Success:    true,
+		Data:       data,
+		Message:    message,
+		Pagination: pagination,
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {

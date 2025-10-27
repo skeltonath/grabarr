@@ -21,6 +21,62 @@ func (_m *MockJobRepository) EXPECT() *MockJobRepository_Expecter {
 	return &MockJobRepository_Expecter{mock: &_m.Mock}
 }
 
+// CountJobs provides a mock function with given fields: filter
+func (_m *MockJobRepository) CountJobs(filter models.JobFilter) (int, error) {
+	ret := _m.Called(filter)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountJobs")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(models.JobFilter) (int, error)); ok {
+		return rf(filter)
+	}
+	if rf, ok := ret.Get(0).(func(models.JobFilter) int); ok {
+		r0 = rf(filter)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(models.JobFilter) error); ok {
+		r1 = rf(filter)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockJobRepository_CountJobs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountJobs'
+type MockJobRepository_CountJobs_Call struct {
+	*mock.Call
+}
+
+// CountJobs is a helper method to define mock.On call
+//   - filter models.JobFilter
+func (_e *MockJobRepository_Expecter) CountJobs(filter interface{}) *MockJobRepository_CountJobs_Call {
+	return &MockJobRepository_CountJobs_Call{Call: _e.mock.On("CountJobs", filter)}
+}
+
+func (_c *MockJobRepository_CountJobs_Call) Run(run func(filter models.JobFilter)) *MockJobRepository_CountJobs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(models.JobFilter))
+	})
+	return _c
+}
+
+func (_c *MockJobRepository_CountJobs_Call) Return(_a0 int, _a1 error) *MockJobRepository_CountJobs_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockJobRepository_CountJobs_Call) RunAndReturn(run func(models.JobFilter) (int, error)) *MockJobRepository_CountJobs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetJob provides a mock function with given fields: id
 func (_m *MockJobRepository) GetJob(id int64) (*models.Job, error) {
 	ret := _m.Called(id)
@@ -75,6 +131,64 @@ func (_c *MockJobRepository_GetJob_Call) Return(_a0 *models.Job, _a1 error) *Moc
 }
 
 func (_c *MockJobRepository_GetJob_Call) RunAndReturn(run func(int64) (*models.Job, error)) *MockJobRepository_GetJob_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetJobs provides a mock function with given fields: filter
+func (_m *MockJobRepository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
+	ret := _m.Called(filter)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetJobs")
+	}
+
+	var r0 []*models.Job
+	var r1 error
+	if rf, ok := ret.Get(0).(func(models.JobFilter) ([]*models.Job, error)); ok {
+		return rf(filter)
+	}
+	if rf, ok := ret.Get(0).(func(models.JobFilter) []*models.Job); ok {
+		r0 = rf(filter)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*models.Job)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(models.JobFilter) error); ok {
+		r1 = rf(filter)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockJobRepository_GetJobs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetJobs'
+type MockJobRepository_GetJobs_Call struct {
+	*mock.Call
+}
+
+// GetJobs is a helper method to define mock.On call
+//   - filter models.JobFilter
+func (_e *MockJobRepository_Expecter) GetJobs(filter interface{}) *MockJobRepository_GetJobs_Call {
+	return &MockJobRepository_GetJobs_Call{Call: _e.mock.On("GetJobs", filter)}
+}
+
+func (_c *MockJobRepository_GetJobs_Call) Run(run func(filter models.JobFilter)) *MockJobRepository_GetJobs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(models.JobFilter))
+	})
+	return _c
+}
+
+func (_c *MockJobRepository_GetJobs_Call) Return(_a0 []*models.Job, _a1 error) *MockJobRepository_GetJobs_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockJobRepository_GetJobs_Call) RunAndReturn(run func(models.JobFilter) ([]*models.Job, error)) *MockJobRepository_GetJobs_Call {
 	_c.Call.Return(run)
 	return _c
 }

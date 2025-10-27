@@ -70,6 +70,62 @@ func (_c *MockJobQueue_CancelJob_Call) RunAndReturn(run func(int64) error) *Mock
 	return _c
 }
 
+// CountJobs provides a mock function with given fields: filter
+func (_m *MockJobQueue) CountJobs(filter models.JobFilter) (int, error) {
+	ret := _m.Called(filter)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountJobs")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(models.JobFilter) (int, error)); ok {
+		return rf(filter)
+	}
+	if rf, ok := ret.Get(0).(func(models.JobFilter) int); ok {
+		r0 = rf(filter)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(models.JobFilter) error); ok {
+		r1 = rf(filter)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockJobQueue_CountJobs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountJobs'
+type MockJobQueue_CountJobs_Call struct {
+	*mock.Call
+}
+
+// CountJobs is a helper method to define mock.On call
+//   - filter models.JobFilter
+func (_e *MockJobQueue_Expecter) CountJobs(filter interface{}) *MockJobQueue_CountJobs_Call {
+	return &MockJobQueue_CountJobs_Call{Call: _e.mock.On("CountJobs", filter)}
+}
+
+func (_c *MockJobQueue_CountJobs_Call) Run(run func(filter models.JobFilter)) *MockJobQueue_CountJobs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(models.JobFilter))
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_CountJobs_Call) Return(_a0 int, _a1 error) *MockJobQueue_CountJobs_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockJobQueue_CountJobs_Call) RunAndReturn(run func(models.JobFilter) (int, error)) *MockJobQueue_CountJobs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteJob provides a mock function with given fields: id
 func (_m *MockJobQueue) DeleteJob(id int64) error {
 	ret := _m.Called(id)

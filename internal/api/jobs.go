@@ -155,7 +155,32 @@ func (h *Handlers) GetJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.writeSuccess(w, http.StatusOK, jobs, "")
+	// Get total count for pagination
+	totalCount, err := h.queue.CountJobs(filter)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to count jobs", err)
+		return
+	}
+
+	// Calculate pagination metadata
+	totalPages := 0
+	if filter.Limit > 0 {
+		totalPages = (totalCount + filter.Limit - 1) / filter.Limit
+	}
+	currentPage := 1
+	if filter.Limit > 0 && filter.Offset > 0 {
+		currentPage = (filter.Offset / filter.Limit) + 1
+	}
+
+	pagination := &PaginationMeta{
+		Total:      totalCount,
+		Limit:      filter.Limit,
+		Offset:     filter.Offset,
+		TotalPages: totalPages,
+		Page:       currentPage,
+	}
+
+	h.writeSuccessWithPagination(w, http.StatusOK, jobs, pagination, "")
 }
 
 func (h *Handlers) GetJob(w http.ResponseWriter, r *http.Request) {

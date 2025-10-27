@@ -202,6 +202,10 @@ func (q *queue) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	return q.repo.GetJobs(filter)
 }
 
+func (q *queue) CountJobs(filter models.JobFilter) (int, error) {
+	return q.repo.CountJobs(filter)
+}
+
 func (q *queue) CancelJob(id int64) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()

@@ -269,6 +269,49 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	return jobs, nil
 }
 
+func (r *Repository) CountJobs(filter models.JobFilter) (int, error) {
+	query := "SELECT COUNT(*) FROM jobs"
+
+	var conditions []string
+	var args []interface{}
+
+	if len(filter.Status) > 0 {
+		placeholders := strings.Repeat("?,", len(filter.Status))
+		placeholders = placeholders[:len(placeholders)-1] // Remove trailing comma
+		conditions = append(conditions, fmt.Sprintf("status IN (%s)", placeholders))
+		for _, status := range filter.Status {
+			args = append(args, status)
+		}
+	}
+
+	if filter.Category != "" {
+		conditions = append(conditions, "JSON_EXTRACT(metadata, '$.category') = ?")
+		args = append(args, filter.Category)
+	}
+
+	if filter.MinPriority != nil {
+		conditions = append(conditions, "priority >= ?")
+		args = append(args, *filter.MinPriority)
+	}
+
+	if filter.MaxPriority != nil {
+		conditions = append(conditions, "priority <= ?")
+		args = append(args, *filter.MaxPriority)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	var count int
+	err := r.db.QueryRow(query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count jobs: %w", err)
+	}
+
+	return count, nil
+}
+
 func (r *Repository) UpdateJob(job *models.Job) error {
 	query := `
 		UPDATE jobs SET

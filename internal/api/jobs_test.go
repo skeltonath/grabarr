@@ -265,6 +265,11 @@ func TestGetJobs_Success(t *testing.T) {
 		Return(testJobs, nil).
 		Once()
 
+	mockQueue.EXPECT().
+		CountJobs(mock.Anything).
+		Return(len(testJobs), nil).
+		Once()
+
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
@@ -296,6 +301,11 @@ func TestGetJobs_WithFilters(t *testing.T) {
 		Return([]*models.Job{}, nil).
 		Once()
 
+	mockQueue.EXPECT().
+		CountJobs(mock.Anything).
+		Return(0, nil).
+		Once()
+
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
@@ -317,6 +327,11 @@ func TestGetJobs_WithPagination(t *testing.T) {
 			return filter.Limit == 25 && filter.Offset == 50
 		})).
 		Return([]*models.Job{}, nil).
+		Once()
+
+	mockQueue.EXPECT().
+		CountJobs(mock.Anything).
+		Return(100, nil).
 		Once()
 
 	cfg := &config.Config{}

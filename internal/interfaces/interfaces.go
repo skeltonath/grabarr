@@ -14,6 +14,7 @@ type JobQueue interface {
 	Enqueue(job *models.Job) error
 	GetJob(id int64) (*models.Job, error)
 	GetJobs(filter models.JobFilter) ([]*models.Job, error)
+	CountJobs(filter models.JobFilter) (int, error)
 	CancelJob(id int64) error
 	DeleteJob(id int64) error
 	RetryJob(id int64) error
@@ -55,6 +56,8 @@ type GatekeeperResourceStatus struct {
 type JobRepository interface {
 	UpdateJob(job *models.Job) error
 	GetJob(id int64) (*models.Job, error)
+	GetJobs(filter models.JobFilter) ([]*models.Job, error)
+	CountJobs(filter models.JobFilter) (int, error)
 }
 
 // RCloneClient provides an interface to interact with RClone daemon

@@ -342,6 +342,33 @@ body {
     padding-left: 2rem;
 }
 
+/* Pagination */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    margin-top: 1rem;
+}
+
+.page-info {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    min-width: 250px;
+    text-align: center;
+}
+
+.pagination-container .btn {
+    min-width: 100px;
+}
+
+.pagination-container .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* Status badges */
 .status-badge {
     padding: 0.25rem 0.5rem;

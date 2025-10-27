@@ -9,6 +9,12 @@ class GrabarrDashboard {
         this.currentSearch = '';
         this.expandedGroups = new Set(); // Track which groups are expanded
 
+        // Pagination state
+        this.currentPage = 1;
+        this.pageSize = 50;
+        this.totalJobs = 0;
+        this.totalPages = 0;
+
         this.init();
     }
 
@@ -64,14 +70,23 @@ class GrabarrDashboard {
         // Status filter
         document.getElementById('status-filter').addEventListener('change', (e) => {
             this.currentFilter = e.target.value;
-            this.filterAndDisplayJobs();
+            this.currentPage = 1; // Reset to first page on filter change
+            this.loadJobs();
         });
 
-        // Search input
+        // Search input (client-side filtering within current page)
         const searchInput = document.getElementById('search-input');
         searchInput.addEventListener('input', (e) => {
             this.currentSearch = e.target.value.toLowerCase();
             this.filterAndDisplayJobs();
+        });
+
+        // Pagination controls
+        document.getElementById('prev-page-btn')?.addEventListener('click', () => {
+            this.prevPage();
+        });
+        document.getElementById('next-page-btn')?.addEventListener('click', () => {
+            this.nextPage();
         });
 
         // Job modal controls
@@ -157,12 +172,28 @@ class GrabarrDashboard {
 
     async loadJobs() {
         try {
-            const response = await fetch(`${this.apiBase}/jobs?limit=100`);
+            const offset = (this.currentPage - 1) * this.pageSize;
+            let url = `${this.apiBase}/jobs?limit=${this.pageSize}&offset=${offset}`;
+
+            // Add status filter to API request
+            if (this.currentFilter) {
+                url += `&status=${this.currentFilter}`;
+            }
+
+            const response = await fetch(url);
             const data = await response.json();
 
             if (data.success) {
                 this.currentJobs = data.data || [];
+
+                // Update pagination state from response
+                if (data.pagination) {
+                    this.totalJobs = data.pagination.total;
+                    this.totalPages = data.pagination.total_pages;
+                }
+
                 this.filterAndDisplayJobs();
+                this.updatePaginationControls();
             }
         } catch (error) {
             console.error('Error loading jobs:', error);
@@ -186,12 +217,7 @@ class GrabarrDashboard {
     filterAndDisplayJobs() {
         let filteredJobs = this.currentJobs;
 
-        // Apply status filter
-        if (this.currentFilter) {
-            filteredJobs = filteredJobs.filter(job => job.status === this.currentFilter);
-        }
-
-        // Apply search filter
+        // Apply client-side search filter (searches within current page only)
         if (this.currentSearch) {
             filteredJobs = filteredJobs.filter(job =>
                 job.name.toLowerCase().includes(this.currentSearch) ||
@@ -200,6 +226,42 @@ class GrabarrDashboard {
         }
 
         this.displayJobs(filteredJobs);
+    }
+
+    nextPage() {
+        if (this.currentPage < this.totalPages) {
+            this.currentPage++;
+            this.loadJobs();
+        }
+    }
+
+    prevPage() {
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            this.loadJobs();
+        }
+    }
+
+    goToPage(page) {
+        if (page >= 1 && page <= this.totalPages) {
+            this.currentPage = page;
+            this.loadJobs();
+        }
+    }
+
+    updatePaginationControls() {
+        const prevBtn = document.getElementById('prev-page-btn');
+        const nextBtn = document.getElementById('next-page-btn');
+        const pageInfo = document.getElementById('page-info');
+
+        if (prevBtn && nextBtn && pageInfo) {
+            // Update button states
+            prevBtn.disabled = this.currentPage <= 1;
+            nextBtn.disabled = this.currentPage >= this.totalPages;
+
+            // Update page info text
+            pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages} (${this.totalJobs} total jobs)`;
+        }
     }
 
     groupJobsByPath(jobs) {
@@ -223,24 +285,64 @@ class GrabarrDashboard {
         }
 
         // Filter out groups with only 1 job (treat as ungrouped)
-        const finalGroups = new Map();
+        const finalGroups = [];
         for (const [torrentName, groupJobs] of groups) {
             if (groupJobs.length > 1) {
-                // Sort jobs within group by ID
+                // Sort jobs within group by ID ascending (file order)
                 groupJobs.sort((a, b) => a.id - b.id);
-                finalGroups.set(torrentName, groupJobs);
+
+                // Find the most recent created_at in this group
+                const maxCreatedAt = Math.max(...groupJobs.map(j => new Date(j.created_at)));
+
+                finalGroups.push({
+                    torrentName,
+                    jobs: groupJobs,
+                    sortKey: maxCreatedAt
+                });
             } else {
                 ungrouped.push(...groupJobs);
             }
         }
 
-        // Sort ungrouped jobs by ID
-        ungrouped.sort((a, b) => a.id - b.id);
+        // Sort ungrouped jobs by created_at descending
+        ungrouped.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-        // Convert to array and sort groups by torrent name
-        const sortedGroups = new Map([...finalGroups.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+        // Sort groups by most recent job in each group (descending)
+        finalGroups.sort((a, b) => b.sortKey - a.sortKey);
 
-        return { groups: sortedGroups, ungrouped };
+        // Create display items array that interleaves groups and ungrouped jobs
+        const displayItems = [];
+        let groupIndex = 0;
+        let ungroupedIndex = 0;
+
+        while (groupIndex < finalGroups.length || ungroupedIndex < ungrouped.length) {
+            const nextGroup = finalGroups[groupIndex];
+            const nextUngrouped = ungrouped[ungroupedIndex];
+
+            if (!nextGroup && nextUngrouped) {
+                // No more groups, add remaining ungrouped
+                displayItems.push({ type: 'job', job: nextUngrouped });
+                ungroupedIndex++;
+            } else if (!nextUngrouped && nextGroup) {
+                // No more ungrouped, add remaining groups
+                displayItems.push({ type: 'group', group: nextGroup });
+                groupIndex++;
+            } else {
+                // Compare timestamps to determine order
+                const groupTime = nextGroup.sortKey;
+                const ungroupedTime = new Date(nextUngrouped.created_at).getTime();
+
+                if (groupTime >= ungroupedTime) {
+                    displayItems.push({ type: 'group', group: nextGroup });
+                    groupIndex++;
+                } else {
+                    displayItems.push({ type: 'job', job: nextUngrouped });
+                    ungroupedIndex++;
+                }
+            }
+        }
+
+        return { displayItems };
     }
 
     toggleGroup(groupPath) {
@@ -273,39 +375,40 @@ class GrabarrDashboard {
             return;
         }
 
-        const { groups, ungrouped } = this.groupJobsByPath(jobs);
+        const { displayItems } = this.groupJobsByPath(jobs);
 
         let html = '';
 
-        // Render grouped jobs
-        for (const [torrentName, groupJobs] of groups) {
-            const isExpanded = this.expandedGroups.has(torrentName);
-            const expandIcon = isExpanded ? '▼' : '▶';
+        // Render display items (groups and ungrouped jobs in sorted order)
+        for (const item of displayItems) {
+            if (item.type === 'group') {
+                const { torrentName, jobs: groupJobs } = item.group;
+                const isExpanded = this.expandedGroups.has(torrentName);
+                const expandIcon = isExpanded ? '▼' : '▶';
 
-            // Group header row
-            html += `
-                <tr class="group-header-row" data-group-path="${this.escapeHtml(torrentName)}" onclick="dashboard.toggleGroupFromElement(this)">
-                    <td colspan="8">
-                        <div class="group-header">
-                            <span class="group-expand-icon">${expandIcon}</span>
-                            <span class="group-path">${this.escapeHtml(torrentName)}</span>
-                            <span class="group-count">(${groupJobs.length} files)</span>
-                        </div>
-                    </td>
-                </tr>
-            `;
+                // Group header row
+                html += `
+                    <tr class="group-header-row" data-group-path="${this.escapeHtml(torrentName)}" onclick="dashboard.toggleGroupFromElement(this)">
+                        <td colspan="8">
+                            <div class="group-header">
+                                <span class="group-expand-icon">${expandIcon}</span>
+                                <span class="group-path">${this.escapeHtml(torrentName)}</span>
+                                <span class="group-count">(${groupJobs.length} files)</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
 
-            // Group job rows (only if expanded)
-            if (isExpanded) {
-                for (const job of groupJobs) {
-                    html += this.renderJobRow(job, true);
+                // Group job rows (only if expanded)
+                if (isExpanded) {
+                    for (const job of groupJobs) {
+                        html += this.renderJobRow(job, true);
+                    }
                 }
+            } else {
+                // Ungrouped job
+                html += this.renderJobRow(item.job, false);
             }
-        }
-
-        // Render ungrouped jobs
-        for (const job of ungrouped) {
-            html += this.renderJobRow(job, false);
         }
 
         tbody.innerHTML = html;
