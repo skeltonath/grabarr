@@ -7,6 +7,7 @@ class GrabarrDashboard {
         this.currentJobs = [];
         this.currentFilter = '';
         this.currentSearch = '';
+        this.expandedGroups = new Set(); // Track which groups are expanded
 
         this.init();
     }
@@ -201,6 +202,65 @@ class GrabarrDashboard {
         this.displayJobs(filteredJobs);
     }
 
+    groupJobsByPath(jobs) {
+        const groups = new Map();
+        const ungrouped = [];
+
+        for (const job of jobs) {
+            // Group by torrent name if available
+            const torrentName = job.metadata?.torrent_name;
+
+            if (torrentName) {
+                // Has torrent name - can be grouped
+                if (!groups.has(torrentName)) {
+                    groups.set(torrentName, []);
+                }
+                groups.get(torrentName).push(job);
+            } else {
+                // No torrent name - ungrouped
+                ungrouped.push(job);
+            }
+        }
+
+        // Filter out groups with only 1 job (treat as ungrouped)
+        const finalGroups = new Map();
+        for (const [torrentName, groupJobs] of groups) {
+            if (groupJobs.length > 1) {
+                // Sort jobs within group by ID
+                groupJobs.sort((a, b) => a.id - b.id);
+                finalGroups.set(torrentName, groupJobs);
+            } else {
+                ungrouped.push(...groupJobs);
+            }
+        }
+
+        // Sort ungrouped jobs by ID
+        ungrouped.sort((a, b) => a.id - b.id);
+
+        // Convert to array and sort groups by torrent name
+        const sortedGroups = new Map([...finalGroups.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+
+        return { groups: sortedGroups, ungrouped };
+    }
+
+    toggleGroup(groupPath) {
+        if (this.expandedGroups.has(groupPath)) {
+            this.expandedGroups.delete(groupPath);
+        } else {
+            this.expandedGroups.add(groupPath);
+        }
+
+        // Re-render to show/hide group items
+        this.filterAndDisplayJobs();
+    }
+
+    toggleGroupFromElement(element) {
+        const groupPath = element.getAttribute('data-group-path');
+        if (groupPath) {
+            this.toggleGroup(groupPath);
+        }
+    }
+
     displayJobs(jobs) {
         const tbody = document.getElementById('jobs-tbody');
 
@@ -213,8 +273,48 @@ class GrabarrDashboard {
             return;
         }
 
-        tbody.innerHTML = jobs.map(job => `
-            <tr onclick="dashboard.showJobDetails(${job.id})" data-job-id="${job.id}">
+        const { groups, ungrouped } = this.groupJobsByPath(jobs);
+
+        let html = '';
+
+        // Render grouped jobs
+        for (const [torrentName, groupJobs] of groups) {
+            const isExpanded = this.expandedGroups.has(torrentName);
+            const expandIcon = isExpanded ? '▼' : '▶';
+
+            // Group header row
+            html += `
+                <tr class="group-header-row" data-group-path="${this.escapeHtml(torrentName)}" onclick="dashboard.toggleGroupFromElement(this)">
+                    <td colspan="8">
+                        <div class="group-header">
+                            <span class="group-expand-icon">${expandIcon}</span>
+                            <span class="group-path">${this.escapeHtml(torrentName)}</span>
+                            <span class="group-count">(${groupJobs.length} files)</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+
+            // Group job rows (only if expanded)
+            if (isExpanded) {
+                for (const job of groupJobs) {
+                    html += this.renderJobRow(job, true);
+                }
+            }
+        }
+
+        // Render ungrouped jobs
+        for (const job of ungrouped) {
+            html += this.renderJobRow(job, false);
+        }
+
+        tbody.innerHTML = html;
+    }
+
+    renderJobRow(job, isGrouped) {
+        const rowClass = isGrouped ? 'grouped-job-row' : '';
+        return `
+            <tr class="${rowClass}" onclick="dashboard.showJobDetails(${job.id})" data-job-id="${job.id}">
                 <td>${job.id}</td>
                 <td>
                     <div class="job-name" title="${this.escapeHtml(job.name)}">
@@ -238,7 +338,7 @@ class GrabarrDashboard {
                     </button>
                 </td>
             </tr>
-        `).join('');
+        `;
     }
 
     renderProgress(progress) {

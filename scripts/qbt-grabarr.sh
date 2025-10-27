@@ -60,7 +60,7 @@ if [[ -f "$CONTENT_PATH" ]]; then
 
     # Build JSON and send
     JSON=$(cat <<JSONEOF
-{"name":"${FILE_NAME}","remote_path":"${REMOTE_PATH}","local_path":"${LOCAL_PATH}","file_size":${FILE_SIZE},"metadata":{"category":"${CATEGORY}"}${DOWNLOAD_CONFIG}}
+{"name":"${FILE_NAME}","remote_path":"${REMOTE_PATH}","local_path":"${LOCAL_PATH}","file_size":${FILE_SIZE},"metadata":{"category":"${CATEGORY}","torrent_name":"${NAME}"}${DOWNLOAD_CONFIG}}
 JSONEOF
 )
     curl -X POST "$GRABARR_API_URL" -H "Content-Type: application/json" -H "CF-Access-Client-Id: $GRABARR_CF_CLIENT_ID" -H "CF-Access-Client-Secret: $GRABARR_CF_CLIENT_SECRET" -d "$JSON"
@@ -82,7 +82,7 @@ elif [[ -d "$CONTENT_PATH" ]]; then
 
         # Build JSON and send
         JSON=$(cat <<JSONEOF
-{"name":"${FILE_NAME}","remote_path":"${REMOTE_PATH}","local_path":"${LOCAL_PATH}","file_size":${FILE_SIZE},"metadata":{"category":"${CATEGORY}"}${DOWNLOAD_CONFIG}}
+{"name":"${FILE_NAME}","remote_path":"${REMOTE_PATH}","local_path":"${LOCAL_PATH}","file_size":${FILE_SIZE},"metadata":{"category":"${CATEGORY}","torrent_name":"${NAME}"}${DOWNLOAD_CONFIG}}
 JSONEOF
 )
         curl -X POST "$GRABARR_API_URL" -H "Content-Type: application/json" -H "CF-Access-Client-Id: $GRABARR_CF_CLIENT_ID" -H "CF-Access-Client-Secret: $GRABARR_CF_CLIENT_SECRET" -d "$JSON"

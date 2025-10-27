@@ -55,6 +55,7 @@ type JobProgress struct {
 type JobMetadata struct {
 	QBittorrentHash string                 `json:"qbittorrent_hash,omitempty"`
 	Category        string                 `json:"category,omitempty"`
+	TorrentName     string                 `json:"torrent_name,omitempty"`
 	Tags            []string               `json:"tags,omitempty"`
 	SourceIP        string                 `json:"source_ip,omitempty"`
 	UserAgent       string                 `json:"user_agent,omitempty"`

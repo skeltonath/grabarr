@@ -296,6 +296,52 @@ body {
     cursor: pointer;
 }
 
+/* Job grouping */
+.group-header-row {
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.group-header-row:hover {
+    background: var(--border-color);
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.group-expand-icon {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    width: 14px;
+    display: inline-block;
+}
+
+.group-path {
+    flex: 1;
+}
+
+.group-count {
+    color: var(--text-muted);
+    font-weight: normal;
+    font-size: 0.875rem;
+}
+
+.grouped-job-row {
+    background: var(--bg-card);
+}
+
+.grouped-job-row td:first-child {
+    padding-left: 2rem;
+}
+
 /* Status badges */
 .status-badge {
     padding: 0.25rem 0.5rem;
