@@ -14,6 +14,11 @@
 # GRABARR_BW_LIMIT_FILE - Per-file bandwidth limit (default: 10M)
 # GRABARR_CHECKERS - Number of checkers (default: 1)
 # GRABARR_MULTI_THREAD_STREAMS - Multi-thread streams (default: 1)
+#
+# Optional environment variables for file filtering:
+# GRABARR_ALLOWED_EXTENSIONS - Space-separated list of allowed file extensions (without dots)
+#                              Default: "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt"
+#                              Files not matching these extensions will be skipped
 
 # Load environment variables from config file if it exists
 if [[ -f ~/bin/qbt-grabarr.env ]]; then
@@ -26,6 +31,31 @@ if [[ -z "$GRABARR_API_URL" ]] || [[ -z "$GRABARR_CF_CLIENT_ID" ]] || [[ -z "$GR
     echo "Please set GRABARR_API_URL, GRABARR_CF_CLIENT_ID, and GRABARR_CF_CLIENT_SECRET"
     exit 1
 fi
+
+# Set default allowed extensions if not configured
+if [[ -z "$GRABARR_ALLOWED_EXTENSIONS" ]]; then
+    GRABARR_ALLOWED_EXTENSIONS="mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt"
+fi
+
+# Function to check if a file extension is allowed
+# Usage: is_extension_allowed "filename.mkv"
+# Returns: 0 (true) if allowed, 1 (false) if not allowed
+is_extension_allowed() {
+    local filename="$1"
+    local extension="${filename##*.}"
+
+    # Convert to lowercase for case-insensitive comparison
+    extension=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+
+    # Check if extension is in the allowed list
+    for allowed_ext in $GRABARR_ALLOWED_EXTENSIONS; do
+        if [[ "$extension" == "$allowed_ext" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
 
 NAME="$1"
 SIZE="$2"
@@ -54,6 +84,13 @@ fi
 if [[ -f "$CONTENT_PATH" ]]; then
     # Single file - create one job
     FILE_NAME=$(basename "$CONTENT_PATH")
+
+    # Check if file extension is allowed
+    if ! is_extension_allowed "$FILE_NAME"; then
+        echo "Skipping file with disallowed extension: $FILE_NAME" >&2
+        exit 0
+    fi
+
     REMOTE_PATH="$CONTENT_PATH"
     LOCAL_PATH="$FILE_NAME"
     FILE_SIZE="$SIZE"
@@ -73,6 +110,13 @@ elif [[ -d "$CONTENT_PATH" ]]; then
 
     while IFS= read -r file_path; do
         FILE_NAME=$(basename "$file_path")
+
+        # Check if file extension is allowed
+        if ! is_extension_allowed "$FILE_NAME"; then
+            echo "Skipping file with disallowed extension: $FILE_NAME" >&2
+            continue
+        fi
+
         REMOTE_PATH="$file_path"
         FILE_SIZE=$(stat -c%s "$file_path" 2>/dev/null || echo "0")
 
