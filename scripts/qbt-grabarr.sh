@@ -17,7 +17,7 @@
 #
 # Optional environment variables for file filtering:
 # GRABARR_ALLOWED_EXTENSIONS - Space-separated list of allowed file extensions (without dots)
-#                              Default: "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt"
+#                              Default: "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt zip rar"
 #                              Files not matching these extensions will be skipped
 
 # Load environment variables from config file if it exists
@@ -34,7 +34,7 @@ fi
 
 # Set default allowed extensions if not configured
 if [[ -z "$GRABARR_ALLOWED_EXTENSIONS" ]]; then
-    GRABARR_ALLOWED_EXTENSIONS="mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt"
+    GRABARR_ALLOWED_EXTENSIONS="mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt zip rar"
 fi
 
 # Function to check if a file extension is allowed
@@ -46,6 +46,16 @@ is_extension_allowed() {
 
     # Convert to lowercase for case-insensitive comparison
     extension=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+
+    # Special handling for multi-volume RAR files (.r00, .r01, .r1, .r2, etc.)
+    # These should be allowed if "rar" is in the allowed extensions
+    if [[ "$extension" =~ ^r[0-9]+$ ]]; then
+        for allowed_ext in $GRABARR_ALLOWED_EXTENSIONS; do
+            if [[ "$allowed_ext" == "rar" ]]; then
+                return 0
+            fi
+        done
+    fi
 
     # Check if extension is in the allowed list
     for allowed_ext in $GRABARR_ALLOWED_EXTENSIONS; do
