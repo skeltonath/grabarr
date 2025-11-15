@@ -15,10 +15,19 @@
 # GRABARR_CHECKERS - Number of checkers (default: 1)
 # GRABARR_MULTI_THREAD_STREAMS - Multi-thread streams (default: 1)
 #
+# Optional environment variables for archive extraction:
+# GRABARR_EXTRACT_ARCHIVES   - Enable automatic extraction of RAR/ZIP files on seedbox (default: true)
+# GRABARR_EXTRACT_RETRIES    - Number of extraction retry attempts (default: 2)
+# GRABARR_EXTRACT_DELAY      - Seconds to wait between retry attempts (default: 5)
+#
 # Optional environment variables for file filtering:
 # GRABARR_ALLOWED_EXTENSIONS - Space-separated list of allowed file extensions (without dots)
-#                              Default: "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt zip rar"
+#                              Default: "mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt"
 #                              Files not matching these extensions will be skipped
+# GRABARR_ALLOWED_PATTERNS   - Space-separated regex patterns for file extensions
+#                              Default: "" (empty - no pattern matching by default)
+#                              Example: "tmp[0-9]+" would match .tmp01, .tmp99
+#                              Patterns are checked before exact extension matching
 
 # Load environment variables from config file if it exists
 if [[ -f ~/bin/qbt-grabarr.env ]]; then
@@ -32,10 +41,167 @@ if [[ -z "$GRABARR_API_URL" ]] || [[ -z "$GRABARR_CF_CLIENT_ID" ]] || [[ -z "$GR
     exit 1
 fi
 
+# Set default extraction settings if not configured
+if [[ -z "$GRABARR_EXTRACT_ARCHIVES" ]]; then
+    GRABARR_EXTRACT_ARCHIVES=true
+fi
+if [[ -z "$GRABARR_EXTRACT_RETRIES" ]]; then
+    GRABARR_EXTRACT_RETRIES=2
+fi
+if [[ -z "$GRABARR_EXTRACT_DELAY" ]]; then
+    GRABARR_EXTRACT_DELAY=5
+fi
+
 # Set default allowed extensions if not configured
 if [[ -z "$GRABARR_ALLOWED_EXTENSIONS" ]]; then
-    GRABARR_ALLOWED_EXTENSIONS="mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt zip rar"
+    GRABARR_ALLOWED_EXTENSIONS="mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts srt sub ass ssa idx vtt"
 fi
+
+# Set default allowed patterns if not configured (empty by default)
+if [[ -z "$GRABARR_ALLOWED_PATTERNS" ]]; then
+    GRABARR_ALLOWED_PATTERNS=""
+fi
+
+# Function to check if a file is an archive
+# Usage: is_archive "filename.rar"
+# Returns: 0 (true) if archive, 1 (false) if not
+is_archive() {
+    local filename="$1"
+    local extension="${filename##*.}"
+    extension=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+
+    # Check for archive extensions
+    case "$extension" in
+        rar|zip|r[0-9]|r[0-9][0-9])
+            return 0
+            ;;
+        *)
+            # Check for .partN.rar pattern
+            if [[ "$filename" =~ \.part[0-9]+\.rar$ ]]; then
+                return 0
+            fi
+            return 1
+            ;;
+    esac
+}
+
+# Function to extract archives with retry logic
+# Usage: extract_archives "/path/to/content"
+# Returns: 0 on success, 1 on failure
+extract_archives() {
+    local content_path="$1"
+    local extraction_attempted=false
+    local extraction_failed=false
+
+    echo "Checking for archives in: $content_path" >&2
+
+    # Find all archive files
+    local archives=()
+    if [[ -f "$content_path" ]]; then
+        # Single file torrent
+        if is_archive "$(basename "$content_path")"; then
+            archives+=("$content_path")
+        fi
+    elif [[ -d "$content_path" ]]; then
+        # Directory torrent - find all archives
+        while IFS= read -r -d '' archive; do
+            archives+=("$archive")
+        done < <(find "$content_path" -type f \( -iname "*.rar" -o -iname "*.zip" -o -iname "*.r[0-9]" -o -iname "*.r[0-9][0-9]" \) -print0)
+    fi
+
+    if [[ ${#archives[@]} -eq 0 ]]; then
+        echo "No archives found" >&2
+        return 0
+    fi
+
+    echo "Found ${#archives[@]} archive(s) to extract" >&2
+    extraction_attempted=true
+
+    # Extract each archive with retries
+    for archive in "${archives[@]}"; do
+        local archive_dir="$(dirname "$archive")"
+        local archive_name="$(basename "$archive")"
+        local attempt=0
+        local extracted=false
+
+        echo "Extracting: $archive_name" >&2
+
+        while [[ $attempt -le $GRABARR_EXTRACT_RETRIES && $extracted == false ]]; do
+            if [[ $attempt -gt 0 ]]; then
+                echo "Retry attempt $attempt for $archive_name" >&2
+                sleep "$GRABARR_EXTRACT_DELAY"
+            fi
+
+            # Try extraction
+            if extract_single_archive "$archive" "$archive_dir"; then
+                echo "Successfully extracted: $archive_name" >&2
+                extracted=true
+            else
+                echo "Extraction failed for: $archive_name (attempt $((attempt + 1)))" >&2
+                ((attempt++))
+            fi
+        done
+
+        if [[ $extracted == false ]]; then
+            echo "Failed to extract $archive_name after $((attempt)) attempts" >&2
+            extraction_failed=true
+        fi
+    done
+
+    if [[ $extraction_failed == true ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
+# Function to extract a single archive
+# Usage: extract_single_archive "/path/to/archive.rar" "/extract/to/dir"
+# Returns: 0 on success, 1 on failure
+extract_single_archive() {
+    local archive="$1"
+    local dest_dir="$2"
+    local extension="${archive##*.}"
+    extension=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+
+    cd "$dest_dir" || return 1
+
+    # Try different extraction tools based on file type
+    case "$extension" in
+        rar|r[0-9]|r[0-9][0-9])
+            # Try unrar first
+            if command -v unrar >/dev/null 2>&1; then
+                unrar x -o- "$archive" >/dev/null 2>&1 && return 0
+            fi
+            # Fall back to 7z
+            if command -v 7z >/dev/null 2>&1; then
+                7z x -y "$archive" >/dev/null 2>&1 && return 0
+            fi
+            ;;
+        zip)
+            # Try unzip first
+            if command -v unzip >/dev/null 2>&1; then
+                unzip -o "$archive" >/dev/null 2>&1 && return 0
+            fi
+            # Fall back to 7z
+            if command -v 7z >/dev/null 2>&1; then
+                7z x -y "$archive" >/dev/null 2>&1 && return 0
+            fi
+            ;;
+    esac
+
+    # Check for .partN.rar
+    if [[ "$archive" =~ \.part[0-9]+\.rar$ ]]; then
+        if command -v unrar >/dev/null 2>&1; then
+            unrar x -o- "$archive" >/dev/null 2>&1 && return 0
+        fi
+        if command -v 7z >/dev/null 2>&1; then
+            7z x -y "$archive" >/dev/null 2>&1 && return 0
+        fi
+    fi
+
+    return 1
+}
 
 # Function to check if a file extension is allowed
 # Usage: is_extension_allowed "filename.mkv"
@@ -47,17 +213,16 @@ is_extension_allowed() {
     # Convert to lowercase for case-insensitive comparison
     extension=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
 
-    # Special handling for multi-volume RAR files (.r00, .r01, .r1, .r2, etc.)
-    # These should be allowed if "rar" is in the allowed extensions
-    if [[ "$extension" =~ ^r[0-9]+$ ]]; then
-        for allowed_ext in $GRABARR_ALLOWED_EXTENSIONS; do
-            if [[ "$allowed_ext" == "rar" ]]; then
+    # First, check if extension matches any configured regex patterns
+    if [[ -n "$GRABARR_ALLOWED_PATTERNS" ]]; then
+        for pattern in $GRABARR_ALLOWED_PATTERNS; do
+            if [[ "$extension" =~ ^${pattern}$ ]]; then
                 return 0
             fi
         done
     fi
 
-    # Check if extension is in the allowed list
+    # Then check if extension is in the exact-match allowed list
     for allowed_ext in $GRABARR_ALLOWED_EXTENSIONS; do
         if [[ "$extension" == "$allowed_ext" ]]; then
             return 0
@@ -71,6 +236,14 @@ NAME="$1"
 SIZE="$2"
 CATEGORY="$3"
 CONTENT_PATH="$4"
+
+# Extract archives if enabled
+if [[ "$GRABARR_EXTRACT_ARCHIVES" == "true" ]]; then
+    if ! extract_archives "$CONTENT_PATH"; then
+        echo "Archive extraction failed after retries, skipping this torrent" >&2
+        exit 1
+    fi
+fi
 
 # Build download_config JSON if any environment variables are set
 DOWNLOAD_CONFIG=""
