@@ -3,6 +3,9 @@
 # Usage: qbt-grabarr.sh "%N" "%Z" "%L" "%F"
 # %N = Torrent name, %Z = Size, %L = Category, %F = Content path
 #
+# Requirements:
+# - Bash 4.0+ (for associative arrays in multi-part RAR filtering)
+#
 # Required environment variables:
 # GRABARR_API_URL - Grabarr API endpoint URL
 # GRABARR_CF_CLIENT_ID - Cloudflare Access Client ID
@@ -85,6 +88,148 @@ is_archive() {
     esac
 }
 
+# Function to extract base name from multi-part RAR archive
+# Usage: get_archive_basename "movie.r00"
+# Returns: "movie" (the base name without RAR extension patterns)
+get_archive_basename() {
+    local filename="$1"
+    local basename="$filename"
+
+    # Remove common multi-part RAR extensions
+    # Pattern 1: .rar
+    basename="${basename%.rar}"
+    basename="${basename%.RAR}"
+
+    # Pattern 1: .r00, .r01, etc.
+    basename="${basename%.r[0-9][0-9]}"
+    basename="${basename%.R[0-9][0-9]}"
+
+    # Pattern 2: .r1, .r2, etc. (old style, single digit)
+    if [[ "$filename" =~ \.[rR][0-9]$ ]]; then
+        basename="${basename%.[rR][0-9]}"
+    fi
+
+    # Pattern 3: .part1.rar, .part2.rar, etc.
+    # Remove .partN.rar pattern - this captures the .part prefix
+    if [[ "$basename" =~ \.part[0-9]+ ]]; then
+        basename="${basename%.part[0-9]*}"
+    fi
+
+    echo "$basename"
+}
+
+# Function to determine if a file is the first part of a multi-part RAR archive
+# Usage: is_first_rar_part "/path/to/movie.r00"
+# Returns: 0 (true) if first part, 1 (false) otherwise
+is_first_rar_part() {
+    local filepath="$1"
+    local filename="$(basename "$filepath")"
+    local dirname="$(dirname "$filepath")"
+
+    # Enable case-insensitive matching
+    shopt -s nocasematch
+
+    # Pattern 1: *.rar is ALWAYS the first part if it exists (and not .partN.rar)
+    # Companion files: .r00, .r01, .r02, etc.
+    if [[ "$filename" =~ \.rar$ ]] && [[ ! "$filename" =~ \.part[0-9]+\.rar$ ]]; then
+        shopt -u nocasematch
+        return 0
+    fi
+
+    # Pattern 3: .part1.rar, .part01.rar, .part001.rar, etc.
+    # Only part1 is first
+    if [[ "$filename" =~ \.part0*1\.rar$ ]]; then
+        shopt -u nocasematch
+        return 0
+    fi
+
+    # Pattern 3: .part2.rar, .part3.rar, etc. are NOT first
+    if [[ "$filename" =~ \.part[0-9]+\.rar$ ]]; then
+        shopt -u nocasematch
+        return 1
+    fi
+
+    # Pattern 1 companion parts: .r00, .r01, etc.
+    # These are NEVER first if the .rar file exists
+    if [[ "$filename" =~ \.r[0-9][0-9]$ ]]; then
+        # Check if corresponding .rar exists
+        local base="$(get_archive_basename "$filename")"
+        if [[ -f "$dirname/$base.rar" ]] || [[ -f "$dirname/$base.RAR" ]]; then
+            # The .rar file exists, so this is a companion part
+            shopt -u nocasematch
+            return 1
+        fi
+        # If no .rar exists, treat .r00 as first part (orphaned archive)
+        if [[ "$filename" =~ \.r00$ ]]; then
+            shopt -u nocasematch
+            return 0
+        fi
+        shopt -u nocasematch
+        return 1
+    fi
+
+    # Pattern 2: .r1, .r2, etc. (old single-digit style)
+    # .r1 is the first part
+    if [[ "$filename" =~ \.r[0-9]$ ]]; then
+        # Check if there's a .rar file (which would take precedence)
+        local base="$(get_archive_basename "$filename")"
+        if [[ -f "$dirname/$base.rar" ]] || [[ -f "$dirname/$base.RAR" ]]; then
+            # The .rar file exists, this is not the first part
+            shopt -u nocasematch
+            return 1
+        fi
+        # .r1 is first, .r2+ are not
+        if [[ "$filename" =~ \.r1$ ]]; then
+            shopt -u nocasematch
+            return 0
+        fi
+        shopt -u nocasematch
+        return 1
+    fi
+
+    # Not a recognized multi-part pattern
+    shopt -u nocasematch
+    return 1
+}
+
+# Function to filter an array of archive paths to include only first parts and standalone archives
+# Usage: filter_first_parts_only archives_array filtered_array
+# Modifies: filtered_array (passed by name reference)
+# Note: Requires Bash 4+ for associative arrays
+filter_first_parts_only() {
+    local -n input_array=$1
+    local -n output_array=$2
+
+    # Track base names we've already processed to avoid duplicates
+    declare -A processed_bases
+
+    for archive in "${input_array[@]}"; do
+        local filename="$(basename "$archive")"
+        local dirname="$(dirname "$archive")"
+
+        # ZIP files are always extracted (no multi-part support)
+        if [[ "$filename" =~ \.[zZ][iI][pP]$ ]]; then
+            output_array+=("$archive")
+            continue
+        fi
+
+        # For RAR files, determine base name and check if first part
+        local base="$(get_archive_basename "$filename")"
+        local fullpath="$dirname/$base"
+
+        # Skip if we've already processed this base
+        if [[ -n "${processed_bases[$fullpath]}" ]]; then
+            continue
+        fi
+
+        # Check if this is a first part
+        if is_first_rar_part "$archive"; then
+            output_array+=("$archive")
+            processed_bases[$fullpath]=1
+        fi
+    done
+}
+
 # Function to extract archives with retry logic
 # Usage: extract_archives "/path/to/content"
 # Returns: 0 on success, 1 on failure
@@ -114,11 +259,27 @@ extract_archives() {
         return 0
     fi
 
-    echo "Found ${#archives[@]} archive(s) to extract" >&2
+    echo "Found ${#archives[@]} archive file(s)" >&2
+
+    # Filter to only first parts of multi-part archives
+    local archives_to_extract=()
+    filter_first_parts_only archives archives_to_extract
+
+    if [[ ${#archives_to_extract[@]} -eq 0 ]]; then
+        echo "No archives to extract (only companion parts found)" >&2
+        return 0
+    fi
+
+    local skipped_count=$((${#archives[@]} - ${#archives_to_extract[@]}))
+    if [[ $skipped_count -gt 0 ]]; then
+        echo "Extracting ${#archives_to_extract[@]} archive(s), skipped $skipped_count companion part(s)" >&2
+    else
+        echo "Extracting ${#archives_to_extract[@]} archive(s)" >&2
+    fi
     extraction_attempted=true
 
     # Extract each archive with retries
-    for archive in "${archives[@]}"; do
+    for archive in "${archives_to_extract[@]}"; do
         local archive_dir="$(dirname "$archive")"
         local archive_name="$(basename "$archive")"
         local attempt=0
