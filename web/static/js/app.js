@@ -376,7 +376,7 @@ class GrabarrDashboard {
             : '';
 
         return `
-            <tr class="group-header-row" onclick="dashboard.toggleFolder(${JSON.stringify(dirName)})">
+            <tr class="group-header-row" data-folder-name="${this.escapeHtml(dirName)}" onclick="dashboard.toggleFolderFromElement(this)">
                 <td colspan="4">
                     <div class="group-header">
                         <span class="group-expand-icon">${icon}</span>
@@ -388,6 +388,13 @@ class GrabarrDashboard {
                 </td>
             </tr>
         `;
+    }
+
+    toggleFolderFromElement(element) {
+        const dirName = element.getAttribute('data-folder-name');
+        if (dirName) {
+            this.toggleFolder(dirName);
+        }
     }
 
     toggleFolder(dirName) {
