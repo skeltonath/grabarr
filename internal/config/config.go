@@ -16,8 +16,7 @@ import (
 type Config struct {
 	Server        ServerConfig        `yaml:"server"`
 	Downloads     DownloadsConfig     `yaml:"downloads"`
-	Rclone        RcloneConfig        `yaml:"rclone"`
-	Rsync         RsyncConfig         `yaml:"rsync"`
+	Remotes       []RemoteConfig      `yaml:"remotes"`
 	Gatekeeper    GatekeeperConfig    `yaml:"gatekeeper"`
 	Jobs          JobsConfig          `yaml:"jobs"`
 	Database      DatabaseConfig      `yaml:"database"`
@@ -32,11 +31,17 @@ type Config struct {
 type SyncConfig struct {
 	Enabled      bool          `yaml:"enabled"`
 	ScanInterval time.Duration `yaml:"scan_interval"`
+}
+
+type RemoteConfig struct {
+	Name         string        `yaml:"name"`
+	SSHHost      string        `yaml:"ssh_host"`
+	SSHUser      string        `yaml:"ssh_user"`
+	SSHKeyFile   string        `yaml:"ssh_key_file"`
 	WatchedPaths []WatchedPath `yaml:"watched_paths"`
 }
 
 type WatchedPath struct {
-	Name            string   `yaml:"name"` // optional display name for the UI
 	RemotePath      string   `yaml:"remote_path"`
 	LocalPath       string   `yaml:"local_path"`
 	Extensions      []string `yaml:"extensions"`
@@ -54,20 +59,6 @@ type ServerConfig struct {
 type DownloadsConfig struct {
 	LocalPath         string   `yaml:"local_path"`
 	AllowedCategories []string `yaml:"allowed_categories"`
-}
-
-type RcloneConfig struct {
-	RemoteName      string        `yaml:"remote_name"`
-	ConfigFile      string        `yaml:"config_file"`
-	BandwidthLimit  string        `yaml:"bandwidth_limit"`
-	TransferTimeout time.Duration `yaml:"transfer_timeout"`
-	DaemonAddr      string        `yaml:"daemon_addr"`
-}
-
-type RsyncConfig struct {
-	SSHHost    string `yaml:"ssh_host"`
-	SSHUser    string `yaml:"ssh_user"`
-	SSHKeyFile string `yaml:"ssh_key_file"`
 }
 
 type GatekeeperConfig struct {
@@ -277,7 +268,7 @@ func (c *Config) reload(configPath string) error {
 
 	// Update all fields
 	c.Server = newConfig.Server
-	c.Rclone = newConfig.Rclone
+	c.Remotes = newConfig.Remotes
 	c.Gatekeeper = newConfig.Gatekeeper
 	c.Jobs = newConfig.Jobs
 	c.Database = newConfig.Database
@@ -302,17 +293,13 @@ func (c *Config) notifyWatchers() {
 	}
 }
 
-// GetRClone returns a copy of the rclone configuration
-func (c *Config) GetRClone() RcloneConfig {
+// GetRemotes returns a copy of the remotes configuration
+func (c *Config) GetRemotes() []RemoteConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.Rclone
-}
-
-func (c *Config) GetRsync() RsyncConfig {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Rsync
+	result := make([]RemoteConfig, len(c.Remotes))
+	copy(result, c.Remotes)
+	return result
 }
 
 // GetJobs returns a copy of the jobs configuration

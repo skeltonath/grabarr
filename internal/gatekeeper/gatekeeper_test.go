@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"grabarr/internal/config"
-	"grabarr/internal/mocks"
 )
 
 func createTestConfig() *config.Config {
@@ -29,9 +28,8 @@ func createTestConfig() *config.Config {
 
 func TestCanStartJob_Success(t *testing.T) {
 	cfg := createTestConfig()
-	rcloneClient := mocks.NewMockRCloneClient(t)
 
-	gk := New(cfg, rcloneClient)
+	gk := New(cfg)
 
 	decision := gk.CanStartJob(0)
 
@@ -42,9 +40,8 @@ func TestCanStartJob_Success(t *testing.T) {
 
 func TestCanStartJob_BandwidthExceeded_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	rcloneClient := mocks.NewMockRCloneClient(t)
 
-	gk := New(cfg, rcloneClient)
+	gk := New(cfg)
 
 	// Manually set bandwidth usage to exceed limit
 	gk.bandwidthUsage = 600 // Exceeds 500Mbps limit
@@ -62,9 +59,8 @@ func TestCanStartJob_BandwidthExceeded_Blocked(t *testing.T) {
 
 func TestCanStartJob_CacheUsageHigh_Blocked(t *testing.T) {
 	cfg := createTestConfig()
-	rcloneClient := mocks.NewMockRCloneClient(t)
 
-	gk := New(cfg, rcloneClient)
+	gk := New(cfg)
 
 	// Manually set cache usage to exceed limit
 	gk.cacheUsage = 85 // Exceeds 80% limit
@@ -82,9 +78,8 @@ func TestCanStartJob_CacheUsageHigh_Blocked(t *testing.T) {
 
 func TestGetResourceStatus(t *testing.T) {
 	cfg := createTestConfig()
-	rcloneClient := mocks.NewMockRCloneClient(t)
 
-	gk := New(cfg, rcloneClient)
+	gk := New(cfg)
 	gk.bandwidthUsage = 250.5
 	gk.cacheUsage = 45.2
 

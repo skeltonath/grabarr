@@ -20,8 +20,12 @@ type RsyncExecutor struct {
 }
 
 func NewRsyncExecutor(cfg *config.Config, gatekeeper interfaces.Gatekeeper, repo interfaces.JobRepository) *RsyncExecutor {
-	rsyncConfig := cfg.GetRsync()
-	client := rsync.NewClient(rsyncConfig.SSHHost, rsyncConfig.SSHUser, rsyncConfig.SSHKeyFile)
+	remotes := cfg.GetRemotes()
+	if len(remotes) == 0 {
+		panic("no remotes configured")
+	}
+	r := remotes[0]
+	client := rsync.NewClient(r.SSHHost, r.SSHUser, r.SSHKeyFile)
 
 	return &RsyncExecutor{
 		config:     cfg,

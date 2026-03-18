@@ -220,14 +220,16 @@ func (h *Handlers) GetSyncStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Error = st.Error
 	}
 
-	for _, wp := range syncCfg.WatchedPaths {
-		resp.WatchedPaths = append(resp.WatchedPaths, watchedPathResponse{
-			RemotePath:      wp.RemotePath,
-			Extensions:      wp.Extensions,
-			ExcludePatterns: wp.ExcludePatterns,
-			AutoDownload:    wp.AutoDownload,
-			Recursive:       wp.Recursive,
-		})
+	for _, remote := range h.config.GetRemotes() {
+		for _, wp := range remote.WatchedPaths {
+			resp.WatchedPaths = append(resp.WatchedPaths, watchedPathResponse{
+				RemotePath:      wp.RemotePath,
+				Extensions:      wp.Extensions,
+				ExcludePatterns: wp.ExcludePatterns,
+				AutoDownload:    wp.AutoDownload,
+				Recursive:       wp.Recursive,
+			})
+		}
 	}
 
 	h.writeSuccess(w, http.StatusOK, resp, "")
@@ -258,12 +260,26 @@ func localPathForRemoteFile(remotePath, watchedPath, base string) string {
 
 // findWatchedPath finds the WatchedPath config matching a given remote_path prefix.
 func (h *Handlers) findWatchedPath(watchedPath string) *config.WatchedPath {
-	for i, wp := range h.config.GetSync().WatchedPaths {
-		if wp.RemotePath == watchedPath {
-			return &h.config.GetSync().WatchedPaths[i]
+	for _, remote := range h.config.GetRemotes() {
+		for i, wp := range remote.WatchedPaths {
+			if wp.RemotePath == watchedPath {
+				return &remote.WatchedPaths[i]
+			}
 		}
 	}
 	return nil
+}
+
+// findWatchedPathRemoteName returns the remote name for the given watched path.
+func (h *Handlers) findWatchedPathRemoteName(watchedPath string) string {
+	for _, remote := range h.config.GetRemotes() {
+		for _, wp := range remote.WatchedPaths {
+			if wp.RemotePath == watchedPath {
+				return remote.Name
+			}
+		}
+	}
+	return ""
 }
 
 // parseID parses a string path variable into an int64.
@@ -374,11 +390,8 @@ func (h *Handlers) GetRemoteFileTree(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Use configured display name if set, otherwise derive from path.
-		displayName := ""
-		if wpCfg := h.findWatchedPath(wp); wpCfg != nil && wpCfg.Name != "" {
-			displayName = wpCfg.Name
-		}
+		// Use remote name as display name if available.
+		displayName := h.findWatchedPathRemoteName(wp)
 		root := buildFileTree(wp, displayName, wpFiles, jobMap)
 		roots = append(roots, root)
 	}

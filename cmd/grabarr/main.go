@@ -16,7 +16,6 @@ import (
 	"grabarr/internal/gatekeeper"
 	"grabarr/internal/notifications"
 	"grabarr/internal/queue"
-	"grabarr/internal/rclone"
 	"grabarr/internal/repository"
 	internalsync "grabarr/internal/sync"
 
@@ -58,13 +57,8 @@ func run() error {
 
 	slog.Info("database initialized", "path", cfg.GetDatabase().Path)
 
-	// Initialize RClone client
-	rcloneConfig := cfg.GetRClone()
-	slog.Info("initializing RClone client", "daemon_addr", rcloneConfig.DaemonAddr)
-	rcloneClient := rclone.NewClient(fmt.Sprintf("http://%s", rcloneConfig.DaemonAddr))
-
 	// Initialize gatekeeper
-	gk := gatekeeper.New(cfg, rcloneClient)
+	gk := gatekeeper.New(cfg)
 	if err := gk.Start(); err != nil {
 		return fmt.Errorf("failed to start gatekeeper: %w", err)
 	}

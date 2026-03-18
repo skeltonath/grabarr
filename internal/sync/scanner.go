@@ -70,7 +70,11 @@ func (s *Scanner) Start(ctx context.Context) {
 		interval = 5 * time.Minute
 	}
 
-	slog.Info("starting sync scanner", "interval", interval, "watched_paths", len(syncCfg.WatchedPaths))
+	totalWatchedPaths := 0
+	for _, r := range s.cfg.GetRemotes() {
+		totalWatchedPaths += len(r.WatchedPaths)
+	}
+	slog.Info("starting sync scanner", "interval", interval, "watched_paths", totalWatchedPaths)
 
 	// Full scan loop (SSH → find files, reconcile).
 	go func() {
@@ -131,23 +135,24 @@ func (s *Scanner) ScanNow(ctx context.Context) error {
 		s.mu.Unlock()
 	}()
 
-	syncCfg := s.cfg.GetSync()
 	scanStart := time.Now()
 	totalFound := 0
 
-	for _, wp := range syncCfg.WatchedPaths {
-		if err := ctx.Err(); err != nil {
-			return err
+	for _, remote := range s.cfg.GetRemotes() {
+		for _, wp := range remote.WatchedPaths {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			n, err := s.scanPath(ctx, remote, wp, scanStart)
+			if err != nil {
+				slog.Error("failed to scan path", "remote", remote.Name, "path", wp.RemotePath, "error", err)
+				s.mu.Lock()
+				s.status.Error = err.Error()
+				s.mu.Unlock()
+				continue
+			}
+			totalFound += n
 		}
-		n, err := s.scanPath(ctx, wp, scanStart)
-		if err != nil {
-			slog.Error("failed to scan path", "path", wp.RemotePath, "error", err)
-			s.mu.Lock()
-			s.status.Error = err.Error()
-			s.mu.Unlock()
-			continue
-		}
-		totalFound += n
 	}
 
 	// Sync job statuses for all files linked to a job.
@@ -175,13 +180,13 @@ func (s *Scanner) GetStatus() ScanStatus {
 
 // scanPath lists files under a single WatchedPath and reconciles them with the DB.
 // Returns the number of files found.
-func (s *Scanner) scanPath(ctx context.Context, wp config.WatchedPath, scanStart time.Time) (int, error) {
+func (s *Scanner) scanPath(ctx context.Context, remote config.RemoteConfig, wp config.WatchedPath, scanStart time.Time) (int, error) {
 	excludeREs, err := compilePatterns(wp.ExcludePatterns)
 	if err != nil {
 		return 0, fmt.Errorf("invalid exclude_patterns: %w", err)
 	}
 
-	files, err := s.sshListFiles(ctx, wp, excludeREs)
+	files, err := s.sshListFiles(ctx, remote, wp, excludeREs)
 	if err != nil {
 		return 0, fmt.Errorf("ssh list files: %w", err)
 	}
@@ -209,9 +214,7 @@ func (s *Scanner) scanPath(ctx context.Context, wp config.WatchedPath, scanStart
 }
 
 // sshListFiles SSHes into the seedbox and runs `find` to list files.
-func (s *Scanner) sshListFiles(ctx context.Context, wp config.WatchedPath, excludeREs []*regexp.Regexp) ([]*models.RemoteFile, error) {
-	rsyncCfg := s.cfg.GetRsync()
-
+func (s *Scanner) sshListFiles(ctx context.Context, remote config.RemoteConfig, wp config.WatchedPath, excludeREs []*regexp.Regexp) ([]*models.RemoteFile, error) {
 	// Build the find command.
 	depth := ""
 	if !wp.Recursive {
@@ -234,8 +237,8 @@ func (s *Scanner) sshListFiles(ctx context.Context, wp config.WatchedPath, exclu
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "ConnectTimeout=15",
-		"-i", rsyncCfg.SSHKeyFile,
-		fmt.Sprintf("%s@%s", rsyncCfg.SSHUser, rsyncCfg.SSHHost),
+		"-i", remote.SSHKeyFile,
+		fmt.Sprintf("%s@%s", remote.SSHUser, remote.SSHHost),
 		findCmd,
 	)
 

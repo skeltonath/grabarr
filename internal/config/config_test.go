@@ -26,22 +26,16 @@ downloads:
   local_path: "` + tmpDir + `/downloads"
   allowed_categories: ["movies", "tv"]
 
-rclone:
-  remote_name: "seedbox"
-  config_file: "` + tmpDir + `/rclone.conf"
-  bandwidth_limit: "10M"
-  transfer_timeout: 1h
-  daemon_addr: "localhost:5572"
-
-resources:
-  bandwidth:
-    max_usage_percent: 80
-    check_interval: 10s
-  disk:
-    cache_drive_path: "` + tmpDir + `/cache"
-    cache_drive_min_free: "10GB"
-    array_min_free: "50GB"
-    check_interval: 30s
+remotes:
+  - name: "whatbox"
+    ssh_host: "example.com"
+    ssh_user: "testuser"
+    ssh_key_file: "/tmp/test_rsa"
+    watched_paths:
+      - remote_path: "/home/testuser/downloads/"
+        extensions: ["mkv", "mp4"]
+        auto_download: true
+        recursive: true
 
 jobs:
   max_concurrent: 3
@@ -65,8 +59,9 @@ logging:
   level: "info"
   format: "json"
 
-monitoring:
-  resource_check_interval: 30s
+sync:
+  enabled: true
+  scan_interval: "5m"
 `
 
 	// Create temp config file
@@ -92,9 +87,13 @@ monitoring:
 	assert.Contains(t, cfg.Downloads.LocalPath, "downloads")
 	assert.Equal(t, []string{"movies", "tv"}, cfg.Downloads.AllowedCategories)
 
-	// Verify rclone config
-	assert.Equal(t, "seedbox", cfg.Rclone.RemoteName)
-	assert.Equal(t, "10M", cfg.Rclone.BandwidthLimit)
+	// Verify remotes config
+	require.Len(t, cfg.Remotes, 1)
+	assert.Equal(t, "whatbox", cfg.Remotes[0].Name)
+	assert.Equal(t, "example.com", cfg.Remotes[0].SSHHost)
+	assert.Equal(t, "testuser", cfg.Remotes[0].SSHUser)
+	require.Len(t, cfg.Remotes[0].WatchedPaths, 1)
+	assert.Equal(t, "/home/testuser/downloads/", cfg.Remotes[0].WatchedPaths[0].RemotePath)
 
 	// Verify jobs config
 	assert.Equal(t, 3, cfg.Jobs.MaxConcurrent)
@@ -198,9 +197,13 @@ func TestConfigGetters(t *testing.T) {
 			LocalPath:         "/downloads",
 			AllowedCategories: []string{"movies"},
 		},
-		Rclone: RcloneConfig{
-			RemoteName:     "seedbox",
-			BandwidthLimit: "10M",
+		Remotes: []RemoteConfig{
+			{
+				Name:       "whatbox",
+				SSHHost:    "example.com",
+				SSHUser:    "testuser",
+				SSHKeyFile: "/tmp/test_rsa",
+			},
 		},
 		Database: DatabaseConfig{
 			Path: "/data/db.sqlite",
@@ -219,8 +222,9 @@ func TestConfigGetters(t *testing.T) {
 	downloadsCfg := cfg.GetDownloads()
 	assert.Equal(t, "/downloads", downloadsCfg.LocalPath)
 
-	rcloneCfg := cfg.GetRClone()
-	assert.Equal(t, "seedbox", rcloneCfg.RemoteName)
+	remotes := cfg.GetRemotes()
+	require.Len(t, remotes, 1)
+	assert.Equal(t, "whatbox", remotes[0].Name)
 
 	dbCfg := cfg.GetDatabase()
 	assert.Equal(t, "/data/db.sqlite", dbCfg.Path)
@@ -241,11 +245,6 @@ server:
 downloads:
   local_path: "${DOWNLOAD_PATH}"
 
-rclone:
-  remote_name: "seedbox"
-  config_file: "` + tmpDir + `/rclone.conf"
-  daemon_addr: "localhost:5572"
-
 jobs:
   max_concurrent: 3
   max_retries: 3
@@ -261,22 +260,13 @@ notifications:
     token: ""
     user: ""
 
-resources:
-  bandwidth:
-    max_usage_percent: 80
-    check_interval: 10s
-  disk:
-    cache_drive_path: "` + tmpDir + `/cache"
-    cache_drive_min_free: "10GB"
-    array_min_free: "50GB"
-    check_interval: 30s
-
 logging:
   level: "info"
   format: "json"
 
-monitoring:
-  resource_check_interval: 30s
+sync:
+  enabled: false
+  scan_interval: "5m"
 `
 
 	// Set environment variables

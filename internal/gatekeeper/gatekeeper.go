@@ -15,8 +15,7 @@ import (
 
 // Gatekeeper manages resource constraints and enforces operational rules
 type Gatekeeper struct {
-	config       *config.Config
-	rcloneClient interfaces.RCloneClient
+	config *config.Config
 
 	mu             sync.RWMutex
 	bandwidthUsage float64 // Current bandwidth usage in Mbps
@@ -34,15 +33,14 @@ type GateDecision struct {
 	Details map[string]interface{}
 }
 
-func New(cfg *config.Config, rcloneClient interfaces.RCloneClient) *Gatekeeper {
+func New(cfg *config.Config) *Gatekeeper {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Gatekeeper{
-		config:       cfg,
-		rcloneClient: rcloneClient,
-		ctx:          ctx,
-		cancel:       cancel,
-		lastCheck:    time.Now(),
+		config:    cfg,
+		ctx:       ctx,
+		cancel:    cancel,
+		lastCheck: time.Now(),
 	}
 }
 
@@ -185,15 +183,6 @@ func (g *Gatekeeper) updateResourceStatus() {
 
 	g.lastCheck = time.Now()
 
-	// Update bandwidth usage
-	bandwidthUsage, err := g.checkBandwidthUsage()
-	if err != nil {
-		slog.Error("failed to check bandwidth usage", "error", err)
-		// Keep previous value
-	} else {
-		g.bandwidthUsage = bandwidthUsage
-	}
-
 	// Update cache usage
 	cacheUsage, err := g.checkCacheUsage()
 	if err != nil {
@@ -207,22 +196,6 @@ func (g *Gatekeeper) updateResourceStatus() {
 		"bandwidth_mbps", g.bandwidthUsage,
 		"cache_percent", g.cacheUsage,
 	)
-}
-
-func (g *Gatekeeper) checkBandwidthUsage() (float64, error) {
-	// Query rclone daemon for current transfer stats using /core/stats
-	ctx, cancel := context.WithTimeout(g.ctx, 5*time.Second)
-	defer cancel()
-
-	stats, err := g.rcloneClient.GetCoreStats(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get core stats: %w", err)
-	}
-
-	// Speed is in bytes per second, convert to Mbps
-	mbps := (stats.Speed * 8) / 1_000_000
-
-	return mbps, nil
 }
 
 func (g *Gatekeeper) checkCacheUsage() (float64, error) {

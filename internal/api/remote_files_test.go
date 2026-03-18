@@ -28,9 +28,14 @@ func setupRemoteFileHandlers(t *testing.T) (*Handlers, *mocks.MockRemoteFileRepo
 	queue := mocks.NewMockJobQueue(t)
 	gk := mocks.NewMockGatekeeper(t)
 	cfg := &config.Config{
-		Sync: config.SyncConfig{
-			WatchedPaths: []config.WatchedPath{
-				{RemotePath: "/seedbox/dp/", LocalPath: ""},
+		Remotes: []config.RemoteConfig{
+			{
+				Name:    "whatbox",
+				SSHHost: "example.com",
+				SSHUser: "testuser",
+				WatchedPaths: []config.WatchedPath{
+					{RemotePath: "/seedbox/dp/", LocalPath: ""},
+				},
 			},
 		},
 		Downloads: config.DownloadsConfig{LocalPath: "/downloads/"},

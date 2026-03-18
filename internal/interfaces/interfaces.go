@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"grabarr/internal/models"
-	"grabarr/internal/rclone"
 )
 
 // JobQueue manages the job queue, scheduling, and execution
@@ -58,16 +57,6 @@ type JobRepository interface {
 	GetJob(id int64) (*models.Job, error)
 	GetJobs(filter models.JobFilter) ([]*models.Job, error)
 	CountJobs(filter models.JobFilter) (int, error)
-}
-
-// RCloneClient provides an interface to interact with RClone daemon
-type RCloneClient interface {
-	Copy(ctx context.Context, srcFs, dstFs string, filter map[string]interface{}, config map[string]interface{}) (*models.RCloneCopyResponse, error)
-	GetJobStatus(ctx context.Context, jobID int64) (*models.RCloneJobStatus, error)
-	GetCoreStats(ctx context.Context) (*rclone.CoreStats, error)
-	ListJobs(ctx context.Context) (*models.RCloneJobListResponse, error)
-	StopJob(ctx context.Context, jobID int64) error
-	Ping(ctx context.Context) error
 }
 
 // Notifier handles sending notifications for various events
