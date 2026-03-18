@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grabarr</title>
+<link rel="icon" type="image/x-icon" href="/static/images/favicon.ico">
+<link rel="icon" type="image/png" href="/static/images/favicon.png">
+<link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png">
+<style>
+/* ---- Reset & base ---- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.4; }
+
+/* ---- Theme variables ---- */
+:root {
+  --bg: #0f1320;
+  --surface: #1a1f2e;
+  --surface2: #232a3b;
+  --border: #2a3040;
+  --text: #e0e6f0;
+  --muted: #7a8499;
+  --primary: #e74c3c;
+  --green: #27ae60;
+  --green-bg: #1a4a2e;
+  --blue: #3498db;
+  --blue-bg: #1a3a5c;
+  --amber: #f39c12;
+  --amber-bg: #4a3000;
+  --red: #e74c3c;
+  --red-bg: #4a1a1a;
+  --gray: #4a5568;
+  --gray-bg: #2a3040;
+  --header-h: 52px;
+  --footer-h: 36px;
+}
+
+body.light {
+  --bg: #f0f2f7;
+  --surface: #ffffff;
+  --surface2: #f5f7fb;
+  --border: #d8dce8;
+  --text: #1a2030;
+  --muted: #6b7280;
+  --blue-bg: #dbeafe;
+  --green-bg: #d1fae5;
+  --amber-bg: #fef3c7;
+  --red-bg: #fee2e2;
+  --gray-bg: #e5e7eb;
+}
+
+body { background: var(--bg); color: var(--text); }
+
+/* ---- Header ---- */
+#header {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  z-index: 100;
+}
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: var(--primary); white-space: nowrap; }
+.logo svg { flex-shrink: 0; }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(39,174,96,0.4);
+  animation: pulse 2s infinite;
+}
+.status-dot.disconnected { background: var(--red); animation: none; box-shadow: none; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(39,174,96,0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(39,174,96,0); }
+  100% { box-shadow: 0 0 0 0 rgba(39,174,96,0); }
+}
+#last-scanned { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.spacer { flex: 1; }
+#search { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 13px; width: 200px; outline: none; }
+#search:focus { border-color: var(--blue); }
+#search::placeholder { color: var(--muted); }
+#status-filter { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer; }
+.btn { padding: 6px 12px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #c0392b; }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+.btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--border); }
+#theme-toggle { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 4px; }
+
+/* ---- Layout ---- */
+#layout {
+  display: flex;
+  margin-top: var(--header-h);
+  margin-bottom: var(--footer-h);
+  min-height: calc(100vh - var(--header-h) - var(--footer-h));
+}
+
+/* ---- Sidebar ---- */
+#sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 12px 8px;
+  position: sticky;
+  top: var(--header-h);
+  height: calc(100vh - var(--header-h) - var(--footer-h));
+  overflow-y: auto;
+}
+.sidebar-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted); padding: 0 8px 8px;
+}
+.sidebar-tab {
+  display: flex; flex-direction: column; gap: 3px;
+  width: 100%; padding: 8px 10px; border: none; border-radius: 7px;
+  background: none; color: var(--text); text-align: left; cursor: pointer;
+  transition: background 0.1s;
+}
+.sidebar-tab:hover { background: var(--surface2); }
+.sidebar-tab.active { background: var(--surface2); }
+.sidebar-tab.active .tab-name { color: var(--primary); }
+.tab-name { font-size: 13px; font-weight: 600; }
+.tab-stats { font-size: 11px; color: var(--muted); }
+
+/* ---- Main tree area ---- */
+#main {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 0;
+}
+#tree-container { padding: 0 32px; }
+#empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+#empty-state h3 { font-size: 18px; margin-bottom: 8px; }
+
+/* ---- Tree rows ---- */
+.tree-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 16px; cursor: pointer; border-bottom: 1px solid transparent;
+  transition: background 0.1s;
+}
+.tree-row:hover { background: var(--surface2); }
+.tree-row.folder-row { padding-top: 7px; padding-bottom: 7px; }
+.tree-indent { flex-shrink: 0; }
+.chevron { width: 16px; text-align: center; color: var(--muted); font-size: 10px; flex-shrink: 0; transition: transform 0.15s; }
+.chevron.open { transform: rotate(90deg); }
+.folder-icon { font-size: 14px; flex-shrink: 0; }
+.row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.folder-name { font-weight: 600; color: var(--text); }
+.file-name { color: var(--muted); }
+.file-name.active { color: var(--text); }
+.row-size { color: var(--muted); font-size: 12px; white-space: nowrap; margin-left: 4px; }
+.row-speed { color: var(--blue); font-size: 11px; white-space: nowrap; margin-left: 4px; }
+.folder-stats { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.folder-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ---- File status icons ---- */
+.status-icon { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 20px; }
+
+/* Folder progress pill */
+.folder-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+  padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 500;
+  white-space: nowrap; flex-shrink: 0; min-width: 52px;
+}
+.folder-pill-fill {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  border-radius: 10px 0 0 10px; transition: width 0.5s ease;
+}
+.folder-pill-text { position: relative; z-index: 1; }
+.folder-pill.fp-done { background: var(--green-bg); color: var(--green); }
+.folder-pill.fp-downloading { background: var(--blue-bg); color: var(--blue); }
+.folder-pill.fp-downloading .folder-pill-fill { background: rgba(52,152,219,0.35); }
+.folder-pill.fp-partial { background: var(--amber-bg); color: var(--amber); }
+.folder-pill.fp-partial .folder-pill-fill { background: rgba(243,156,18,0.35); }
+.folder-pill.fp-failed { background: var(--red-bg); color: var(--red); }
+.folder-pill.fp-empty { background: var(--gray-bg); color: var(--muted); }
+
+.btn-queue { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 2px 8px; border-radius: 5px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.btn-queue:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* ---- Footer ---- */
+#footer {
+  position: fixed; bottom: 0; left: 0; right: 0; height: var(--footer-h);
+  background: var(--surface); border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 20px; padding: 0 16px;
+  color: var(--muted); font-size: 12px;
+}
+.footer-stat strong { color: var(--text); }
+
+/* ---- Modal ---- */
+#modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  z-index: 200; align-items: center; justify-content: center;
+}
+#modal-overlay.open { display: flex; }
+#modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  width: 520px; max-width: 95vw; max-height: 85vh; overflow-y: auto;
+  padding: 24px;
+}
+.modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+.modal-header h2 { font-size: 16px; font-weight: 600; word-break: break-all; }
+.modal-close { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; padding: 0 0 0 12px; flex-shrink: 0; }
+.modal-close:hover { color: var(--text); }
+.detail-grid { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin-bottom: 16px; }
+.detail-label { color: var(--muted); font-size: 12px; }
+.detail-value { font-size: 13px; word-break: break-all; }
+.modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px; }
+.modal-actions .btn { font-size: 13px; }
+.btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
+.btn-danger:hover { background: var(--red); color: #fff; }
+.btn-success { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+.btn-success:hover { background: var(--green); color: #fff; }
+
+/* ---- Toast ---- */
+#toast {
+  position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 18px; font-size: 13px; z-index: 300;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+#toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header id="header">
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <circle cx="11" cy="11" r="10" fill="#e74c3c" opacity="0.15"/>
+      <path d="M7 8l4 5 4-5" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M11 13v-7" stroke="#e74c3c" stroke-width="2" stroke-linecap="round"/>
+      <path d="M6 17h10" stroke="#e74c3c" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    Grabarr
+  </div>
+  <div id="status-dot" class="status-dot" title="System healthy"></div>
+  <span id="last-scanned">—</span>
+  <button id="scan-btn" class="btn btn-primary">Scan Now</button>
+  <div class="spacer"></div>
+  <input id="search" type="search" placeholder="🔍 Search files…" autocomplete="off">
+  <select id="status-filter">
+    <option value="all">All files</option>
+    <option value="on_seedbox">On Seedbox</option>
+    <option value="queued">Queued</option>
+    <option value="downloading">Downloading</option>
+    <option value="downloaded">Downloaded</option>
+    <option value="failed">Failed</option>
+    <option value="ignored">Ignored</option>
+  </select>
+  <button id="theme-toggle" title="Toggle theme">🌙</button>
+</header>
+
+<!-- Body layout -->
+<div id="layout">
+  <nav id="sidebar">
+    <div class="sidebar-label">Sources</div>
+    <div id="sidebar-tabs"></div>
+  </nav>
+  <main id="main">
+    <div id="tree-container"></div>
+    <div id="empty-state" style="display:none">
+      <h3>No files found</h3>
+      <p>Trigger a scan to discover files on the seedbox.</p>
+    </div>
+  </main>
+</div>
+
+<!-- Footer -->
+<footer id="footer">
+  <span class="footer-stat">Files: <strong id="ft-files">—</strong></span>
+  <span class="footer-stat">Total: <strong id="ft-size">—</strong></span>
+  <span class="footer-stat">Downloaded: <strong id="ft-done">—</strong></span>
+  <span class="footer-stat" id="ft-active-wrap" style="display:none">Downloading: <strong id="ft-active">—</strong></span>
+</footer>
+
+<!-- File detail modal -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">File details</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ---- State ----
+let treeData = null;
+let selectedWatchedPath = null;
+const openFolders = new Set();
+let searchQuery = '';
+let statusFilter = 'all';
+let scanPolling = null;
+let refreshTimer = null;
+
+// ---- Init ----
+document.addEventListener('DOMContentLoaded', () => {
+  loadTheme();
+  fetchTree();
+  startAutoRefresh();
+  fetchHealth();
+
+  document.getElementById('search').addEventListener('input', e => {
+    searchQuery = e.target.value.toLowerCase().trim();
+    renderTree();
+  });
+  document.getElementById('status-filter').addEventListener('change', e => {
+    statusFilter = e.target.value;
+    renderTree();
+  });
+  document.getElementById('scan-btn').addEventListener('click', triggerScan);
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopAutoRefresh(); else startAutoRefresh();
+  });
+});
+
+// ---- Data fetching ----
+async function fetchTree() {
+  try {
+    const res = await fetch('/api/v1/remote-files/tree');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error);
+    treeData = json.data;
+    // Auto-select first tab if nothing selected yet, or selection no longer exists.
+    if (treeData.roots && treeData.roots.length > 0) {
+      const paths = treeData.roots.map(r => r.watched_path);
+      if (!selectedWatchedPath || !paths.includes(selectedWatchedPath)) {
+        selectedWatchedPath = paths[0];
+      }
+    }
+    updateLastScanned(treeData.scanned_at);
+    renderSidebar();
+    renderTree();
+  } catch (e) {
+    console.error('fetchTree failed', e);
+  }
+}
+
+function renderSidebar() {
+  const container = document.getElementById('sidebar-tabs');
+  container.innerHTML = '';
+  if (!treeData || !treeData.roots) return;
+  for (const root of treeData.roots) {
+    const btn = document.createElement('button');
+    btn.className = 'sidebar-tab' + (root.watched_path === selectedWatchedPath ? ' active' : '');
+    const s = root.stats || {};
+    const done = s.downloaded || 0;
+    const total = s.file_count || 0;
+    btn.innerHTML =
+      `<span class="tab-name">${escHtml(root.name)}</span>` +
+      `<span class="tab-stats">${total} files · ${done}/${total} done</span>`;
+    btn.addEventListener('click', () => {
+      selectedWatchedPath = root.watched_path;
+      renderSidebar();
+      renderTree();
+    });
+    container.appendChild(btn);
+  }
+}
+
+async function fetchHealth() {
+  try {
+    const res = await fetch('/api/v1/health');
+    const json = await res.json();
+    const dot = document.getElementById('status-dot');
+    if (json.success) {
+      dot.className = 'status-dot';
+      dot.title = 'System healthy';
+    } else {
+      dot.className = 'status-dot disconnected';
+      dot.title = 'System error';
+    }
+  } catch {
+    document.getElementById('status-dot').className = 'status-dot disconnected';
+  }
+}
+
+async function triggerScan() {
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning…';
+  try {
+    await fetch('/api/v1/sync/scan', { method: 'POST' });
+  } catch {}
+  if (scanPolling) clearInterval(scanPolling);
+  scanPolling = setInterval(async () => {
+    try {
+      const res = await fetch('/api/v1/sync/status');
+      const json = await res.json();
+      if (json.success && !json.data.scan_in_flight) {
+        clearInterval(scanPolling);
+        scanPolling = null;
+        btn.disabled = false;
+        btn.textContent = 'Scan Now';
+        await fetchTree();
+      }
+    } catch {}
+  }, 2000);
+}
+
+// ---- Auto refresh ----
+function startAutoRefresh() {
+  stopAutoRefresh();
+  refreshTimer = setInterval(() => {
+    fetchTree();
+    fetchHealth();
+  }, 10000);
+}
+function stopAutoRefresh() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+}
+
+// ---- Rendering ----
+function renderTree() {
+  const container = document.getElementById('tree-container');
+  const empty = document.getElementById('empty-state');
+
+  if (!treeData || !treeData.roots || treeData.roots.length === 0) {
+    container.innerHTML = '';
+    empty.style.display = '';
+    updateFooter(null);
+    return;
+  }
+
+  empty.style.display = 'none';
+  const frag = document.createDocumentFragment();
+
+  let totalFiles = 0, totalBytes = 0, totalDone = 0, totalDownloading = 0;
+  const visibleRoots = treeData.roots.filter(r => r.watched_path === selectedWatchedPath);
+  for (const root of visibleRoots) {
+    if (root.stats) {
+      totalFiles += root.stats.file_count;
+      totalBytes += root.stats.total_bytes;
+      totalDone += root.stats.downloaded;
+      totalDownloading += root.stats.downloading;
+    }
+    // Skip the watched-path root row; render its children as top-level items.
+    if (root.children) {
+      for (const child of root.children) {
+        if (child.type === 'folder') renderFolder(child, 0, frag, root.watched_path);
+        else renderFile(child, 0, frag);
+      }
+    }
+  }
+
+  container.innerHTML = '';
+  container.appendChild(frag);
+  updateFooter({ totalFiles, totalBytes, totalDone, totalDownloading });
+}
+
+function renderFile(node, depth, parent) {
+  if (!fileVisible(node)) return;
+
+  const row = document.createElement('div');
+  row.className = 'tree-row';
+
+  // Indent
+  const indent = document.createElement('div');
+  indent.className = 'tree-indent';
+  indent.style.width = (depth * 20 + 24) + 'px'; // +24 for chevron space
+  row.appendChild(indent);
+
+  // Status icon
+  row.appendChild(buildFileStatusIcon(node));
+
+  // Name
+  const name = document.createElement('div');
+  name.className = 'row-name file-name' + (isActiveFile(node) ? ' active' : '');
+  name.textContent = node.name;
+  row.appendChild(name);
+
+  // Size
+  const size = document.createElement('div');
+  size.className = 'row-size';
+  size.textContent = fmtSize(node.size_bytes);
+  row.appendChild(size);
+
+  // Speed + ETA (downloading)
+  if (node.progress && node.progress.job_status === 'running') {
+    const speed = document.createElement('div');
+    speed.className = 'row-speed';
+    const parts = [];
+    if (node.progress.transfer_speed > 0) parts.push(fmtSpeed(node.progress.transfer_speed));
+    if (node.progress.eta) {
+      const eta = fmtETA(node.progress.eta);
+      if (eta) parts.push('ETA ' + eta);
+    }
+    if (parts.length) speed.textContent = parts.join(' · ');
+    if (parts.length) row.appendChild(speed);
+  }
+
+  row.addEventListener('click', () => openModal(node));
+  parent.appendChild(row);
+}
+
+// ---- Visibility ---- (filter + search)
+function fileEffectiveStatus(node) {
+  if (node.progress) {
+    if (node.progress.job_status === 'failed') return 'failed';
+    if (node.progress.job_status === 'cancelled') return 'cancelled';
+    if (node.progress.job_status === 'running') return 'downloading';
+    if (node.progress.job_status === 'queued' || node.progress.job_status === 'pending') return 'queued';
+    if (node.progress.job_status === 'completed') return 'downloaded';
+  }
+  return node.status;
+}
+
+function isActiveFile(node) {
+  const s = fileEffectiveStatus(node);
+  return s === 'downloading' || s === 'queued' || s === 'failed';
+}
+
+function fileVisible(node) {
+  if (statusFilter !== 'all' && fileEffectiveStatus(node) !== statusFilter) return false;
+  if (searchQuery && !node.name.toLowerCase().includes(searchQuery)) return false;
+  return true;
+}
+
+function folderVisible(node) {
+  if (!node.children) return false;
+  // A folder is visible if at least one descendant matches filter+search
+  return hasVisibleDescendant(node);
+}
+
+function hasVisibleDescendant(node) {
+  if (!node.children) return false;
+  for (const child of node.children) {
+    if (child.type === 'file') {
+      if (fileVisible(child)) return true;
+    } else {
+      if (hasVisibleDescendant(child)) return true;
+    }
+  }
+  return false;
+}
+
+function renderFolder(node, depth, parent, watchedPath) {
+  const path = node.path || '/';
+  const key = watchedPath + path;
+  const isOpen = searchQuery ? hasVisibleDescendant(node) : openFolders.has(key);
+
+  if (!folderVisible(node)) return;
+
+  const row = document.createElement('div');
+  row.className = 'tree-row folder-row';
+
+  if (depth > 0) {
+    const indent = document.createElement('div');
+    indent.className = 'tree-indent';
+    indent.style.width = (depth * 20) + 'px';
+    row.appendChild(indent);
+  }
+
+  const chevron = document.createElement('div');
+  chevron.className = 'chevron' + (isOpen ? ' open' : '');
+  chevron.textContent = '▶';
+  row.appendChild(chevron);
+
+  const icon = document.createElement('div');
+  icon.className = 'folder-icon';
+  icon.textContent = '📁';
+  row.appendChild(icon);
+
+  const name = document.createElement('div');
+  name.className = 'row-name folder-name';
+  name.textContent = node.name + '/';
+  row.appendChild(name);
+
+  if (node.stats) {
+    const stats = document.createElement('div');
+    stats.className = 'folder-stats';
+    stats.textContent = node.stats.file_count + ' files · ' + fmtSize(node.stats.total_bytes);
+    row.appendChild(stats);
+  }
+
+  if (node.stats && node.stats.file_count > 0) {
+    row.appendChild(buildFolderPill(node.stats));
+  }
+
+  if (node.stats && node.stats.on_seedbox > 0) {
+    const qBtn = document.createElement('button');
+    qBtn.className = 'btn-queue';
+    qBtn.textContent = node.stats.on_seedbox === node.stats.file_count ? 'Queue All' : 'Queue Remaining';
+    qBtn.onclick = (e) => { e.stopPropagation(); queueFolder(watchedPath, path, qBtn); };
+    const actions = document.createElement('div');
+    actions.className = 'folder-actions';
+    actions.appendChild(qBtn);
+    row.appendChild(actions);
+  }
+
+  row.addEventListener('click', () => toggleFolder(key));
+  parent.appendChild(row);
+
+  if (isOpen && node.children) {
+    for (const child of node.children) {
+      if (child.type === 'folder') renderFolder(child, depth + 1, parent, watchedPath);
+      else renderFile(child, depth + 1, parent);
+    }
+  }
+}
+
+// ---- Folder toggle ----
+function toggleFolder(key) {
+  if (openFolders.has(key)) openFolders.delete(key);
+  else openFolders.add(key);
+  renderTree();
+}
+
+// ---- File status icons (SVG circles + checkmarks) ----
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function buildFileStatusIcon(node) {
+  const status = fileEffectiveStatus(node);
+  const wrap = document.createElement('div');
+  wrap.className = 'status-icon';
+
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', '20');
+  svg.setAttribute('height', '20');
+  svg.setAttribute('viewBox', '0 0 20 20');
+
+  function circle(cx, cy, r, attrs) {
+    const el = document.createElementNS(SVG_NS, 'circle');
+    el.setAttribute('cx', cx); el.setAttribute('cy', cy); el.setAttribute('r', r);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+  }
+  function path(d, attrs) {
+    const el = document.createElementNS(SVG_NS, 'path');
+    el.setAttribute('d', d);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+  }
+
+  if (status === 'downloading' && node.progress) {
+    const pct = Math.min(100, Math.max(0, node.progress.percentage || 0));
+    const r = 8, circ = 2 * Math.PI * r;
+    svg.appendChild(circle(10, 10, r, { fill: 'none', stroke: '#1a3a5c', 'stroke-width': '2.5' }));
+    const arc = circle(10, 10, r, {
+      fill: 'none', stroke: '#3498db', 'stroke-width': '2.5',
+      'stroke-dasharray': circ.toFixed(2),
+      'stroke-dashoffset': (circ * (1 - pct / 100)).toFixed(2),
+      'stroke-linecap': 'round',
+      transform: 'rotate(-90 10 10)',
+    });
+    svg.appendChild(arc);
+
+  } else if (status === 'downloaded') {
+    svg.appendChild(circle(10, 10, 9, { fill: '#27ae60' }));
+    svg.appendChild(path('M6 10l3 3 5-5', { stroke: 'white', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none' }));
+
+  } else if (status === 'failed') {
+    svg.appendChild(circle(10, 10, 9, { fill: '#e74c3c' }));
+    svg.appendChild(path('M7 7l6 6M13 7l-6 6', { stroke: 'white', 'stroke-width': '2', 'stroke-linecap': 'round', fill: 'none' }));
+
+  } else if (status === 'queued') {
+    svg.appendChild(circle(10, 10, 8, { fill: 'none', stroke: '#f39c12', 'stroke-width': '2', 'stroke-dasharray': '3 2' }));
+    svg.appendChild(circle(10, 10, 3, { fill: '#f39c12' }));
+
+  } else if (status === 'ignored' || status === 'cancelled') {
+    svg.appendChild(circle(10, 10, 8, { fill: 'none', stroke: '#4a5568', 'stroke-width': '2' }));
+    svg.appendChild(path('M7 10h6', { stroke: '#4a5568', 'stroke-width': '2', 'stroke-linecap': 'round', fill: 'none' }));
+
+  } else {
+    // on_seedbox — empty gray ring
+    svg.appendChild(circle(10, 10, 8, { fill: 'none', stroke: '#3a4358', 'stroke-width': '2' }));
+  }
+
+  wrap.appendChild(svg);
+  return wrap;
+}
+
+function buildFolderPill(stats) {
+  const pill = document.createElement('div');
+  pill.className = 'folder-pill';
+  const pct = stats.file_count > 0 ? (stats.downloaded / stats.file_count) * 100 : 0;
+
+  let cls = 'fp-empty';
+  if (stats.downloaded === stats.file_count && stats.file_count > 0) cls = 'fp-done';
+  else if (stats.downloading > 0) cls = 'fp-downloading';
+  else if (stats.failed > 0) cls = 'fp-failed';
+  else if (stats.queued > 0) cls = 'fp-partial';
+  pill.classList.add(cls);
+
+  if (cls !== 'fp-done' && cls !== 'fp-empty') {
+    const fill = document.createElement('div');
+    fill.className = 'folder-pill-fill';
+    fill.style.width = pct + '%';
+    pill.appendChild(fill);
+  }
+
+  const text = document.createElement('div');
+  text.className = 'folder-pill-text';
+  text.textContent = stats.downloaded + '/' + stats.file_count;
+  pill.appendChild(text);
+  return pill;
+}
+
+// ---- Queue folder ----
+async function queueFolder(watchedPath, folderPath, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Queuing…';
+  try {
+    const res = await fetch('/api/v1/remote-files/queue-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ watched_path: watchedPath, folder_path: folderPath }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast('Queued ' + json.data.queued + ' files');
+      await fetchTree();
+    } else {
+      showToast(json.error || 'Failed to queue folder', true);
+      btn.disabled = false;
+      btn.textContent = 'Queue All';
+    }
+  } catch (e) {
+    showToast('Network error', true);
+    btn.disabled = false;
+    btn.textContent = 'Queue All';
+  }
+}
+
+// ---- Modal ----
+function openModal(node) {
+  const status = fileEffectiveStatus(node);
+  const p = node.progress;
+
+  let rows = [
+    ['Path', node.path],
+    ['Size', fmtSize(node.size_bytes)],
+    ['Status', status],
+  ];
+  if (p) {
+    if (p.created_at) rows.push(['Created', fmtDate(p.created_at)]);
+    if (p.started_at) rows.push(['Started', fmtDate(p.started_at)]);
+    if (p.completed_at) rows.push(['Completed', fmtDate(p.completed_at)]);
+    if (p.transferred_bytes > 0) rows.push(['Transferred', fmtSize(p.transferred_bytes) + ' / ' + fmtSize(p.total_bytes)]);
+    if (p.transfer_speed > 0) rows.push(['Speed', fmtSpeed(p.transfer_speed)]);
+    if (p.eta) { const e = fmtETA(p.eta); if (e) rows.push(['ETA', e]); }
+    if (p.error_message) rows.push(['Error', p.error_message]);
+  }
+
+  const grid = rows.map(([label, val]) =>
+    `<div class="detail-label">${label}</div><div class="detail-value">${escHtml(String(val ?? '—'))}</div>`
+  ).join('');
+
+  // Action buttons
+  const actions = [];
+  if (status === 'on_seedbox') {
+    actions.push(`<button class="btn btn-success" onclick="fileAction('queue', ${node.id})">Queue Download</button>`);
+    actions.push(`<button class="btn btn-ghost" onclick="fileAction('ignore', ${node.id})">Ignore</button>`);
+  }
+  if (status === 'ignored') {
+    actions.push(`<button class="btn btn-ghost" onclick="fileAction('restore', ${node.id})">Restore</button>`);
+  }
+  if ((status === 'queued' || status === 'downloading') && p) {
+    actions.push(`<button class="btn btn-danger" onclick="fileAction('cancel', ${p.job_id})">Cancel</button>`);
+  }
+  if ((status === 'failed' || status === 'cancelled') && p) {
+    actions.push(`<button class="btn btn-success" onclick="fileAction('retry', ${p.job_id})">Retry</button>`);
+  }
+
+  document.getElementById('modal-title').textContent = node.name;
+  document.getElementById('modal-body').innerHTML =
+    `<div class="detail-grid">${grid}</div>` +
+    (actions.length ? `<div class="modal-actions">${actions.join('')}</div>` : '');
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal-overlay')) {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+}
+
+// Close modal on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+async function fileAction(action, id) {
+  const endpoints = {
+    queue:   ['/api/v1/remote-files/' + id + '/queue', 'POST'],
+    ignore:  ['/api/v1/remote-files/' + id + '/ignore', 'POST'],
+    restore: ['/api/v1/remote-files/' + id + '/restore', 'POST'],
+    cancel:  ['/api/v1/jobs/' + id + '/cancel', 'POST'],
+    retry:   ['/api/v1/jobs/' + id + '/retry', 'POST'],
+  };
+  const [url, method] = endpoints[action] || [];
+  if (!url) return;
+  try {
+    const res = await fetch(url, { method });
+    const json = await res.json();
+    if (json.success) {
+      document.getElementById('modal-overlay').classList.remove('open');
+      showToast(json.message || 'Done');
+      await fetchTree();
+    } else {
+      showToast(json.error || 'Error', true);
+    }
+  } catch {
+    showToast('Network error', true);
+  }
+}
+
+// ---- Footer update ----
+function updateFooter(stats) {
+  document.getElementById('ft-files').textContent = stats ? stats.totalFiles : '—';
+  document.getElementById('ft-size').textContent = stats ? fmtSize(stats.totalBytes) : '—';
+  document.getElementById('ft-done').textContent = stats ? stats.totalDone : '—';
+  const activeWrap = document.getElementById('ft-active-wrap');
+  if (stats && stats.totalDownloading > 0) {
+    activeWrap.style.display = '';
+    document.getElementById('ft-active').textContent = stats.totalDownloading;
+  } else {
+    activeWrap.style.display = 'none';
+  }
+}
+
+// ---- Last scanned ----
+function updateLastScanned(isoDate) {
+  const el = document.getElementById('last-scanned');
+  if (!isoDate) { el.textContent = '—'; return; }
+  const d = new Date(isoDate);
+  el.textContent = 'Scanned ' + fmtRelative(d);
+}
+
+// ---- Theme ----
+function loadTheme() {
+  if (localStorage.getItem('grabarr-theme') === 'light') {
+    document.body.classList.add('light');
+    document.getElementById('theme-toggle').textContent = '☀️';
+  }
+}
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('grabarr-theme', isLight ? 'light' : 'dark');
+  document.getElementById('theme-toggle').textContent = isLight ? '☀️' : '🌙';
+}
+
+// ---- Toast ----
+let toastTimer;
+function showToast(msg, isError) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+}
+
+// ---- Formatters ----
+function fmtSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0) + ' ' + units[i];
+}
+
+function fmtSpeed(bps) {
+  return fmtSize(bps) + '/s';
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString();
+}
+
+function fmtRelative(d) {
+  const secs = Math.floor((Date.now() - d) / 1000);
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+  if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+  return Math.floor(secs / 86400) + 'd ago';
+}
+
+function fmtETA(isoOrMs) {
+  const d = new Date(isoOrMs);
+  const secs = Math.floor((d - Date.now()) / 1000);
+  if (secs <= 0) return null;
+  if (secs < 60) return secs + 's';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm';
+  return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

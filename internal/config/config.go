@@ -36,6 +36,7 @@ type SyncConfig struct {
 }
 
 type WatchedPath struct {
+	Name            string   `yaml:"name"` // optional display name for the UI
 	RemotePath      string   `yaml:"remote_path"`
 	LocalPath       string   `yaml:"local_path"`
 	Extensions      []string `yaml:"extensions"`

@@ -63,6 +63,8 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 
 	// Remote files (seedbox scanner) endpoints
 	api.HandleFunc("/remote-files", h.ListRemoteFiles).Methods("GET")
+	api.HandleFunc("/remote-files/tree", h.GetRemoteFileTree).Methods("GET")
+	api.HandleFunc("/remote-files/queue-folder", h.QueueFolder).Methods("POST")
 	api.HandleFunc("/remote-files/{id:[0-9]+}/queue", h.QueueRemoteFile).Methods("POST")
 	api.HandleFunc("/remote-files/{id:[0-9]+}/ignore", h.IgnoreRemoteFile).Methods("POST")
 	api.HandleFunc("/remote-files/{id:[0-9]+}/restore", h.RestoreRemoteFile).Methods("POST")

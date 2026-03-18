@@ -275,6 +275,33 @@ func (r *Repository) GetStaleRemoteFilesWithJobs(watchedPath string, seenBefore 
 	return files, rows.Err()
 }
 
+// GetRemoteFilesByPathPrefix returns all on_seedbox files whose remote_path starts with
+// watchedRoot+pathPrefix. Used by the folder queue-all action.
+func (r *Repository) GetRemoteFilesByPathPrefix(watchedRoot, pathPrefix string) ([]*models.RemoteFile, error) {
+	prefix := watchedRoot + strings.TrimPrefix(pathPrefix, "/")
+	query := `
+		SELECT id, remote_path, name, size, extension, status, job_id, watched_path,
+		       first_seen_at, last_seen_at, updated_at
+		FROM remote_files
+		WHERE remote_path LIKE ? AND status = ?
+	`
+	rows, err := r.db.Query(query, prefix+"%", string(models.FileStatusOnSeedbox))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query remote files by path prefix: %w", err)
+	}
+	defer rows.Close()
+
+	var files []*models.RemoteFile
+	for rows.Next() {
+		f, err := scanRemoteFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
 // DeleteStaleRemoteFiles removes remote files whose last_seen_at is before the given cutoff time.
 // This is used to clean up files that were not seen during the most recent scan.
 func (r *Repository) DeleteStaleRemoteFiles(watchedPath string, seenAfter time.Time) error {
