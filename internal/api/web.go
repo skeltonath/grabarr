@@ -24,7 +24,8 @@ func (h *Handlers) registerWebRoutes(r *mux.Router) {
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir(webDir)))
 	r.PathPrefix("/static/").Handler(staticHandler)
 
-	// Serve main dashboard at /dashboard
+	// Serve main dashboard
+	r.HandleFunc("/", h.serveDashboard).Methods("GET")
 	r.HandleFunc("/dashboard", h.serveDashboard).Methods("GET")
 	r.HandleFunc("/ui", h.serveDashboard).Methods("GET")
 }

@@ -18,6 +18,7 @@ import (
 	"grabarr/internal/queue"
 	"grabarr/internal/rclone"
 	"grabarr/internal/repository"
+	internalsync "grabarr/internal/sync"
 
 	"github.com/gorilla/mux"
 )
@@ -103,11 +104,15 @@ func run() error {
 		}
 	}
 
+	// Initialize and start the sync scanner
+	scanner := internalsync.New(cfg, repo, jobQueue)
+	scanner.Start(ctx)
+
 	// Setup HTTP server
 	router := mux.NewRouter()
 
 	// Setup API handlers
-	handlers := api.NewHandlers(jobQueue, gk, cfg)
+	handlers := api.NewHandlers(jobQueue, gk, cfg, repo, scanner)
 	handlers.RegisterRoutes(router)
 
 	// Log registered routes for debugging

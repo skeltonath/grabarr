@@ -9,11 +9,25 @@ class GrabarrDashboard {
         this.currentSearch = '';
         this.expandedGroups = new Set(); // Track which groups are expanded
 
-        // Pagination state
+        // Pagination state (Jobs tab)
         this.currentPage = 1;
         this.pageSize = 50;
         this.totalJobs = 0;
         this.totalPages = 0;
+
+        // Active tab
+        this.activeTab = 'seedbox';
+
+        // Seedbox state
+        this.seedboxFiles = [];
+        this.seedboxFilter = '';
+        this.seedboxSearch = '';
+        this.seedboxPage = 1;
+        this.seedboxPageSize = 100;
+        this.seedboxTotal = 0;
+        this.seedboxTotalPages = 0;
+        this.expandedFolders = new Set(); // all folders expanded by default on first load
+        this.firstSeedboxLoad = true;
 
         this.init();
     }
@@ -129,13 +143,62 @@ class GrabarrDashboard {
                 this.closeConfirmModal(false);
             }
         });
+
+        // Seedbox controls
+        document.getElementById('seedbox-status-filter')?.addEventListener('change', (e) => {
+            this.seedboxFilter = e.target.value;
+            this.seedboxPage = 1;
+            this.loadSeedbox();
+        });
+        document.getElementById('seedbox-search-input')?.addEventListener('input', (e) => {
+            this.seedboxSearch = e.target.value.toLowerCase();
+            this.filterAndDisplaySeedbox();
+        });
+        document.getElementById('seedbox-prev-page-btn')?.addEventListener('click', () => {
+            if (this.seedboxPage > 1) { this.seedboxPage--; this.loadSeedbox(); }
+        });
+        document.getElementById('seedbox-next-page-btn')?.addEventListener('click', () => {
+            if (this.seedboxPage < this.seedboxTotalPages) { this.seedboxPage++; this.loadSeedbox(); }
+        });
+        document.getElementById('scan-now-btn')?.addEventListener('click', () => {
+            this.triggerScan();
+        });
+
+        // Remote file modal close
+        document.getElementById('remote-file-modal-close')?.addEventListener('click', () => {
+            this.closeModal('remote-file-modal');
+        });
+        document.getElementById('remote-file-modal-close-btn')?.addEventListener('click', () => {
+            this.closeModal('remote-file-modal');
+        });
+        document.getElementById('remote-file-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'remote-file-modal') this.closeModal('remote-file-modal');
+        });
+    }
+
+    switchTab(tab) {
+        this.activeTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        document.getElementById(`tab-${tab}`)?.classList.add('active');
+        document.getElementById(`tab-content-${tab}`)?.classList.remove('hidden');
+
+        if (tab === 'seedbox') {
+            this.loadSeedbox();
+            this.loadSyncStatus();
+        }
     }
 
     startAutoRefresh() {
         this.stopAutoRefresh(); // Clear existing interval
         this.refreshInterval = setInterval(() => {
-            this.loadJobs();
-        }, 3000); // Refresh every 3 seconds
+            if (this.activeTab === 'seedbox') {
+                this.loadSeedbox();
+                this.loadSyncStatus();
+            } else {
+                this.loadJobs();
+            }
+        }, 5000); // Refresh every 5 seconds
     }
 
     stopAutoRefresh() {
@@ -148,8 +211,387 @@ class GrabarrDashboard {
     async loadDashboard() {
         await Promise.all([
             this.loadSystemStatus(),
-            this.loadJobs()
+            this.loadSeedbox(),
+            this.loadSyncStatus(),
         ]);
+    }
+
+    async loadSeedbox() {
+        try {
+            const offset = (this.seedboxPage - 1) * this.seedboxPageSize;
+            let url = `${this.apiBase}/remote-files?limit=${this.seedboxPageSize}&offset=${offset}`;
+            if (this.seedboxFilter) url += `&status=${this.seedboxFilter}`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.success) {
+                this.seedboxFiles = data.data || [];
+                if (data.pagination) {
+                    this.seedboxTotal = data.pagination.total;
+                    this.seedboxTotalPages = data.pagination.total_pages;
+                }
+                this.filterAndDisplaySeedbox();
+                this.updateSeedboxPagination();
+            }
+        } catch (error) {
+            console.error('Error loading seedbox files:', error);
+        }
+    }
+
+    async loadSyncStatus() {
+        try {
+            const response = await fetch(`${this.apiBase}/sync/status`);
+            const data = await response.json();
+            if (data.success && data.data) {
+                this.renderSyncStatus(data.data);
+            }
+        } catch (error) {
+            console.error('Error loading sync status:', error);
+        }
+    }
+
+    renderSyncStatus(status) {
+        const bar = document.getElementById('sync-status-text');
+        if (!bar) return;
+
+        if (!status.enabled) {
+            bar.textContent = 'Scanner disabled';
+            return;
+        }
+
+        let text = '';
+        if (status.scan_in_flight) {
+            text = 'Scanning...';
+        } else if (status.last_scan_at) {
+            const ago = this.timeAgo(new Date(status.last_scan_at));
+            text = `Last scan: ${ago} · ${status.files_found} files`;
+        } else {
+            text = 'No scan yet';
+        }
+        if (status.error) text += ` · Error: ${status.error}`;
+        bar.textContent = text;
+    }
+
+    filterAndDisplaySeedbox() {
+        let files = this.seedboxFiles;
+        // Status filter is applied server-side; only search is client-side
+        if (this.seedboxSearch) {
+            files = files.filter(f =>
+                f.name.toLowerCase().includes(this.seedboxSearch) ||
+                f.remote_path.toLowerCase().includes(this.seedboxSearch)
+            );
+        }
+        this.displaySeedbox(files);
+    }
+
+    // Build a two-level tree: top-level dirs → files (files at root level are ungrouped).
+    buildFileTree(files) {
+        const folders = new Map(); // dirName → { files: [{file, relPath}], totalSize }
+        const rootFiles = [];
+
+        for (const f of files) {
+            const watchedPath = f.watched_path || '';
+            const rel = f.remote_path.startsWith(watchedPath)
+                ? f.remote_path.slice(watchedPath.length)
+                : f.name;
+
+            const slashIdx = rel.indexOf('/');
+            if (slashIdx === -1) {
+                // File sits directly in the watched dir — show ungrouped
+                rootFiles.push({ file: f, relPath: rel });
+            } else {
+                const dirName = rel.slice(0, slashIdx);
+                if (!folders.has(dirName)) {
+                    folders.set(dirName, { files: [], totalSize: 0 });
+                }
+                const entry = folders.get(dirName);
+                entry.files.push({ file: f, relPath: rel.slice(slashIdx + 1) });
+                entry.totalSize += f.size || 0;
+            }
+        }
+
+        return { folders, rootFiles };
+    }
+
+    displaySeedbox(files) {
+        const tbody = document.getElementById('seedbox-tbody');
+        if (!tbody) return;
+
+        if (!files || files.length === 0) {
+            tbody.innerHTML = '<tr class="loading-row"><td colspan="4">No files found</td></tr>';
+            return;
+        }
+
+        // On first load, expand all folders automatically
+        if (this.firstSeedboxLoad) {
+            const { folders } = this.buildFileTree(files);
+            for (const dirName of folders.keys()) {
+                this.expandedFolders.add(dirName);
+            }
+            this.firstSeedboxLoad = false;
+        }
+
+        const { folders, rootFiles } = this.buildFileTree(files);
+
+        let html = '';
+
+        for (const [dirName, { files: dirFiles, totalSize }] of folders) {
+            const isExpanded = this.expandedFolders.has(dirName);
+            html += this.renderFolderRow(dirName, dirFiles, totalSize, isExpanded);
+            if (isExpanded) {
+                for (const { file, relPath } of dirFiles) {
+                    html += this.renderSeedboxRow(file, relPath, true);
+                }
+            }
+        }
+
+        for (const { file, relPath } of rootFiles) {
+            html += this.renderSeedboxRow(file, relPath, false);
+        }
+
+        tbody.innerHTML = html;
+    }
+
+    renderFolderRow(dirName, dirFiles, totalSize, isExpanded) {
+        const icon = isExpanded ? '▼' : '▶';
+        const size = this.formatBytes(totalSize);
+        const fileCount = dirFiles.length;
+
+        // Aggregate status summary
+        const statusCounts = {};
+        for (const { file } of dirFiles) {
+            statusCounts[file.status] = (statusCounts[file.status] || 0) + 1;
+        }
+        const statusSummary = Object.entries(statusCounts)
+            .map(([s, n]) => `<span class="status-badge seedbox-status-${s}">${n} ${s.replace('_', ' ')}</span>`)
+            .join(' ');
+
+        // "Download Folder" queues all on_seedbox files in this dir
+        const queueableIds = dirFiles
+            .filter(({ file }) => file.status === 'on_seedbox')
+            .map(({ file }) => file.id);
+        const dlBtn = queueableIds.length > 0
+            ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); dashboard.downloadFolder(${JSON.stringify(queueableIds)})">Download All (${queueableIds.length})</button>`
+            : '';
+
+        return `
+            <tr class="group-header-row" onclick="dashboard.toggleFolder(${JSON.stringify(dirName)})">
+                <td colspan="4">
+                    <div class="group-header">
+                        <span class="group-expand-icon">${icon}</span>
+                        <span class="group-path">${this.escapeHtml(dirName)}</span>
+                        <span class="group-count">${fileCount} file${fileCount !== 1 ? 's' : ''} · ${size}</span>
+                        <span class="folder-status-summary">${statusSummary}</span>
+                        <span class="folder-actions" onclick="event.stopPropagation()">${dlBtn}</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    toggleFolder(dirName) {
+        if (this.expandedFolders.has(dirName)) {
+            this.expandedFolders.delete(dirName);
+        } else {
+            this.expandedFolders.add(dirName);
+        }
+        this.filterAndDisplaySeedbox();
+    }
+
+    async downloadFolder(ids) {
+        if (!ids || ids.length === 0) return;
+        this.showLoading(true);
+        try {
+            let queued = 0;
+            for (const id of ids) {
+                const response = await fetch(`${this.apiBase}/remote-files/${id}/queue`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) queued++;
+            }
+            this.showToast(`${queued} download${queued !== 1 ? 's' : ''} queued`, 'success');
+            this.loadSeedbox();
+        } catch (error) {
+            this.showError('Failed to queue folder downloads');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    renderSeedboxRow(f, relPath, isGrouped) {
+        const statusBadge = `<span class="status-badge seedbox-status-${f.status}">${f.status.replace('_', ' ')}</span>`;
+        const size = this.formatBytes(f.size || 0);
+        const rowClass = isGrouped ? 'grouped-job-row' : '';
+        const displayName = relPath || f.name;
+
+        let actions = '';
+        switch (f.status) {
+            case 'on_seedbox':
+                actions = `
+                    <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); dashboard.queueRemoteFile(${f.id})">Download</button>
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); dashboard.ignoreRemoteFile(${f.id})">Ignore</button>
+                `;
+                break;
+            case 'queued':
+            case 'downloading':
+                actions = `<span class="muted-text">In progress</span>`;
+                break;
+            case 'downloaded':
+                actions = `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); dashboard.redownloadRemoteFile(${f.id})">Re-download</button>`;
+                break;
+            case 'ignored':
+                actions = `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); dashboard.restoreRemoteFile(${f.id})">Restore</button>`;
+                break;
+        }
+
+        return `
+            <tr class="${rowClass}" onclick="dashboard.showRemoteFileDetails(${f.id})" data-file-id="${f.id}">
+                <td><div class="job-name" title="${this.escapeHtml(f.remote_path)}">${this.escapeHtml(displayName)}</div></td>
+                <td>${size}</td>
+                <td>${statusBadge}</td>
+                <td onclick="event.stopPropagation()">${actions}</td>
+            </tr>
+        `;
+    }
+
+    updateSeedboxPagination() {
+        const prevBtn = document.getElementById('seedbox-prev-page-btn');
+        const nextBtn = document.getElementById('seedbox-next-page-btn');
+        const pageInfo = document.getElementById('seedbox-page-info');
+        if (prevBtn && nextBtn && pageInfo) {
+            prevBtn.disabled = this.seedboxPage <= 1;
+            nextBtn.disabled = this.seedboxPage >= this.seedboxTotalPages;
+            pageInfo.textContent = `Page ${this.seedboxPage} of ${this.seedboxTotalPages} (${this.seedboxTotal} files)`;
+        }
+    }
+
+    async triggerScan() {
+        const btn = document.getElementById('scan-now-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Scanning...'; }
+        try {
+            const response = await fetch(`${this.apiBase}/sync/scan`, { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                this.showToast('Scan started', 'success');
+                setTimeout(() => { this.loadSeedbox(); this.loadSyncStatus(); }, 2000);
+            } else {
+                this.showError(data.error || 'Scan failed');
+            }
+        } catch (error) {
+            this.showError('Failed to trigger scan');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Scan Now'; }
+        }
+    }
+
+    async queueRemoteFile(id) {
+        try {
+            this.showLoading(true);
+            const response = await fetch(`${this.apiBase}/remote-files/${id}/queue`, { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                this.showToast('Download queued', 'success');
+                this.loadSeedbox();
+            } else {
+                this.showError(data.error || 'Failed to queue download');
+            }
+        } catch (error) {
+            this.showError('Failed to queue download');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    async ignoreRemoteFile(id) {
+        try {
+            const response = await fetch(`${this.apiBase}/remote-files/${id}/ignore`, { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                this.loadSeedbox();
+            } else {
+                this.showError(data.error || 'Failed to ignore file');
+            }
+        } catch (error) {
+            this.showError('Failed to ignore file');
+        }
+    }
+
+    async restoreRemoteFile(id) {
+        try {
+            const response = await fetch(`${this.apiBase}/remote-files/${id}/restore`, { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                this.loadSeedbox();
+            } else {
+                this.showError(data.error || 'Failed to restore file');
+            }
+        } catch (error) {
+            this.showError('Failed to restore file');
+        }
+    }
+
+    async redownloadRemoteFile(id) {
+        try {
+            await fetch(`${this.apiBase}/remote-files/${id}/restore`, { method: 'POST' });
+            const response = await fetch(`${this.apiBase}/remote-files/${id}/queue`, { method: 'POST' });
+            const data = await response.json();
+            if (data.success) {
+                this.showToast('Re-download queued', 'success');
+                this.loadSeedbox();
+            } else {
+                this.showError(data.error || 'Failed to re-download');
+            }
+        } catch (error) {
+            this.showError('Failed to re-download');
+        }
+    }
+
+    showRemoteFileDetails(id) {
+        const f = this.seedboxFiles.find(f => f.id === id);
+        if (!f) return;
+
+        document.getElementById('remote-file-modal-title').textContent = f.name;
+        document.getElementById('remote-file-modal-body').innerHTML = `
+            <div class="job-detail">
+                <div class="detail-group">
+                    <div class="detail-label">Remote Path:</div>
+                    <div class="detail-value">${this.escapeHtml(f.remote_path)}</div>
+                </div>
+                <div class="detail-group">
+                    <div class="detail-label">Size:</div>
+                    <div class="detail-value">${this.formatBytes(f.size || 0)}</div>
+                </div>
+                <div class="detail-group">
+                    <div class="detail-label">Extension:</div>
+                    <div class="detail-value">${this.escapeHtml(f.extension || '-')}</div>
+                </div>
+                <div class="detail-group">
+                    <div class="detail-label">Status:</div>
+                    <div class="detail-value"><span class="status-badge seedbox-status-${f.status}">${f.status.replace('_', ' ')}</span></div>
+                </div>
+                <div class="detail-group">
+                    <div class="detail-label">Watched Path:</div>
+                    <div class="detail-value">${this.escapeHtml(f.watched_path || '-')}</div>
+                </div>
+                ${f.job_id ? `<div class="detail-group"><div class="detail-label">Linked Job:</div><div class="detail-value">#${f.job_id}</div></div>` : ''}
+                <div class="detail-group">
+                    <div class="detail-label">First Seen:</div>
+                    <div class="detail-value">${this.formatDateTime(f.first_seen_at)}</div>
+                </div>
+                <div class="detail-group">
+                    <div class="detail-label">Last Seen:</div>
+                    <div class="detail-value">${this.formatDateTime(f.last_seen_at)}</div>
+                </div>
+            </div>
+        `;
+        this.openModal('remote-file-modal');
+    }
+
+    timeAgo(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        if (seconds < 60) return `${seconds}s ago`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        return `${Math.floor(seconds / 3600)}h ago`;
     }
 
     async loadSystemStatus() {

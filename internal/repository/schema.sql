@@ -69,6 +69,33 @@ BEGIN
     UPDATE system_config SET updated_at = CURRENT_TIMESTAMP WHERE key = NEW.key;
 END;
 
+-- Remote files table (files discovered on seedbox via periodic scanning)
+CREATE TABLE IF NOT EXISTS remote_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    remote_path TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    extension TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'on_seedbox',
+    job_id INTEGER,
+    watched_path TEXT NOT NULL DEFAULT '',
+    first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_remote_files_status ON remote_files(status);
+CREATE INDEX IF NOT EXISTS idx_remote_files_watched_path ON remote_files(watched_path);
+CREATE INDEX IF NOT EXISTS idx_remote_files_job_id ON remote_files(job_id);
+
+CREATE TRIGGER IF NOT EXISTS remote_files_updated_at
+    AFTER UPDATE ON remote_files
+    FOR EACH ROW
+BEGIN
+    UPDATE remote_files SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
 -- Initial system configuration values
 INSERT OR IGNORE INTO system_config (key, value, description) VALUES
     ('schema_version', '1', 'Database schema version'),

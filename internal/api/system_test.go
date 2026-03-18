@@ -34,7 +34,7 @@ func TestHealthCheck_WithGatekeeper(t *testing.T) {
 		Return(resourceStatus).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/health", nil)
 	rec := httptest.NewRecorder()
@@ -63,7 +63,7 @@ func TestHealthCheck_WithoutGatekeeper(t *testing.T) {
 	mockQueue := mocks.NewMockJobQueue(t)
 	cfg := &config.Config{}
 
-	handlers := NewHandlers(mockQueue, nil, cfg)
+	handlers := NewHandlers(mockQueue, nil, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/health", nil)
 	rec := httptest.NewRecorder()
@@ -115,7 +115,7 @@ func TestGetMetrics_Success(t *testing.T) {
 		Return(summary, nil).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -156,7 +156,7 @@ func TestGetMetrics_JobSummaryError(t *testing.T) {
 		Return(nil, errors.New("database error")).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -207,7 +207,7 @@ func TestGetStatus_Full(t *testing.T) {
 		Return(resourceStatus).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rec := httptest.NewRecorder()
@@ -246,7 +246,7 @@ func TestGetStatus_WithoutMonitor(t *testing.T) {
 		Return(summary, nil).
 		Once()
 
-	handlers := NewHandlers(mockQueue, nil, cfg)
+	handlers := NewHandlers(mockQueue, nil, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rec := httptest.NewRecorder()
@@ -289,7 +289,7 @@ func TestGetStatus_JobSummaryError(t *testing.T) {
 		Return(resourceStatus).
 		Once()
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rec := httptest.NewRecorder()

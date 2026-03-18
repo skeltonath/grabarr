@@ -7,14 +7,17 @@ import (
 
 	"grabarr/internal/config"
 	"grabarr/internal/interfaces"
+	"grabarr/internal/sync"
 
 	"github.com/gorilla/mux"
 )
 
 type Handlers struct {
-	queue      interfaces.JobQueue
-	gatekeeper interfaces.Gatekeeper
-	config     *config.Config
+	queue          interfaces.JobQueue
+	gatekeeper     interfaces.Gatekeeper
+	config         *config.Config
+	remoteFileRepo RemoteFileRepo
+	scanner        *sync.Scanner
 }
 
 type APIResponse struct {
@@ -33,11 +36,13 @@ type PaginationMeta struct {
 	Page       int `json:"page"`
 }
 
-func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper, cfg *config.Config) *Handlers {
+func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper, cfg *config.Config, remoteFileRepo RemoteFileRepo, scanner *sync.Scanner) *Handlers {
 	return &Handlers{
-		queue:      jobQueue,
-		gatekeeper: gatekeeper,
-		config:     cfg,
+		queue:          jobQueue,
+		gatekeeper:     gatekeeper,
+		config:         cfg,
+		remoteFileRepo: remoteFileRepo,
+		scanner:        scanner,
 	}
 }
 
@@ -55,6 +60,14 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/jobs/{id:[0-9]+}/cancel", h.CancelJob).Methods("POST")
 	api.HandleFunc("/jobs/{id:[0-9]+}/retry", h.RetryJob).Methods("POST")
 	api.HandleFunc("/jobs/summary", h.GetJobSummary).Methods("GET")
+
+	// Remote files (seedbox scanner) endpoints
+	api.HandleFunc("/remote-files", h.ListRemoteFiles).Methods("GET")
+	api.HandleFunc("/remote-files/{id:[0-9]+}/queue", h.QueueRemoteFile).Methods("POST")
+	api.HandleFunc("/remote-files/{id:[0-9]+}/ignore", h.IgnoreRemoteFile).Methods("POST")
+	api.HandleFunc("/remote-files/{id:[0-9]+}/restore", h.RestoreRemoteFile).Methods("POST")
+	api.HandleFunc("/sync/scan", h.TriggerScan).Methods("POST")
+	api.HandleFunc("/sync/status", h.GetSyncStatus).Methods("GET")
 
 	// System endpoints
 	api.HandleFunc("/health", h.HealthCheck).Methods("GET")

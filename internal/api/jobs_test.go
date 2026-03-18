@@ -43,7 +43,7 @@ func TestCreateJob_Success(t *testing.T) {
 			LocalPath: "/downloads/",
 		},
 	}
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"name":"test-job","remote_path":"/remote/path","local_path":"test-file.mkv"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -70,7 +70,7 @@ func TestCreateJob_MissingName(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"remote_path":"/remote/path"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -92,7 +92,7 @@ func TestCreateJob_MissingRemotePath(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"name":"test-job","local_path":"test.mkv"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -114,7 +114,7 @@ func TestCreateJob_MissingLocalPath(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"name":"test-job","remote_path":"/remote/path"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -136,7 +136,7 @@ func TestCreateJob_LocalPathEscapeAttempt(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"name":"test-job","remote_path":"/remote/path","local_path":"../../../etc/passwd"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -158,7 +158,7 @@ func TestCreateJob_LocalPathAbsolute(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"name":"test-job","remote_path":"/remote/path","local_path":"/absolute/path"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -180,7 +180,7 @@ func TestCreateJob_InvalidJSON(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{invalid json`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -206,7 +206,7 @@ func TestCreateJob_CategoryNotAllowed(t *testing.T) {
 	}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"name":"test","remote_path":"/path","local_path":"test.mkv","metadata":{"category":"music"}}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -233,7 +233,7 @@ func TestCreateJob_EnqueueError(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	reqBody := `{"name":"test","remote_path":"/path","local_path":"test.mkv"}`
 	req := httptest.NewRequest("POST", "/api/v1/jobs", strings.NewReader(reqBody))
@@ -273,7 +273,7 @@ func TestGetJobs_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs", nil)
 	rec := httptest.NewRecorder()
@@ -309,7 +309,7 @@ func TestGetJobs_WithFilters(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs?status=queued&category=movies&limit=10", nil)
 	rec := httptest.NewRecorder()
@@ -337,7 +337,7 @@ func TestGetJobs_WithPagination(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs?limit=25&offset=50", nil)
 	rec := httptest.NewRecorder()
@@ -358,7 +358,7 @@ func TestGetJobs_Error(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs", nil)
 	rec := httptest.NewRecorder()
@@ -389,7 +389,7 @@ func TestGetJob_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/123", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "123"})
@@ -410,7 +410,7 @@ func TestGetJob_InvalidID(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/invalid", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
@@ -438,7 +438,7 @@ func TestGetJob_NotFound(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/999", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "999"})
@@ -460,7 +460,7 @@ func TestDeleteJob_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/jobs/123", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "123"})
@@ -488,7 +488,7 @@ func TestCancelJob_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/cancel", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "123"})
@@ -516,7 +516,7 @@ func TestCancelJob_Error(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/cancel", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "123"})
@@ -538,7 +538,7 @@ func TestRetryJob_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "123"})
@@ -560,7 +560,7 @@ func TestRetryJob_InvalidJobID(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/invalid/retry", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
@@ -582,7 +582,7 @@ func TestRetryJob_NotFailed(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "123"})
@@ -613,7 +613,7 @@ func TestGetJobSummary_Success(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/summary", nil)
 	rec := httptest.NewRecorder()
@@ -644,7 +644,7 @@ func TestGetJobSummary_Error(t *testing.T) {
 	cfg := &config.Config{}
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	mockGatekeeper.EXPECT().CanStartJob(mock.AnythingOfType("int64")).Return(interfaces.GateDecision{Allowed: true}).Maybe()
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/summary", nil)
 	rec := httptest.NewRecorder()

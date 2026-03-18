@@ -23,9 +23,25 @@ type Config struct {
 	Database      DatabaseConfig      `yaml:"database"`
 	Notifications NotificationsConfig `yaml:"notifications"`
 	Logging       LoggingConfig       `yaml:"logging"`
+	Sync          SyncConfig          `yaml:"sync"`
 
 	mu       sync.RWMutex
 	watchers []chan<- struct{}
+}
+
+type SyncConfig struct {
+	Enabled      bool          `yaml:"enabled"`
+	ScanInterval time.Duration `yaml:"scan_interval"`
+	WatchedPaths []WatchedPath `yaml:"watched_paths"`
+}
+
+type WatchedPath struct {
+	RemotePath      string   `yaml:"remote_path"`
+	LocalPath       string   `yaml:"local_path"`
+	Extensions      []string `yaml:"extensions"`
+	ExcludePatterns []string `yaml:"exclude_patterns"` // regex patterns applied to filename
+	AutoDownload    bool     `yaml:"auto_download"`
+	Recursive       bool     `yaml:"recursive"`
 }
 
 type ServerConfig struct {
@@ -266,6 +282,7 @@ func (c *Config) reload(configPath string) error {
 	c.Database = newConfig.Database
 	c.Notifications = newConfig.Notifications
 	c.Logging = newConfig.Logging
+	c.Sync = newConfig.Sync
 
 	slog.Info("configuration reloaded successfully")
 	return nil
@@ -344,4 +361,11 @@ func (c *Config) GetLogging() LoggingConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Logging
+}
+
+// GetSync returns a copy of the sync configuration
+func (c *Config) GetSync() SyncConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Sync
 }

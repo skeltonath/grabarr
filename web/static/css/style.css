@@ -759,3 +759,142 @@ body {
     font-size: 1rem;
     line-height: 1.6;
 }
+/* ==============================
+   Tab Navigation
+   ============================== */
+.tab-nav {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.tab-btn {
+    padding: 0.6rem 1.5rem;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+}
+
+.tab-btn.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+.tab-content.hidden {
+    display: none;
+}
+
+/* ==============================
+   Sync Status Bar
+   ============================== */
+.sync-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    flex: 1;
+}
+
+/* ==============================
+   Seedbox File Status Badges
+   ============================== */
+.seedbox-status-on_seedbox {
+    background-color: #e2e8f0;
+    color: #475569;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.seedbox-status-queued {
+    background-color: #dbeafe;
+    color: #1d4ed8;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.seedbox-status-downloading {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.seedbox-status-downloaded {
+    background-color: #dcfce7;
+    color: #15803d;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.seedbox-status-ignored {
+    background-color: var(--bg-secondary);
+    color: var(--text-muted);
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.muted-text {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+[data-theme="dark"] .seedbox-status-on_seedbox {
+    background-color: #374151;
+    color: #9ca3af;
+}
+
+[data-theme="dark"] .seedbox-status-queued {
+    background-color: #1e3a5f;
+    color: #93c5fd;
+}
+
+[data-theme="dark"] .seedbox-status-downloading {
+    background-color: #451a03;
+    color: #fcd34d;
+}
+
+[data-theme="dark"] .seedbox-status-downloaded {
+    background-color: #14532d;
+    color: #86efac;
+}
+
+/* Folder row extras */
+.folder-status-summary {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    margin-left: 0.5rem;
+}
+
+.folder-actions {
+    margin-left: auto;
+    flex-shrink: 0;
+}

@@ -18,7 +18,7 @@ func setupTestHandlers(t *testing.T) (*Handlers, *mocks.MockJobQueue, *mocks.Moc
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	cfg := &config.Config{}
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 	return handlers, mockQueue, mockGatekeeper
 }
 
@@ -27,7 +27,7 @@ func TestNewHandlers(t *testing.T) {
 	mockGatekeeper := mocks.NewMockGatekeeper(t)
 	cfg := &config.Config{}
 
-	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg)
+	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	assert.NotNil(t, handlers)
 	assert.Equal(t, mockQueue, handlers.queue)

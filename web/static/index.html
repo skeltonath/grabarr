@@ -40,56 +40,127 @@
 
     <main class="main">
         <div class="container">
-            <!-- Jobs Section -->
-            <h2 class="section-title">Download Jobs</h2>
-            <div class="card jobs-card">
-                <div class="card-header">
-                    <h2>Jobs</h2>
-                    <div class="controls">
-                        <select id="status-filter" class="filter-select">
-                            <option value="">All Jobs</option>
-                            <option value="queued">Queued</option>
-                            <option value="running">Running</option>
-                            <option value="completed">Completed</option>
-                            <option value="failed">Failed</option>
-                            <option value="cancelled">Cancelled</option>
-                        </select>
-                        <div class="search-box">
-                            <input type="text" id="search-input" placeholder="Search jobs..." class="search-input">
+            <!-- Tab Navigation -->
+            <div class="tab-nav">
+                <button class="tab-btn active" id="tab-seedbox" onclick="dashboard.switchTab('seedbox')">Seedbox</button>
+                <button class="tab-btn" id="tab-jobs" onclick="dashboard.switchTab('jobs')">Jobs</button>
+            </div>
+
+            <!-- Seedbox Tab -->
+            <div class="tab-content" id="tab-content-seedbox">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="sync-status-bar" id="sync-status-bar">
+                            <span id="sync-status-text">Loading scan status...</span>
+                            <button class="btn btn-sm btn-secondary" id="scan-now-btn">Scan Now</button>
+                        </div>
+                        <div class="controls">
+                            <select id="seedbox-status-filter" class="filter-select">
+                                <option value="">All Files</option>
+                                <option value="on_seedbox">On Seedbox</option>
+                                <option value="queued">Queued</option>
+                                <option value="downloading">Downloading</option>
+                                <option value="downloaded">Downloaded</option>
+                                <option value="ignored">Ignored</option>
+                            </select>
+                            <div class="search-box">
+                                <input type="text" id="seedbox-search-input" placeholder="Search files..." class="search-input">
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="table-container">
-                    <table class="jobs-table" id="jobs-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>Status</th>
-                                <th>Progress</th>
-                                <th>Speed</th>
-                                <th>ETA</th>
-                                <th>Created</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="jobs-tbody">
-                            <tr class="loading-row">
-                                <td colspan="8">Loading jobs...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                    <div class="table-container">
+                        <table class="jobs-table" id="seedbox-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Size</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="seedbox-tbody">
+                                <tr class="loading-row">
+                                    <td colspan="4">Loading seedbox files...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
 
-                <div class="pagination-container">
-                    <button class="btn btn-secondary" id="prev-page-btn">Previous</button>
-                    <span class="page-info" id="page-info">Page 1 of 1</span>
-                    <button class="btn btn-secondary" id="next-page-btn">Next</button>
+                    <div class="pagination-container">
+                        <button class="btn btn-secondary" id="seedbox-prev-page-btn">Previous</button>
+                        <span class="page-info" id="seedbox-page-info">Page 1 of 1</span>
+                        <button class="btn btn-secondary" id="seedbox-next-page-btn">Next</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Jobs Tab -->
+            <div class="tab-content hidden" id="tab-content-jobs">
+                <div class="card jobs-card">
+                    <div class="card-header">
+                        <h2>Jobs</h2>
+                        <div class="controls">
+                            <select id="status-filter" class="filter-select">
+                                <option value="">All Jobs</option>
+                                <option value="queued">Queued</option>
+                                <option value="running">Running</option>
+                                <option value="completed">Completed</option>
+                                <option value="failed">Failed</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                            <div class="search-box">
+                                <input type="text" id="search-input" placeholder="Search jobs..." class="search-input">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="jobs-table" id="jobs-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Status</th>
+                                    <th>Progress</th>
+                                    <th>Speed</th>
+                                    <th>ETA</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobs-tbody">
+                                <tr class="loading-row">
+                                    <td colspan="8">Loading jobs...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="pagination-container">
+                        <button class="btn btn-secondary" id="prev-page-btn">Previous</button>
+                        <span class="page-info" id="page-info">Page 1 of 1</span>
+                        <button class="btn btn-secondary" id="next-page-btn">Next</button>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
+
+    <!-- Remote File Detail Modal -->
+    <div class="modal" id="remote-file-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="remote-file-modal-title">File Details</h3>
+                <button class="modal-close" id="remote-file-modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="remote-file-modal-body">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="remote-file-modal-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Job Detail Modal -->
     <div class="modal" id="job-modal">
