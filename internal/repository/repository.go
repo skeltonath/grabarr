@@ -207,7 +207,7 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	if filter.SortOrder != "" {
 		sortOrder = filter.SortOrder
 	}
-	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortOrder)
+	query += fmt.Sprintf(" ORDER BY %s %s, id ASC", sortBy, sortOrder)
 
 	// Pagination
 	if filter.Limit > 0 {
