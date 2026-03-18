@@ -247,6 +247,34 @@ func (r *Repository) GetRemoteFilesLinkedToJobs() ([]*models.RemoteFile, error) 
 	return files, rows.Err()
 }
 
+// GetStaleRemoteFilesWithJobs returns remote files for a watched path that were not seen
+// since seenBefore and have a linked job. Used to cancel jobs before stale cleanup.
+func (r *Repository) GetStaleRemoteFilesWithJobs(watchedPath string, seenBefore time.Time) ([]*models.RemoteFile, error) {
+	query := `
+		SELECT id, remote_path, name, size, extension, status, job_id, watched_path,
+		       first_seen_at, last_seen_at, updated_at
+		FROM remote_files
+		WHERE watched_path = ? AND last_seen_at < ? AND job_id IS NOT NULL
+	`
+
+	rows, err := r.db.Query(query, watchedPath, seenBefore)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query stale remote files with jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var files []*models.RemoteFile
+	for rows.Next() {
+		f, err := scanRemoteFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+
+	return files, rows.Err()
+}
+
 // DeleteStaleRemoteFiles removes remote files whose last_seen_at is before the given cutoff time.
 // This is used to clean up files that were not seen during the most recent scan.
 func (r *Repository) DeleteStaleRemoteFiles(watchedPath string, seenAfter time.Time) error {

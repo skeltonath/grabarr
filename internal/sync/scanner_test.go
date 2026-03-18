@@ -5,11 +5,40 @@ import (
 	"testing"
 	"time"
 
+	"grabarr/internal/interfaces"
+	"grabarr/internal/mocks"
 	"grabarr/internal/models"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+// stubScannerRepo is a minimal in-memory ScannerRepo for unit tests.
+type stubScannerRepo struct {
+	staleWithJobs []*models.RemoteFile
+	staleErr      error
+}
+
+func (s *stubScannerRepo) UpsertRemoteFile(_ *models.RemoteFile) error { return nil }
+func (s *stubScannerRepo) GetRemoteFilesLinkedToJobs() ([]*models.RemoteFile, error) {
+	return nil, nil
+}
+func (s *stubScannerRepo) GetRemoteFileByPath(_ string) (*models.RemoteFile, error)  { return nil, nil }
+func (s *stubScannerRepo) UpdateRemoteFileStatus(_ int64, _ models.FileStatus) error { return nil }
+func (s *stubScannerRepo) LinkRemoteFileToJob(_ int64, _ int64, _ models.FileStatus) error {
+	return nil
+}
+func (s *stubScannerRepo) GetStaleRemoteFilesWithJobs(_ string, _ time.Time) ([]*models.RemoteFile, error) {
+	return s.staleWithJobs, s.staleErr
+}
+func (s *stubScannerRepo) DeleteStaleRemoteFiles(_ string, _ time.Time) error { return nil }
+
+// compile-time check that stubScannerRepo satisfies ScannerRepo
+var _ ScannerRepo = (*stubScannerRepo)(nil)
+
+// compile-time check that mocks.MockJobQueue satisfies interfaces.JobQueue
+var _ interfaces.JobQueue = (*mocks.MockJobQueue)(nil)
 
 func TestParseSSHFindOutput(t *testing.T) {
 	tests := []struct {
@@ -171,4 +200,51 @@ func TestParseSSHFindOutput_LastSeenAt(t *testing.T) {
 	require.Len(t, files, 1)
 	assert.True(t, files[0].LastSeenAt.After(before) || files[0].LastSeenAt.Equal(before))
 	assert.True(t, files[0].LastSeenAt.Before(after) || files[0].LastSeenAt.Equal(after))
+}
+
+func TestCancelJobsForStaleFiles(t *testing.T) {
+	jobID := int64(42)
+
+	t.Run("queued job is cancelled", func(t *testing.T) {
+		rf := &models.RemoteFile{
+			ID:         1,
+			RemotePath: "/seedbox/movie.mkv",
+			JobID:      &jobID,
+		}
+		repo := &stubScannerRepo{staleWithJobs: []*models.RemoteFile{rf}}
+		q := mocks.NewMockJobQueue(t)
+		q.On("GetJob", jobID).Return(&models.Job{ID: jobID, Status: models.JobStatusQueued}, nil)
+		q.On("CancelJob", jobID).Return(nil)
+
+		s := &Scanner{repo: repo, queue: q}
+		s.cancelJobsForStaleFiles("/seedbox/", time.Now())
+
+		q.AssertCalled(t, "CancelJob", jobID)
+	})
+
+	t.Run("completed job is left alone", func(t *testing.T) {
+		rf := &models.RemoteFile{
+			ID:         2,
+			RemotePath: "/seedbox/movie.mkv",
+			JobID:      &jobID,
+		}
+		repo := &stubScannerRepo{staleWithJobs: []*models.RemoteFile{rf}}
+		q := mocks.NewMockJobQueue(t)
+		q.On("GetJob", jobID).Return(&models.Job{ID: jobID, Status: models.JobStatusCompleted}, nil)
+
+		s := &Scanner{repo: repo, queue: q}
+		s.cancelJobsForStaleFiles("/seedbox/", time.Now())
+
+		q.AssertNotCalled(t, "CancelJob", mock.Anything)
+	})
+
+	t.Run("no linked job proceeds without error", func(t *testing.T) {
+		repo := &stubScannerRepo{staleWithJobs: nil}
+		q := mocks.NewMockJobQueue(t)
+
+		s := &Scanner{repo: repo, queue: q}
+		s.cancelJobsForStaleFiles("/seedbox/", time.Now())
+
+		q.AssertNotCalled(t, "CancelJob", mock.Anything)
+	})
 }

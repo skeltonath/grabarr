@@ -2,6 +2,7 @@ package rsync
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -14,6 +15,16 @@ import (
 
 	"grabarr/internal/models"
 )
+
+// TransferError wraps a failed rsync exit error with the captured stderr output,
+// enabling callers to classify failures based on both exit code and error message.
+type TransferError struct {
+	Err    error
+	Stderr string
+}
+
+func (e *TransferError) Error() string { return e.Err.Error() }
+func (e *TransferError) Unwrap() error { return e.Err }
 
 // Client represents an rsync client for transferring files via SSH
 type Client struct {
@@ -60,12 +71,9 @@ func (c *Client) Copy(ctx context.Context, remotePath, localPath string) (*Trans
 		return nil, fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
-	// Get stderr pipe for error messages
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to get stderr pipe: %w", err)
-	}
+	// Capture stderr into a buffer so we can inspect it for error classification
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
 
 	// Start the command
 	if err := cmd.Start(); err != nil {
@@ -81,13 +89,21 @@ func (c *Client) Copy(ctx context.Context, remotePath, localPath string) (*Trans
 	}
 
 	// Start goroutine to parse progress
-	go transfer.parseProgress(stdout, stderr)
+	go transfer.parseProgress(stdout)
 
 	// Start goroutine to wait for completion
 	go func() {
 		err := cmd.Wait()
-		transfer.doneChan <- err
 		close(transfer.progressChan)
+		if err != nil {
+			stderr := stderrBuf.String()
+			if stderr != "" {
+				slog.Warn("rsync stderr output", "stderr", stderr)
+			}
+			transfer.doneChan <- &TransferError{Err: err, Stderr: stderr}
+		} else {
+			transfer.doneChan <- nil
+		}
 		close(transfer.doneChan)
 	}()
 
@@ -110,7 +126,7 @@ func (t *Transfer) Stop() {
 }
 
 // parseProgress parses rsync progress output and sends updates to the progress channel
-func (t *Transfer) parseProgress(stdout, stderr io.Reader) {
+func (t *Transfer) parseProgress(stdout io.Reader) {
 	// Regex to parse rsync progress line
 	// Example: "  8,745,341,265  21%   10.26MB/s    0:51:13"
 	// Note: rsync uses variable whitespace (2+ spaces between fields)
@@ -197,16 +213,4 @@ func (t *Transfer) parseProgress(stdout, stderr io.Reader) {
 		}
 	}
 
-	// Read any stderr output for errors
-	stderrScanner := bufio.NewScanner(stderr)
-	var stderrLines []string
-	for stderrScanner.Scan() {
-		line := stderrScanner.Text()
-		stderrLines = append(stderrLines, line)
-	}
-
-	// Log stderr output if there were any errors
-	if len(stderrLines) > 0 {
-		slog.Warn("rsync stderr output", "stderr", strings.Join(stderrLines, "; "))
-	}
 }

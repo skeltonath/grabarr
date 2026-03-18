@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"grabarr/internal/rsync"
 )
 
 // PermanentError signals that retrying will not help — the job should fail immediately.
@@ -38,9 +40,15 @@ func classifyRsyncError(err error) error {
 		6,  // daemon unable to append to log
 		24: // source files vanished during transfer
 		return &PermanentError{Cause: err, Msg: fmt.Sprintf("rsync permanent failure (exit %d)", exitErr.ExitCode())}
+	case 23: // partial transfer — retryable unless stderr says the source doesn't exist
+		var te *rsync.TransferError
+		if errors.As(err, &te) && strings.Contains(strings.ToLower(te.Stderr), "no such file or directory") {
+			return &PermanentError{Cause: err, Msg: fmt.Sprintf("rsync permanent failure (exit %d)", exitErr.ExitCode())}
+		}
+		return err
 	default:
 		// exit 10 (socket I/O), 11 (file I/O), 12 (protocol stream),
-		// 14 (IPC crash), 20 (SIGINT), 23 (partial transfer), 255 (SSH error) → retryable
+		// 14 (IPC crash), 20 (SIGINT), 255 (SSH error) → retryable
 		return err
 	}
 }

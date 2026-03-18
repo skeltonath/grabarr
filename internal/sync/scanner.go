@@ -25,6 +25,7 @@ type ScannerRepo interface {
 	GetRemoteFileByPath(remotePath string) (*models.RemoteFile, error)
 	UpdateRemoteFileStatus(id int64, status models.FileStatus) error
 	LinkRemoteFileToJob(remoteFileID, jobID int64, status models.FileStatus) error
+	GetStaleRemoteFilesWithJobs(watchedPath string, seenBefore time.Time) ([]*models.RemoteFile, error)
 	DeleteStaleRemoteFiles(watchedPath string, seenAfter time.Time) error
 }
 
@@ -196,6 +197,9 @@ func (s *Scanner) scanPath(ctx context.Context, wp config.WatchedPath, scanStart
 		s.autoQueueNewFiles(ctx, files, wp)
 	}
 
+	// Cancel jobs for files no longer on the seedbox.
+	s.cancelJobsForStaleFiles(wp.RemotePath, scanStart)
+
 	// Stale cleanup: remove records not seen in this scan.
 	if err := s.repo.DeleteStaleRemoteFiles(wp.RemotePath, scanStart); err != nil {
 		slog.Error("failed to delete stale remote files", "watched_path", wp.RemotePath, "error", err)
@@ -340,6 +344,29 @@ func (s *Scanner) SyncJobStatuses(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// cancelJobsForStaleFiles cancels any active jobs linked to remote files that were not
+// seen during the most recent scan (last_seen_at < scanStart). This prevents infinite
+// retries for files that have been removed from the seedbox.
+func (s *Scanner) cancelJobsForStaleFiles(watchedPath string, scanStart time.Time) {
+	staleWithJobs, err := s.repo.GetStaleRemoteFilesWithJobs(watchedPath, scanStart)
+	if err != nil {
+		slog.Error("failed to get stale files with jobs", "watched_path", watchedPath, "error", err)
+		return
+	}
+
+	for _, rf := range staleWithJobs {
+		job, err := s.queue.GetJob(*rf.JobID)
+		if err != nil || job.IsCompleted() {
+			continue
+		}
+		if err := s.queue.CancelJob(*rf.JobID); err != nil {
+			slog.Error("failed to cancel job for disappeared file", "path", rf.RemotePath, "job_id", *rf.JobID, "error", err)
+		} else {
+			slog.Info("cancelled job: file no longer on seedbox", "path", rf.RemotePath, "job_id", *rf.JobID)
+		}
+	}
 }
 
 // autoQueueNewFiles creates download jobs for files that are still on_seedbox.

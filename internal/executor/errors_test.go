@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"grabarr/internal/rsync"
 )
 
 func TestIsPermanent(t *testing.T) {
@@ -96,6 +98,39 @@ func TestClassifyRsyncError(t *testing.T) {
 				"exit code %d: expected permanent=%v", tt.exitCode, tt.permanent)
 		})
 	}
+}
+
+func TestClassifyRsyncError_Exit23WithStderr(t *testing.T) {
+	rawErr := makeExitError(t, 23)
+
+	t.Run("no such file in stderr is permanent", func(t *testing.T) {
+		wrapped := &rsync.TransferError{
+			Err:    fmt.Errorf("rsync transfer failed: %w", rawErr),
+			Stderr: `rsync: [sender] change_dir "/remote/path" failed: No such file or directory (2)`,
+		}
+		assert.True(t, IsPermanent(classifyRsyncError(wrapped)))
+	})
+
+	t.Run("empty stderr is retryable", func(t *testing.T) {
+		wrapped := &rsync.TransferError{
+			Err:    fmt.Errorf("rsync transfer failed: %w", rawErr),
+			Stderr: "",
+		}
+		assert.False(t, IsPermanent(classifyRsyncError(wrapped)))
+	})
+
+	t.Run("unrelated stderr is retryable", func(t *testing.T) {
+		wrapped := &rsync.TransferError{
+			Err:    fmt.Errorf("rsync transfer failed: %w", rawErr),
+			Stderr: "Broken pipe",
+		}
+		assert.False(t, IsPermanent(classifyRsyncError(wrapped)))
+	})
+
+	t.Run("no TransferError wrapper is retryable", func(t *testing.T) {
+		wrapped := fmt.Errorf("rsync transfer failed: %w", rawErr)
+		assert.False(t, IsPermanent(classifyRsyncError(wrapped)))
+	})
 }
 
 func TestClassifyRsyncError_NonExitError(t *testing.T) {
