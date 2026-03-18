@@ -465,11 +465,19 @@ function renderFile(node, depth, parent) {
   const row = document.createElement('div');
   row.className = 'tree-row';
 
-  // Indent
-  const indent = document.createElement('div');
-  indent.className = 'tree-indent';
-  indent.style.width = (depth * 20 + 24) + 'px'; // +24 for chevron space
-  row.appendChild(indent);
+  // Indent (matches folder indent)
+  if (depth > 0) {
+    const indent = document.createElement('div');
+    indent.className = 'tree-indent';
+    indent.style.width = (depth * 20) + 'px';
+    row.appendChild(indent);
+  }
+
+  // Chevron-width spacer so status icon aligns with folder icon
+  const spacer = document.createElement('div');
+  spacer.style.width = '16px';
+  spacer.style.flexShrink = '0';
+  row.appendChild(spacer);
 
   // Status icon
   row.appendChild(buildFileStatusIcon(node));
