@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"grabarr/internal/config"
+	"grabarr/internal/executor"
 	"grabarr/internal/interfaces"
 	"grabarr/internal/mocks"
 	"grabarr/internal/models"
@@ -540,7 +541,6 @@ func TestExecuteJob_Failure(t *testing.T) {
 	cfg := &config.Config{
 		Jobs: config.JobsConfig{
 			MaxConcurrent: 2,
-			MaxRetries:    0, // No retries
 		},
 	}
 	mockChecker := mocks.NewMockGatekeeper(t)
@@ -548,7 +548,7 @@ func TestExecuteJob_Failure(t *testing.T) {
 
 	mockExecutor.EXPECT().
 		Execute(mock.Anything, mock.Anything).
-		Return(errors.New("execution failed")).
+		Return(&executor.PermanentError{Msg: "execution failed", Cause: errors.New("bad path")}).
 		Once()
 
 	q := New(repo, cfg, mockChecker, nil)
@@ -560,17 +560,93 @@ func TestExecuteJob_Failure(t *testing.T) {
 
 	job := testutil.CreateTestJob(func(j *models.Job) {
 		j.Status = models.JobStatusQueued
-		j.MaxRetries = 0
 	})
 	require.NoError(t, repo.CreateJob(job))
 
 	queue.executeJob(ctx, job)
 
-	// Verify job was marked as failed
+	// Verify job was marked as failed (permanent error skips retry)
 	updatedJob, err := repo.GetJob(job.ID)
 	require.NoError(t, err)
 	assert.Equal(t, models.JobStatusFailed, updatedJob.Status)
 	assert.Contains(t, updatedJob.ErrorMessage, "execution failed")
+}
+
+func TestExecuteJob_PermanentError(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+	}
+	mockChecker := mocks.NewMockGatekeeper(t)
+	mockExecutor := mocks.NewMockJobExecutor(t)
+	mockNotifier := mocks.NewMockNotifier(t)
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(&executor.PermanentError{Msg: "file not found", Cause: errors.New("no such file")}).
+		Once()
+
+	mockNotifier.EXPECT().IsEnabled().Return(true).Once()
+	mockNotifier.EXPECT().NotifyJobFailed(mock.Anything).Return(nil).Once()
+
+	q := New(repo, cfg, mockChecker, mockNotifier)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusFailed, updatedJob.Status)
+	assert.Equal(t, 0, updatedJob.Retries)
+	assert.Contains(t, updatedJob.ErrorMessage, "file not found")
+}
+
+func TestExecuteJob_RetryableError(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{
+		Jobs: config.JobsConfig{
+			MaxConcurrent: 2,
+		},
+	}
+	mockChecker := mocks.NewMockGatekeeper(t)
+	mockExecutor := mocks.NewMockJobExecutor(t)
+	mockNotifier := mocks.NewMockNotifier(t)
+
+	mockExecutor.EXPECT().
+		Execute(mock.Anything, mock.Anything).
+		Return(errors.New("connection reset by peer")).
+		Once()
+
+	q := New(repo, cfg, mockChecker, mockNotifier)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) {
+		j.Status = models.JobStatusQueued
+	})
+	require.NoError(t, repo.CreateJob(job))
+
+	queue.executeJob(ctx, job)
+
+	// Job should be re-queued for retry, not failed
+	updatedJob, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusQueued, updatedJob.Status)
+	assert.Equal(t, 1, updatedJob.Retries)
 }
 
 // ========================================

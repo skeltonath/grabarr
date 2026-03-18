@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"grabarr/internal/config"
+	"grabarr/internal/executor"
 	"grabarr/internal/interfaces"
 	"grabarr/internal/models"
 	"grabarr/internal/repository"
@@ -483,26 +484,24 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) {
 		attempt.Status = models.JobStatusFailed
 		attempt.ErrorMessage = err.Error()
 
-		// Handle retry logic - check retries directly since job status is still "running" at this point
-		if job.Retries < job.MaxRetries {
-			job.IncrementRetry()
-			if err := q.repo.UpdateJob(job); err != nil {
-				slog.Error("failed to update job for retry", "job_id", job.ID, "error", err)
-			}
-			slog.Info("job queued for retry", "job_id", job.ID, "attempt", job.Retries)
-			// Scheduler will pick up queued jobs automatically within 5 seconds
-		} else {
+		if executor.IsPermanent(err) {
+			slog.Warn("job failed permanently, not retrying", "job_id", job.ID, "error", err)
 			job.MarkFailed(err.Error())
-			if err := q.repo.UpdateJob(job); err != nil {
-				slog.Error("failed to mark job as failed", "job_id", job.ID, "error", err)
+			if updateErr := q.repo.UpdateJob(job); updateErr != nil {
+				slog.Error("failed to mark job as failed", "job_id", job.ID, "error", updateErr)
 			}
-
-			// Send notification about failed job
 			if q.notifier != nil && q.notifier.IsEnabled() {
 				if notifyErr := q.notifier.NotifyJobFailed(job); notifyErr != nil {
 					slog.Error("failed to send job failure notification", "job_id", job.ID, "error", notifyErr)
 				}
 			}
+		} else {
+			// Retryable — retry indefinitely
+			job.IncrementRetry()
+			if updateErr := q.repo.UpdateJob(job); updateErr != nil {
+				slog.Error("failed to update job for retry", "job_id", job.ID, "error", updateErr)
+			}
+			slog.Info("job queued for retry (retryable error)", "job_id", job.ID, "attempt", job.Retries, "error", err)
 		}
 	} else {
 		slog.Info("job completed successfully", "job_id", job.ID)

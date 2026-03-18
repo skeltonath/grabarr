@@ -425,6 +425,70 @@ func TestMonitorJob_StatusCheckError(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestMonitorJob_PermanentFailure(t *testing.T) {
+	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
+
+	executor := &RCloneExecutor{
+		client:       mockClient,
+		progressChan: make(chan models.JobProgress, 100),
+		repo:         mockRepo,
+	}
+
+	job := &models.Job{ID: 1}
+	ctx := context.Background()
+	rcloneJobID := int64(123)
+
+	mockClient.EXPECT().
+		GetJobStatus(ctx, rcloneJobID).
+		Return(&models.RCloneJobStatus{
+			ID:       rcloneJobID,
+			Finished: true,
+			Success:  false,
+			Error:    "object not found",
+		}, nil).
+		Once()
+
+	mockRepo.EXPECT().UpdateJob(mock.Anything).Return(nil).Once()
+
+	err := executor.monitorJob(ctx, job, rcloneJobID)
+
+	assert.Error(t, err)
+	assert.True(t, IsPermanent(err), "expected permanent error for 'not found'")
+}
+
+func TestMonitorJob_RetryableFailure(t *testing.T) {
+	mockClient := mocks.NewMockRCloneClient(t)
+	mockRepo := mocks.NewMockJobRepository(t)
+
+	executor := &RCloneExecutor{
+		client:       mockClient,
+		progressChan: make(chan models.JobProgress, 100),
+		repo:         mockRepo,
+	}
+
+	job := &models.Job{ID: 1}
+	ctx := context.Background()
+	rcloneJobID := int64(123)
+
+	mockClient.EXPECT().
+		GetJobStatus(ctx, rcloneJobID).
+		Return(&models.RCloneJobStatus{
+			ID:       rcloneJobID,
+			Finished: true,
+			Success:  false,
+			Error:    "connection reset by peer",
+		}, nil).
+		Once()
+
+	mockRepo.EXPECT().UpdateJob(mock.Anything).Return(nil).Once()
+
+	err := executor.monitorJob(ctx, job, rcloneJobID)
+
+	assert.Error(t, err)
+	assert.False(t, IsPermanent(err), "expected retryable error for 'connection reset by peer'")
+}
+
 func TestGetProgressChannel(t *testing.T) {
 	progressChan := make(chan models.JobProgress, 100)
 

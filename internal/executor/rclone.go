@@ -162,7 +162,7 @@ func (r *RCloneExecutor) monitorJob(ctx context.Context, job *models.Job, rclone
 				}
 
 				if !status.Success {
-					return fmt.Errorf("rclone job failed: %s", status.Error)
+					return classifyRcloneError(status.Error)
 				}
 				slog.Info("rclone job completed successfully", "job_id", job.ID, "rclone_job_id", rcloneJobID)
 				return nil

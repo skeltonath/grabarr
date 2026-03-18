@@ -51,7 +51,7 @@ func (r *RsyncExecutor) Execute(ctx context.Context, job *models.Job) error {
 	// Ensure local path exists and is a directory
 	// rsync will create the target file/directory inside localPath
 	if !filepath.IsAbs(localPath) {
-		return fmt.Errorf("local path must be absolute: %s", localPath)
+		return &PermanentError{Msg: fmt.Sprintf("local path must be absolute: %s", localPath)}
 	}
 
 	slog.Info("prepared rsync request",
@@ -106,7 +106,7 @@ func (r *RsyncExecutor) Execute(ctx context.Context, job *models.Job) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("rsync transfer failed: %w", err)
+			return classifyRsyncError(fmt.Errorf("rsync transfer failed: %w", err))
 		}
 
 		slog.Info("rsync transfer completed successfully", "job_id", job.ID)
