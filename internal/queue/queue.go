@@ -7,6 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"path/filepath"
+
+	"grabarr/internal/archive"
 	"grabarr/internal/config"
 	"grabarr/internal/executor"
 	"grabarr/internal/interfaces"
@@ -512,12 +515,100 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) {
 		if err := q.repo.UpdateJob(job); err != nil {
 			slog.Error("failed to mark job as completed", "job_id", job.ID, "error", err)
 		}
+
+		// Check if this completed job completes an archive group
+		if group := job.ArchiveGroup(); group != "" && !job.IsExtractionJob() && q.config.GetExtraction().Enabled {
+			q.checkArchiveGroupComplete(group, job)
+		}
 	}
 
 	// Update attempt record
 	if err := q.repo.UpdateJobAttempt(attempt); err != nil {
 		slog.Error("failed to update job attempt", "job_id", job.ID, "error", err)
 	}
+}
+
+// checkArchiveGroupComplete checks if all download jobs in an archive group have
+// completed, and if so, creates an extraction job for the group.
+func (q *queue) checkArchiveGroupComplete(group string, completedJob *models.Job) {
+	groupJobs, err := q.repo.GetJobsByArchiveGroup(group)
+	if err != nil {
+		slog.Error("failed to get archive group jobs", "group", group, "error", err)
+		return
+	}
+
+	// Check if ALL non-extraction jobs in the group are completed
+	var allCompleted = true
+	var groupFiles []string
+	var hasExtractionJob bool
+
+	for _, j := range groupJobs {
+		if j.IsExtractionJob() {
+			hasExtractionJob = true
+			continue
+		}
+		groupFiles = append(groupFiles, j.Name)
+		if j.Status != models.JobStatusCompleted {
+			allCompleted = false
+		}
+	}
+
+	if !allCompleted {
+		slog.Debug("archive group not yet complete", "group", group)
+		return
+	}
+
+	if hasExtractionJob {
+		slog.Debug("extraction job already exists for group", "group", group)
+		return
+	}
+
+	// Find the first-part file to extract from
+	var firstPartJob *models.Job
+	for _, j := range groupJobs {
+		if j.IsExtractionJob() {
+			continue
+		}
+		if archive.IsFirstPart(j.Name, groupFiles) {
+			firstPartJob = j
+			break
+		}
+	}
+
+	if firstPartJob == nil {
+		slog.Error("archive group complete but no first-part found", "group", group, "files", groupFiles)
+		return
+	}
+
+	// The local path for extraction: the first-part file's full local path
+	// LocalPath is the directory; we need dir + filename
+	extractArchivePath := filepath.Join(firstPartJob.LocalPath, firstPartJob.Name)
+	extractDir := firstPartJob.LocalPath
+
+	extractionJob := &models.Job{
+		Name:       "extract: " + filepath.Base(group),
+		RemotePath: extractArchivePath, // reuse field to store the archive path to extract
+		LocalPath:  extractDir,
+		Status:     models.JobStatusQueued,
+		Priority:   1, // slightly higher priority so extraction runs soon after downloads
+		MaxRetries: q.config.GetJobs().MaxRetries,
+		Metadata: models.JobMetadata{
+			ExtraFields: map[string]interface{}{
+				"job_type":      "extraction",
+				"archive_group": group,
+			},
+		},
+	}
+
+	if err := q.Enqueue(extractionJob); err != nil {
+		slog.Error("failed to enqueue extraction job", "group", group, "error", err)
+		return
+	}
+
+	slog.Info("created extraction job for archive group",
+		"group", group,
+		"extraction_job_id", extractionJob.ID,
+		"archive_path", extractArchivePath)
 }
 
 func (q *queue) cleanupRoutine() {

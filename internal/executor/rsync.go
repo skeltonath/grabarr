@@ -46,6 +46,11 @@ func (r *RsyncExecutor) Stop() {
 }
 
 func (r *RsyncExecutor) Execute(ctx context.Context, job *models.Job) error {
+	// Dispatch extraction jobs to the extraction handler
+	if job.IsExtractionJob() {
+		return r.executeExtraction(ctx, job)
+	}
+
 	slog.Info("starting rsync execution", "job_id", job.ID, "name", job.Name)
 
 	// Prepare rsync paths

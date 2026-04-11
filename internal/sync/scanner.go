@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"grabarr/internal/archive"
 	"grabarr/internal/config"
 	"grabarr/internal/interfaces"
 	"grabarr/internal/models"
@@ -222,12 +223,15 @@ func (s *Scanner) sshListFiles(ctx context.Context, remote config.RemoteConfig, 
 	}
 
 	extFilter := ""
-	if len(wp.Extensions) > 0 {
-		parts := make([]string, len(wp.Extensions))
-		for i, ext := range wp.Extensions {
-			parts[i] = fmt.Sprintf("-name '*.%s'", ext)
-		}
-		extFilter = "\\( " + strings.Join(parts, " -o ") + " \\)"
+	var nameParts []string
+	for _, ext := range wp.Extensions {
+		nameParts = append(nameParts, fmt.Sprintf("-name '*.%s'", ext))
+	}
+	for _, pattern := range archive.ArchiveExtensionPatterns(wp.ArchiveExtensions) {
+		nameParts = append(nameParts, fmt.Sprintf("-name '%s'", pattern))
+	}
+	if len(nameParts) > 0 {
+		extFilter = "\\( " + strings.Join(nameParts, " -o ") + " \\)"
 	}
 
 	findCmd := fmt.Sprintf("find %s -type f %s %s -printf '%%p\\t%%s\\n' 2>/dev/null",
@@ -403,6 +407,14 @@ func (s *Scanner) autoQueueNewFiles(ctx context.Context, files []*models.RemoteF
 			Priority:   0,
 			MaxRetries: s.cfg.GetJobs().MaxRetries,
 			FileSize:   f.Size,
+		}
+
+		// Tag archive files with their group key so we can trigger
+		// extraction once all parts have been downloaded.
+		if archive.IsArchive(f.Name) {
+			job.Metadata.ExtraFields = map[string]interface{}{
+				"archive_group": archive.GroupKey(f.RemotePath),
+			}
 		}
 
 		if err := s.queue.Enqueue(job); err != nil {

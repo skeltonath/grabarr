@@ -1,7 +1,11 @@
-FROM golang:1.21-alpine
+FROM golang:1.23-alpine
 
 # Install dependencies
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev rclone rsync sshpass openssh-client curl
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev rclone rsync sshpass openssh-client curl 7zip make g++ && \
+    curl -L -o /tmp/unrarsrc.tar.gz https://www.rarlab.com/rar/unrarsrc-7.1.3.tar.gz && \
+    tar xzf /tmp/unrarsrc.tar.gz -C /tmp && \
+    cd /tmp/unrar && make -f makefile && install unrar /usr/local/bin/unrar && \
+    rm -rf /tmp/unrar /tmp/unrarsrc.tar.gz
 
 # Create user for UID 99 (Unraid nobody)
 RUN echo "unraid:x:99:100:unraid:/home/unraid:/bin/sh" >> /etc/passwd && \

@@ -299,6 +299,64 @@ func TestJob_MarkCancelled(t *testing.T) {
 	assert.True(t, job.UpdatedAt.After(beforeMark) || job.UpdatedAt.Equal(beforeMark))
 }
 
+func TestJob_ArchiveGroup(t *testing.T) {
+	t.Run("returns group when set", func(t *testing.T) {
+		job := &Job{
+			Metadata: JobMetadata{
+				ExtraFields: map[string]interface{}{
+					"archive_group": "/path/to/Movie",
+				},
+			},
+		}
+		assert.Equal(t, "/path/to/Movie", job.ArchiveGroup())
+	})
+
+	t.Run("returns empty when no extra fields", func(t *testing.T) {
+		job := &Job{}
+		assert.Equal(t, "", job.ArchiveGroup())
+	})
+
+	t.Run("returns empty when no archive_group key", func(t *testing.T) {
+		job := &Job{
+			Metadata: JobMetadata{
+				ExtraFields: map[string]interface{}{
+					"other": "value",
+				},
+			},
+		}
+		assert.Equal(t, "", job.ArchiveGroup())
+	})
+}
+
+func TestJob_IsExtractionJob(t *testing.T) {
+	t.Run("true for extraction jobs", func(t *testing.T) {
+		job := &Job{
+			Metadata: JobMetadata{
+				ExtraFields: map[string]interface{}{
+					"job_type": "extraction",
+				},
+			},
+		}
+		assert.True(t, job.IsExtractionJob())
+	})
+
+	t.Run("false for regular jobs", func(t *testing.T) {
+		job := &Job{}
+		assert.False(t, job.IsExtractionJob())
+	})
+
+	t.Run("false for other job types", func(t *testing.T) {
+		job := &Job{
+			Metadata: JobMetadata{
+				ExtraFields: map[string]interface{}{
+					"job_type": "other",
+				},
+			},
+		}
+		assert.False(t, job.IsExtractionJob())
+	})
+}
+
 func TestJob_IncrementRetry(t *testing.T) {
 	job := &Job{
 		Status:       JobStatusFailed,

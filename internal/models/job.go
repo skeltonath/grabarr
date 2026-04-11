@@ -168,6 +168,26 @@ func (j *Job) MarkCancelled() {
 	j.UpdatedAt = now
 }
 
+// ArchiveGroup returns the archive group key from job metadata, or "" if not an archive job.
+func (j *Job) ArchiveGroup() string {
+	if j.Metadata.ExtraFields != nil {
+		if group, ok := j.Metadata.ExtraFields["archive_group"].(string); ok {
+			return group
+		}
+	}
+	return ""
+}
+
+// IsExtractionJob returns true if this job is an archive extraction job (not a download).
+func (j *Job) IsExtractionJob() bool {
+	if j.Metadata.ExtraFields != nil {
+		if jt, ok := j.Metadata.ExtraFields["job_type"].(string); ok {
+			return jt == "extraction"
+		}
+	}
+	return false
+}
+
 func (j *Job) IncrementRetry() {
 	j.Retries++
 	j.Status = JobStatusQueued

@@ -202,6 +202,25 @@ func TestParseSSHFindOutput_LastSeenAt(t *testing.T) {
 	assert.True(t, files[0].LastSeenAt.Before(after) || files[0].LastSeenAt.Equal(after))
 }
 
+func TestParseSSHFindOutput_ArchiveFiles(t *testing.T) {
+	output := "/home/user/downloads/Movie/Movie.rar\t52428800\n" +
+		"/home/user/downloads/Movie/Movie.r00\t52428800\n" +
+		"/home/user/downloads/Movie/Movie.r01\t52428800\n" +
+		"/home/user/downloads/Movie/Movie.r02\t1234567\n"
+
+	files := parseSSHFindOutput(output, "/home/user/downloads/", nil)
+
+	require.Len(t, files, 4)
+	assert.Equal(t, "Movie.rar", files[0].Name)
+	assert.Equal(t, "rar", files[0].Extension)
+	assert.Equal(t, "Movie.r00", files[1].Name)
+	assert.Equal(t, "r00", files[1].Extension)
+	assert.Equal(t, "Movie.r01", files[2].Name)
+	assert.Equal(t, "r01", files[2].Extension)
+	assert.Equal(t, "Movie.r02", files[3].Name)
+	assert.Equal(t, "r02", files[3].Extension)
+}
+
 func TestCancelJobsForStaleFiles(t *testing.T) {
 	jobID := int64(42)
 

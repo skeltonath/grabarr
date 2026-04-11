@@ -23,6 +23,7 @@ type Config struct {
 	Notifications NotificationsConfig `yaml:"notifications"`
 	Logging       LoggingConfig       `yaml:"logging"`
 	Sync          SyncConfig          `yaml:"sync"`
+	Extraction    ExtractionConfig    `yaml:"extraction"`
 
 	mu       sync.RWMutex
 	watchers []chan<- struct{}
@@ -31,6 +32,11 @@ type Config struct {
 type SyncConfig struct {
 	Enabled      bool          `yaml:"enabled"`
 	ScanInterval time.Duration `yaml:"scan_interval"`
+}
+
+type ExtractionConfig struct {
+	Enabled         bool `yaml:"enabled"`
+	CleanupArchives bool `yaml:"cleanup_archives"`
 }
 
 type RemoteConfig struct {
@@ -42,12 +48,13 @@ type RemoteConfig struct {
 }
 
 type WatchedPath struct {
-	RemotePath      string   `yaml:"remote_path"`
-	LocalPath       string   `yaml:"local_path"`
-	Extensions      []string `yaml:"extensions"`
-	ExcludePatterns []string `yaml:"exclude_patterns"` // regex patterns applied to filename
-	AutoDownload    bool     `yaml:"auto_download"`
-	Recursive       bool     `yaml:"recursive"`
+	RemotePath        string   `yaml:"remote_path"`
+	LocalPath         string   `yaml:"local_path"`
+	Extensions        []string `yaml:"extensions"`
+	ArchiveExtensions []string `yaml:"archive_extensions"` // e.g. ["rar", "zip"] — auto-expands to include multi-part patterns
+	ExcludePatterns   []string `yaml:"exclude_patterns"`   // regex patterns applied to filename
+	AutoDownload      bool     `yaml:"auto_download"`
+	Recursive         bool     `yaml:"recursive"`
 }
 
 type ServerConfig struct {
@@ -275,6 +282,7 @@ func (c *Config) reload(configPath string) error {
 	c.Notifications = newConfig.Notifications
 	c.Logging = newConfig.Logging
 	c.Sync = newConfig.Sync
+	c.Extraction = newConfig.Extraction
 
 	slog.Info("configuration reloaded successfully")
 	return nil
@@ -356,4 +364,11 @@ func (c *Config) GetSync() SyncConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Sync
+}
+
+// GetExtraction returns a copy of the extraction configuration
+func (c *Config) GetExtraction() ExtractionConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Extraction
 }
