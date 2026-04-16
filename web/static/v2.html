@@ -84,6 +84,51 @@ body { background: var(--bg); color: var(--text); }
 .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--border); }
 #theme-toggle { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 4px; }
+/* ---- Mobile hamburger menu ---- */
+#hamburger-wrap { display: none; position: relative; }
+.btn-hamburger { background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; padding: 8px; line-height: 1; }
+#hamburger-menu {
+  display: none; position: absolute; top: calc(100% + 4px); right: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px; min-width: 180px; z-index: 200;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+#hamburger-menu.open { display: block; }
+.menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 12px; border: none; border-radius: 6px;
+  background: none; color: var(--text); font-size: 14px; cursor: pointer;
+  text-align: left;
+}
+.menu-item:hover { background: var(--surface2); }
+
+/* ---- Mobile source picker ---- */
+#mobile-source-picker { display: none; }
+#mobile-source-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 10px 14px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+  border-top: none; border-left: none; border-right: none;
+}
+#mobile-source-btn .chevron-down { color: var(--muted); font-size: 10px; transition: transform 0.15s; }
+#mobile-source-btn.open .chevron-down { transform: rotate(180deg); }
+#mobile-source-dropdown {
+  display: none; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+#mobile-source-dropdown.open { display: block; }
+.mobile-source-tab {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 10px 14px; border: none;
+  background: none; color: var(--text); font-size: 13px; cursor: pointer;
+  text-align: left;
+}
+.mobile-source-tab:hover { background: var(--surface2); }
+.mobile-source-tab.active { color: var(--primary); background: var(--surface2); }
+.mobile-source-tab .tab-stats { font-size: 11px; color: var(--muted); }
+
+#hamburger-overlay { display: none; position: fixed; inset: 0; z-index: 149; }
+#hamburger-overlay.open { display: block; }
 
 /* ---- Layout ---- */
 #layout {
@@ -142,7 +187,8 @@ body { background: var(--bg); color: var(--text); }
 .tree-indent { flex-shrink: 0; }
 .chevron { width: 16px; text-align: center; color: var(--muted); font-size: 10px; flex-shrink: 0; transition: transform 0.15s; }
 .chevron.open { transform: rotate(90deg); }
-.folder-icon { font-size: 14px; flex-shrink: 0; }
+.folder-icon { display: none; }
+.row-content { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .folder-name { font-weight: 600; color: var(--text); }
 .file-name { color: var(--muted); }
@@ -177,6 +223,16 @@ body { background: var(--bg); color: var(--text); }
 
 .btn-queue { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 2px 8px; border-radius: 5px; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .btn-queue:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* ---- Top-level cards ---- */
+.top-level-card {
+  border: 1px solid var(--border); border-radius: 8px;
+  margin-bottom: 8px; overflow: hidden;
+}
+.tree-row.top-level {
+  border: 1px solid var(--border); border-radius: 8px;
+  margin-bottom: 8px;
+}
 
 /* ---- Footer ---- */
 #footer {
@@ -221,6 +277,66 @@ body { background: var(--bg); color: var(--text); }
 }
 #toast.show { opacity: 1; }
 #toast.error { border-color: var(--red); color: var(--red); }
+
+/* ---- Mobile responsive ---- */
+@media (max-width: 768px) {
+  #hamburger-wrap { display: block; }
+
+  #header {
+    position: sticky; height: auto; min-height: var(--header-h);
+    flex-wrap: wrap; padding: 8px 12px; gap: 8px;
+    z-index: 160;
+  }
+  #last-scanned { display: none; }
+  #scan-btn { display: none; }
+  #theme-toggle { display: none; }
+  .spacer { display: none; }
+  #hamburger-wrap { order: 4; margin-left: auto; }
+  #search { order: 10; flex: 1 1 60%; width: auto; min-width: 120px; }
+  #status-filter { order: 11; }
+
+  #layout { margin-top: 0; }
+
+  /* Hide desktop sidebar, show mobile source picker */
+  #sidebar { display: none; }
+  #mobile-source-picker { display: block; }
+
+  #tree-container { padding: 0 12px; }
+
+  .row-name { white-space: normal; overflow-wrap: anywhere; overflow: visible; text-overflow: unset; }
+
+  .tree-row { padding: 0 12px 10px; gap: 10px; min-height: 44px; }
+  .top-level-card > .tree-row:first-child { padding-top: 10px; }
+  .tree-row.top-level { padding-top: 10px; }
+  .tree-indent { max-width: 4px; }
+  .chevron { width: 12px; }
+  .chevron-spacer { display: none !important; }
+
+  /* File rows: name on first line, size/speed/ETA on second line */
+  .row-content { flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .row-name { flex: 1 1 100%; }
+  .row-size { font-size: 11px; }
+  .row-speed { font-size: 11px; }
+
+  .tree-row.folder-row { flex-wrap: wrap; align-items: flex-start; }
+  .tree-row.folder-row .chevron { flex-shrink: 0; margin-top: 4px; }
+  .tree-row.folder-row .row-name { flex: 1 1 calc(100% - 30px); }
+  .folder-stats { font-size: 10px; }
+
+  .btn { padding: 8px 12px; min-height: 44px; }
+  .btn-queue { padding: 6px 12px; min-height: 36px; }
+
+  #footer {
+    height: auto; min-height: var(--footer-h);
+    flex-wrap: wrap; padding: 6px 12px; gap: 8px 16px;
+  }
+  #layout { margin-bottom: 48px; }
+
+  #modal { width: 100%; padding: 16px; }
+  .detail-grid { grid-template-columns: 100px 1fr; gap: 6px 8px; }
+
+  #toast { white-space: normal; max-width: 90vw; text-align: center; }
+}
 </style>
 </head>
 <body>
@@ -251,7 +367,30 @@ body { background: var(--bg); color: var(--text); }
     <option value="ignored">Ignored</option>
   </select>
   <button id="theme-toggle" title="Toggle theme">🌙</button>
+  <div id="hamburger-wrap">
+    <button id="hamburger-btn" class="btn-hamburger" aria-label="Menu">&#9776;</button>
+    <div id="hamburger-menu">
+      <button class="menu-item" id="menu-scan-btn">
+        <span>🔄</span>
+        <span>Scan Now</span>
+      </button>
+      <button class="menu-item" id="menu-theme-toggle">
+        <span id="menu-theme-icon">🌙</span>
+        <span id="menu-theme-label">Dark mode</span>
+      </button>
+    </div>
+  </div>
 </header>
+<div id="hamburger-overlay"></div>
+
+<!-- Mobile source picker (hidden on desktop) -->
+<div id="mobile-source-picker">
+  <button id="mobile-source-btn">
+    <span id="mobile-source-label">All Sources</span>
+    <span class="chevron-down">▼</span>
+  </button>
+  <div id="mobile-source-dropdown"></div>
+</div>
 
 <!-- Body layout -->
 <div id="layout">
@@ -320,6 +459,36 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('scan-btn').addEventListener('click', triggerScan);
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
+  // Hamburger menu
+  const hamburgerBtn = document.getElementById('hamburger-btn');
+  const hamburgerMenu = document.getElementById('hamburger-menu');
+  const hamburgerOverlay = document.getElementById('hamburger-overlay');
+  function closeHamburger() { hamburgerMenu.classList.remove('open'); hamburgerOverlay.classList.remove('open'); }
+  hamburgerBtn.addEventListener('click', () => {
+    hamburgerMenu.classList.toggle('open');
+    hamburgerOverlay.classList.toggle('open');
+  });
+  hamburgerOverlay.addEventListener('click', closeHamburger);
+  document.getElementById('menu-theme-toggle').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTheme();
+    updateMenuThemeLabel();
+    closeHamburger();
+  });
+  document.getElementById('menu-scan-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    triggerScan();
+    closeHamburger();
+  });
+
+  // Mobile source picker
+  const mobileSourceBtn = document.getElementById('mobile-source-btn');
+  const mobileSourceDropdown = document.getElementById('mobile-source-dropdown');
+  mobileSourceBtn.addEventListener('click', () => {
+    mobileSourceBtn.classList.toggle('open');
+    mobileSourceDropdown.classList.toggle('open');
+  });
+
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) stopAutoRefresh(); else startAutoRefresh();
   });
@@ -343,8 +512,64 @@ async function fetchTree() {
     renderSidebar();
     renderTree();
   } catch (e) {
-    console.error('fetchTree failed', e);
+    console.error('fetchTree failed, using demo data', e);
+    treeData = getDemoData();
+    if (treeData.roots && treeData.roots.length > 0) {
+      const paths = treeData.roots.map(r => r.watched_path);
+      if (!selectedWatchedPath || !paths.includes(selectedWatchedPath)) {
+        selectedWatchedPath = paths[0];
+      }
+    }
+    renderSidebar();
+    renderTree();
   }
+}
+
+function getDemoData() {
+  return {
+    scanned_at: new Date().toISOString(),
+    roots: [
+      {
+        name: 'Movies', watched_path: '/downloads/movies',
+        stats: { file_count: 5, total_bytes: 15728640000, downloaded: 2, downloading: 1 },
+        children: [
+          {
+            type: 'folder', name: 'The.Shawshank.Redemption.1994.REMASTERED.2160p.UHD.BluRay.x265-SURCODE', path: '/movie1',
+            stats: { file_count: 2, total_bytes: 8589934592, downloaded: 2 },
+            children: [
+              { type: 'file', name: 'The.Shawshank.Redemption.1994.REMASTERED.2160p.UHD.BluRay.x265-SURCODE.mkv', size_bytes: 8388608000, status: 'downloaded', progress: { job_status: 'completed' } },
+              { type: 'file', name: 'The.Shawshank.Redemption.1994.REMASTERED.2160p.UHD.BluRay.x265-SURCODE.srt', size_bytes: 201326592, status: 'downloaded', progress: { job_status: 'completed' } }
+            ]
+          },
+          {
+            type: 'folder', name: 'Interstellar.2014.IMAX.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC.TrueHD.7.1-FGT', path: '/movie2',
+            stats: { file_count: 2, total_bytes: 5368709120, downloaded: 0, downloading: 1 },
+            children: [
+              { type: 'file', name: 'Interstellar.2014.IMAX.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC.TrueHD.7.1-FGT.mkv', size_bytes: 5100000000, status: 'downloading', progress: { job_status: 'running', transfer_speed: 47185920, eta: '1m45s', percent_done: 62 } },
+              { type: 'file', name: 'Interstellar.2014.nfo', size_bytes: 4096, status: 'on_seedbox' }
+            ]
+          },
+          { type: 'file', name: 'Big.Buck.Bunny.2008.1080p.BluRay.x264.mkv', size_bytes: 1771674009, status: 'failed', progress: { job_status: 'failed' } }
+        ]
+      },
+      {
+        name: 'TV Shows', watched_path: '/downloads/tv',
+        stats: { file_count: 4, total_bytes: 4294967296, downloaded: 1, downloading: 0 },
+        children: [
+          {
+            type: 'folder', name: 'Breaking.Bad.S01.1080p.BluRay.x264-DEMAND', path: '/tv1',
+            stats: { file_count: 3, total_bytes: 3221225472, downloaded: 1 },
+            children: [
+              { type: 'file', name: 'Breaking.Bad.S01E01.Pilot.1080p.BluRay.x264.mkv', size_bytes: 1073741824, status: 'downloaded', progress: { job_status: 'completed' } },
+              { type: 'file', name: 'Breaking.Bad.S01E02.Cats.in.the.Bag.1080p.BluRay.x264.mkv', size_bytes: 1073741824, status: 'queued', progress: { job_status: 'queued' } },
+              { type: 'file', name: 'Breaking.Bad.S01E03.And.the.Bags.in.the.River.1080p.BluRay.x264.mkv', size_bytes: 1073741824, status: 'on_seedbox' }
+            ]
+          },
+          { type: 'file', name: 'Planet.Earth.III.S01E01.2160p.WEB-DL.DDP5.1.HDR.H.265-NTb.mkv', size_bytes: 1073741824, status: 'on_seedbox' }
+        ]
+      }
+    ]
+  };
 }
 
 function renderSidebar() {
@@ -366,6 +591,34 @@ function renderSidebar() {
       renderTree();
     });
     container.appendChild(btn);
+  }
+  renderMobileSourcePicker();
+}
+
+function renderMobileSourcePicker() {
+  const dropdown = document.getElementById('mobile-source-dropdown');
+  const label = document.getElementById('mobile-source-label');
+  dropdown.innerHTML = '';
+  if (!treeData || !treeData.roots) return;
+  // Update current label
+  const current = treeData.roots.find(r => r.watched_path === selectedWatchedPath);
+  label.textContent = current ? current.name : 'All Sources';
+  // Build dropdown options
+  for (const root of treeData.roots) {
+    const btn = document.createElement('button');
+    btn.className = 'mobile-source-tab' + (root.watched_path === selectedWatchedPath ? ' active' : '');
+    const s = root.stats || {};
+    const done = s.downloaded || 0;
+    const total = s.file_count || 0;
+    btn.innerHTML = `<span>${escHtml(root.name)}</span><span class="tab-stats">${done}/${total}</span>`;
+    btn.addEventListener('click', () => {
+      selectedWatchedPath = root.watched_path;
+      renderSidebar();
+      renderTree();
+      document.getElementById('mobile-source-btn').classList.remove('open');
+      dropdown.classList.remove('open');
+    });
+    dropdown.appendChild(btn);
   }
 }
 
@@ -463,7 +716,7 @@ function renderFile(node, depth, parent) {
   if (!fileVisible(node)) return;
 
   const row = document.createElement('div');
-  row.className = 'tree-row';
+  row.className = 'tree-row' + (depth === 0 ? ' top-level' : '');
 
   // Indent (matches folder indent)
   if (depth > 0) {
@@ -475,6 +728,7 @@ function renderFile(node, depth, parent) {
 
   // Chevron-width spacer so status icon aligns with folder icon
   const spacer = document.createElement('div');
+  spacer.className = 'chevron-spacer';
   spacer.style.width = '16px';
   spacer.style.flexShrink = '0';
   row.appendChild(spacer);
@@ -482,17 +736,21 @@ function renderFile(node, depth, parent) {
   // Status icon
   row.appendChild(buildFileStatusIcon(node));
 
+  // Content wrapper (name + size + speed)
+  const content = document.createElement('div');
+  content.className = 'row-content';
+
   // Name
   const name = document.createElement('div');
   name.className = 'row-name file-name' + (isActiveFile(node) ? ' active' : '');
   name.textContent = node.name;
-  row.appendChild(name);
+  content.appendChild(name);
 
   // Size
   const size = document.createElement('div');
   size.className = 'row-size';
   size.textContent = fmtSize(node.size_bytes);
-  row.appendChild(size);
+  content.appendChild(size);
 
   // Speed + ETA (downloading)
   if (node.progress && node.progress.job_status === 'running') {
@@ -505,9 +763,10 @@ function renderFile(node, depth, parent) {
       if (eta) parts.push('ETA ' + eta);
     }
     if (parts.length) speed.textContent = parts.join(' · ');
-    if (parts.length) row.appendChild(speed);
+    if (parts.length) content.appendChild(speed);
   }
 
+  row.appendChild(content);
   row.addEventListener('click', () => openModal(node));
   parent.appendChild(row);
 }
@@ -560,6 +819,14 @@ function renderFolder(node, depth, parent, watchedPath) {
 
   if (!folderVisible(node)) return;
 
+  // Wrap top-level folders in a card container
+  let cardContainer = parent;
+  if (depth === 0) {
+    cardContainer = document.createElement('div');
+    cardContainer.className = 'top-level-card';
+    parent.appendChild(cardContainer);
+  }
+
   const row = document.createElement('div');
   row.className = 'tree-row folder-row';
 
@@ -608,12 +875,12 @@ function renderFolder(node, depth, parent, watchedPath) {
   }
 
   row.addEventListener('click', () => toggleFolder(key));
-  parent.appendChild(row);
+  cardContainer.appendChild(row);
 
   if (isOpen && node.children) {
     for (const child of node.children) {
-      if (child.type === 'folder') renderFolder(child, depth + 1, parent, watchedPath);
-      else renderFile(child, depth + 1, parent);
+      if (child.type === 'folder') renderFolder(child, depth + 1, cardContainer, watchedPath);
+      else renderFile(child, depth + 1, cardContainer);
     }
   }
 }
@@ -850,11 +1117,18 @@ function loadTheme() {
     document.body.classList.add('light');
     document.getElementById('theme-toggle').textContent = '☀️';
   }
+  updateMenuThemeLabel();
 }
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   localStorage.setItem('grabarr-theme', isLight ? 'light' : 'dark');
   document.getElementById('theme-toggle').textContent = isLight ? '☀️' : '🌙';
+  updateMenuThemeLabel();
+}
+function updateMenuThemeLabel() {
+  const isLight = document.body.classList.contains('light');
+  document.getElementById('menu-theme-icon').textContent = isLight ? '☀️' : '🌙';
+  document.getElementById('menu-theme-label').textContent = isLight ? 'Light mode' : 'Dark mode';
 }
 
 // ---- Toast ----
