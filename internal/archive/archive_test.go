@@ -215,3 +215,92 @@ func TestArchiveExtensionPatterns(t *testing.T) {
 		})
 	}
 }
+
+func TestMissingVolumes(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []string
+		want  []string
+	}{
+		{
+			name:  "complete old-style set",
+			files: []string{"movie.rar", "movie.r00", "movie.r01", "movie.r02"},
+			want:  nil,
+		},
+		{
+			name:  "gap in the middle",
+			files: []string{"movie.rar", "movie.r00", "movie.r02"},
+			want:  []string{"movie.r01"},
+		},
+		{
+			name:  "missing r00 right after the rar",
+			files: []string{"movie.rar", "movie.r01"},
+			want:  []string{"movie.r00"},
+		},
+		{
+			name:  "several gaps",
+			files: []string{"movie.rar", "movie.r00", "movie.r03"},
+			want:  []string{"movie.r01", "movie.r02"},
+		},
+		{
+			name:  "orphaned set with no .rar is still contiguous",
+			files: []string{"movie.r00", "movie.r01"},
+			want:  nil,
+		},
+		{
+			name:  "single standalone rar",
+			files: []string{"movie.rar"},
+			want:  nil,
+		},
+		{
+			name:  "zip has no volumes",
+			files: []string{"archive.zip"},
+			want:  nil,
+		},
+		{
+			name:  "complete partN set",
+			files: []string{"movie.part1.rar", "movie.part2.rar", "movie.part3.rar"},
+			want:  nil,
+		},
+		{
+			name:  "gap in partN set",
+			files: []string{"movie.part1.rar", "movie.part3.rar"},
+			want:  []string{"movie.part2.rar"},
+		},
+		{
+			name:  "zero-padded partN set preserves padding",
+			files: []string{"movie.part01.rar", "movie.part03.rar"},
+			want:  []string{"movie.part02.rar"},
+		},
+		{
+			name:  "order does not matter",
+			files: []string{"movie.r02", "movie.rar", "movie.r00"},
+			want:  []string{"movie.r01"},
+		},
+		{
+			name:  "empty input",
+			files: nil,
+			want:  nil,
+		},
+		{
+			name:  "case insensitive extensions",
+			files: []string{"movie.RAR", "movie.R00", "movie.R02"},
+			want:  []string{"movie.r01"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MissingVolumes(tt.files)
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("MissingVolumes(%v) = %v, want %v", tt.files, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("MissingVolumes(%v)[%d] = %q, want %q", tt.files, i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}

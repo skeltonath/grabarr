@@ -38,6 +38,10 @@ type ScanStatus struct {
 	Error        string
 }
 
+// sshRunner executes a command on a remote over SSH and returns its stdout.
+// It is a field on Scanner so tests can drive the listing logic without SSH.
+type sshRunner func(ctx context.Context, remote config.RemoteConfig, command string) (string, error)
+
 // Scanner periodically scans watched paths on the seedbox and reconciles
 // the results with the remote_files table.
 type Scanner struct {
@@ -46,15 +50,40 @@ type Scanner struct {
 	queue  interfaces.JobQueue
 	mu     sync.Mutex
 	status ScanStatus
+
+	runSSH sshRunner
 }
 
 // New creates a new Scanner.
 func New(cfg *config.Config, repo ScannerRepo, queue interfaces.JobQueue) *Scanner {
 	return &Scanner{
-		cfg:   cfg,
-		repo:  repo,
-		queue: queue,
+		cfg:    cfg,
+		repo:   repo,
+		queue:  queue,
+		runSSH: runSSHCommand,
 	}
+}
+
+// runSSHCommand is the production sshRunner.
+func runSSHCommand(ctx context.Context, remote config.RemoteConfig, command string) (string, error) {
+	cmd := exec.CommandContext(ctx, "ssh",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "ConnectTimeout=15",
+		"-i", remote.SSHKeyFile,
+		fmt.Sprintf("%s@%s", remote.SSHUser, remote.SSHHost),
+		command,
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("ssh command failed: %w (stderr: %s)", err, stderr.String())
+	}
+
+	return stdout.String(), nil
 }
 
 // Start launches the background scan loop. It returns immediately; scanning
@@ -237,24 +266,12 @@ func (s *Scanner) sshListFiles(ctx context.Context, remote config.RemoteConfig, 
 	findCmd := fmt.Sprintf("find %s -type f %s %s -printf '%%p\\t%%s\\n' 2>/dev/null",
 		wp.RemotePath, depth, extFilter)
 
-	sshCmd := exec.CommandContext(ctx, "ssh",
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "ConnectTimeout=15",
-		"-i", remote.SSHKeyFile,
-		fmt.Sprintf("%s@%s", remote.SSHUser, remote.SSHHost),
-		findCmd,
-	)
-
-	var stdout, stderr bytes.Buffer
-	sshCmd.Stdout = &stdout
-	sshCmd.Stderr = &stderr
-
-	if err := sshCmd.Run(); err != nil {
-		return nil, fmt.Errorf("ssh find failed: %w (stderr: %s)", err, stderr.String())
+	stdout, err := s.runSSH(ctx, remote, findCmd)
+	if err != nil {
+		return nil, fmt.Errorf("ssh find failed: %w", err)
 	}
 
-	return parseSSHFindOutput(stdout.String(), wp.RemotePath, excludeREs), nil
+	return parseSSHFindOutput(stdout, wp.RemotePath, excludeREs), nil
 }
 
 // parseSSHFindOutput parses `find -printf '%p\t%s\n'` output into RemoteFile records.

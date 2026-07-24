@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,8 +35,29 @@ type queue struct {
 	// Resource management
 	gatekeeper interfaces.Gatekeeper
 
+	// Optional collaborators, injected after construction.
+	volumeLister   interfaces.RemoteVolumeLister
+	importNotifier interfaces.ImportNotifier
+
 	// Cleanup
 	lastCleanup time.Time
+}
+
+// SetRemoteVolumeLister supplies the source-of-truth listing used to confirm an
+// archive set is complete before extracting. Optional; without it the queue
+// falls back to a local contiguity check only.
+func (q *queue) SetRemoteVolumeLister(l interfaces.RemoteVolumeLister) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.volumeLister = l
+}
+
+// SetImportNotifier supplies the hook that tells media managers a download has
+// landed locally. Optional.
+func (q *queue) SetImportNotifier(n interfaces.ImportNotifier) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.importNotifier = n
 }
 
 func New(repo *repository.Repository, config *config.Config, gatekeeper interfaces.Gatekeeper, notifier interfaces.Notifier) interfaces.JobQueue {
@@ -520,12 +542,89 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) {
 		if group := job.ArchiveGroup(); group != "" && !job.IsExtractionJob() && q.config.GetExtraction().Enabled {
 			q.checkArchiveGroupComplete(group, job)
 		}
+
+		q.notifyImportReady(ctx, job)
 	}
 
 	// Update attempt record
 	if err := q.repo.UpdateJobAttempt(attempt); err != nil {
 		slog.Error("failed to update job attempt", "job_id", job.ID, "error", err)
 	}
+}
+
+// notifyImportReady tells the media manager that this job's output is on local
+// disk and ready to import.
+//
+// This is the event the *arrs otherwise never receive: their download client is
+// qBittorrent on the seedbox, which reports "complete" when the torrent finishes
+// there, long before grabarr has transferred anything locally. Left to poll,
+// they retry against a path that does not exist yet and eventually give up.
+func (q *queue) notifyImportReady(ctx context.Context, job *models.Job) {
+	q.mu.RLock()
+	notifier := q.importNotifier
+	q.mu.RUnlock()
+
+	if notifier == nil {
+		return
+	}
+
+	// An individual archive volume is not importable — only the extraction that
+	// follows the full set produces a media file worth scanning for.
+	if job.ArchiveGroup() != "" && !job.IsExtractionJob() {
+		return
+	}
+
+	notifier.NotifyCompleted(ctx, job.Metadata.Category)
+}
+
+// haveAllRemoteVolumes reports whether every archive volume the source holds for
+// this group is also present locally.
+//
+// When the source cannot be reached it returns true rather than stalling:
+// nothing else re-triggers the completion check, so deferring on an unreachable
+// seedbox would strand the group forever. A genuinely short set still fails
+// safely, because a missing volume is now a retryable extraction error.
+func (q *queue) haveAllRemoteVolumes(group string, localFiles []string) bool {
+	q.mu.RLock()
+	lister := q.volumeLister
+	q.mu.RUnlock()
+
+	if lister == nil {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	remote, err := lister.ListArchiveVolumes(ctx, group)
+	if err != nil {
+		slog.Warn("could not verify archive volumes against source, extracting anyway",
+			"group", group, "error", err)
+		return true
+	}
+
+	have := make(map[string]struct{}, len(localFiles))
+	for _, f := range localFiles {
+		have[strings.ToLower(f)] = struct{}{}
+	}
+
+	var absent []string
+	for _, r := range remote {
+		if _, ok := have[strings.ToLower(r)]; !ok {
+			absent = append(absent, r)
+		}
+	}
+
+	if len(absent) > 0 {
+		slog.Warn("archive group incomplete against source, deferring extraction",
+			"group", group,
+			"missing", absent,
+			"have", len(localFiles),
+			"source_has", len(remote))
+		return false
+	}
+
+	return true
 }
 
 // checkArchiveGroupComplete checks if all download jobs in an archive group have
@@ -563,6 +662,26 @@ func (q *queue) checkArchiveGroupComplete(group string, completedJob *models.Job
 		return
 	}
 
+	// "All known jobs completed" is not the same as "we have the whole set" —
+	// the scanner only creates jobs for volumes it has seen, so a scan that
+	// catches the torrent mid-arrival yields a partial set that looks finished.
+	// Extracting one of those produces a truncated media file, so refuse when
+	// the volume numbering has a hole in it.
+	if missing := archive.MissingVolumes(groupFiles); len(missing) > 0 {
+		slog.Warn("archive group has missing volumes, deferring extraction",
+			"group", group,
+			"missing", missing,
+			"have", len(groupFiles))
+		return
+	}
+
+	// The contiguity check above cannot see a set truncated at the tail — a
+	// prefix like .rar…r05 of a 40-volume release looks perfectly contiguous.
+	// Only the source knows how many volumes there really are.
+	if !q.haveAllRemoteVolumes(group, groupFiles) {
+		return
+	}
+
 	// Find the first-part file to extract from
 	var firstPartJob *models.Job
 	for _, j := range groupJobs {
@@ -593,6 +712,10 @@ func (q *queue) checkArchiveGroupComplete(group string, completedJob *models.Job
 		Priority:   1, // slightly higher priority so extraction runs soon after downloads
 		MaxRetries: q.config.GetJobs().MaxRetries,
 		Metadata: models.JobMetadata{
+			// Carried forward so the import notification can be routed: the
+			// extracted media file, not the volumes, is what gets imported.
+			Category:    firstPartJob.Metadata.Category,
+			TorrentName: firstPartJob.Metadata.TorrentName,
 			ExtraFields: map[string]interface{}{
 				"job_type":      "extraction",
 				"archive_group": group,

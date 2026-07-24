@@ -24,6 +24,7 @@ type Config struct {
 	Logging       LoggingConfig       `yaml:"logging"`
 	Sync          SyncConfig          `yaml:"sync"`
 	Extraction    ExtractionConfig    `yaml:"extraction"`
+	MediaManagers MediaManagersConfig `yaml:"media_managers"`
 
 	mu       sync.RWMutex
 	watchers []chan<- struct{}
@@ -38,6 +39,27 @@ type ExtractionConfig struct {
 	Enabled         bool `yaml:"enabled"`
 	CleanupArchives bool `yaml:"cleanup_archives"`
 }
+
+// MediaManagersConfig describes the Radarr/Sonarr instances that should be told
+// when a download has landed locally.
+type MediaManagersConfig struct {
+	// Debounce is how long to wait for a burst of completions to settle before
+	// issuing a single refresh. A season pack completes one file at a time.
+	Debounce  time.Duration        `yaml:"debounce"`
+	Instances []MediaManagerConfig `yaml:"instances"`
+}
+
+type MediaManagerConfig struct {
+	Name       string   `yaml:"name"`
+	Enabled    bool     `yaml:"enabled"`
+	URL        string   `yaml:"url"`
+	APIKey     string   `yaml:"api_key"`
+	Categories []string `yaml:"categories"`
+}
+
+// defaultMediaManagerDebounce is long enough to absorb a season pack's worth of
+// per-file completions without noticeably delaying the import.
+const defaultMediaManagerDebounce = 30 * time.Second
 
 type RemoteConfig struct {
 	Name         string        `yaml:"name"`
@@ -283,6 +305,7 @@ func (c *Config) reload(configPath string) error {
 	c.Logging = newConfig.Logging
 	c.Sync = newConfig.Sync
 	c.Extraction = newConfig.Extraction
+	c.MediaManagers = newConfig.MediaManagers
 
 	slog.Info("configuration reloaded successfully")
 	return nil
@@ -371,4 +394,16 @@ func (c *Config) GetExtraction() ExtractionConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Extraction
+}
+
+// GetMediaManagers returns a copy of the media manager configuration.
+func (c *Config) GetMediaManagers() MediaManagersConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	out := c.MediaManagers
+	if out.Debounce <= 0 {
+		out.Debounce = defaultMediaManagerDebounce
+	}
+	return out
 }

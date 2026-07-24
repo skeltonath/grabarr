@@ -17,6 +17,9 @@ type RsyncExecutor struct {
 	gatekeeper interfaces.Gatekeeper
 	client     *rsync.Client
 	repo       interfaces.JobRepository
+
+	// extractFn runs the extraction tool; nil means use the real unrar/7z.
+	extractFn extractRunner
 }
 
 func NewRsyncExecutor(cfg *config.Config, gatekeeper interfaces.Gatekeeper, repo interfaces.JobRepository) *RsyncExecutor {

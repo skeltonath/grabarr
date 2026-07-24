@@ -329,3 +329,87 @@ server:
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to unmarshal config")
 }
+
+func TestLoadConfigMediaManagers(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Setenv("TEST_RADARR_KEY", "secret-radarr-key")
+
+	configContent := `
+server:
+  port: 8080
+database:
+  path: "` + tmpDir + `/grabarr.db"
+downloads:
+  local_path: "` + tmpDir + `/downloads"
+jobs:
+  max_concurrent: 3
+  max_retries: 5
+
+media_managers:
+  debounce: 45s
+  instances:
+    - name: "radarr"
+      enabled: true
+      url: "http://millions:7878"
+      api_key: "${TEST_RADARR_KEY}"
+      categories: ["dp-movies"]
+    - name: "sonarr"
+      enabled: false
+      url: "http://millions:8989"
+      api_key: "sonarr-key"
+      categories: ["dp-tv", "dp-anime"]
+`
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0644))
+
+	cfg, err := loadConfig(configPath)
+	require.NoError(t, err)
+
+	mm := cfg.GetMediaManagers()
+	assert.Equal(t, 45*time.Second, mm.Debounce)
+	require.Len(t, mm.Instances, 2)
+
+	assert.Equal(t, "radarr", mm.Instances[0].Name)
+	assert.True(t, mm.Instances[0].Enabled)
+	assert.Equal(t, "http://millions:7878", mm.Instances[0].URL)
+	assert.Equal(t, "secret-radarr-key", mm.Instances[0].APIKey,
+		"api_key should be expanded from the environment so secrets stay out of the file")
+	assert.Equal(t, []string{"dp-movies"}, mm.Instances[0].Categories)
+
+	assert.Equal(t, "sonarr", mm.Instances[1].Name)
+	assert.False(t, mm.Instances[1].Enabled)
+	assert.Equal(t, []string{"dp-tv", "dp-anime"}, mm.Instances[1].Categories)
+}
+
+func TestMediaManagersDebounceDefaultsWhenUnset(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	configContent := `
+server:
+  port: 8080
+database:
+  path: "` + tmpDir + `/grabarr.db"
+downloads:
+  local_path: "` + tmpDir + `/downloads"
+jobs:
+  max_concurrent: 3
+  max_retries: 5
+
+media_managers:
+  instances:
+    - name: "radarr"
+      enabled: true
+      url: "http://millions:7878"
+      api_key: "k"
+      categories: ["dp-movies"]
+`
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0644))
+
+	cfg, err := loadConfig(configPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, 30*time.Second, cfg.GetMediaManagers().Debounce,
+		"an unset debounce should fall back to a sane default")
+}
