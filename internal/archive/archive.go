@@ -2,8 +2,10 @@ package archive
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -116,6 +118,107 @@ func IsFirstPart(filename string, groupFiles []string) bool {
 	}
 
 	return false
+}
+
+// MissingVolumes returns the names of volumes that are absent from the middle
+// of a multi-part archive set, in ascending order.
+//
+// RAR volumes are numbered contiguously, so a gap means we are holding an
+// incomplete set and must not extract yet. Note this only detects interior
+// gaps: a set truncated at the tail (.rar….r05 when the release actually has
+// 40 volumes) looks perfectly contiguous, so callers must also confirm the set
+// is complete against the source.
+//
+// files are base filenames belonging to a single archive group.
+func MissingVolumes(files []string) []string {
+	// .partN.rar sets and old-style .rNN sets are numbered differently, so
+	// collect each separately and report on whichever is in use.
+	partNums := make(map[int]bool)
+	rNums := make(map[int]bool)
+	var partWidth int
+	var partPrefix, rPrefix string
+	var hasPlainRar bool
+
+	for _, f := range files {
+		lower := strings.ToLower(f)
+
+		if strings.HasSuffix(lower, ".rar") && !partNRarRegex.MatchString(lower) {
+			hasPlainRar = true
+			continue
+		}
+
+		if m := partNRarRegex.FindStringSubmatch(lower); m != nil {
+			n, err := strconv.Atoi(m[1])
+			if err != nil {
+				continue
+			}
+			partNums[n] = true
+			if len(m[1]) > partWidth {
+				partWidth = len(m[1])
+			}
+			if loc := partNRarRegex.FindStringIndex(lower); loc != nil {
+				partPrefix = f[:loc[0]]
+			}
+			continue
+		}
+
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(lower), "."))
+		if rNNRegex.MatchString(ext) {
+			n, err := strconv.Atoi(ext[1:])
+			if err != nil {
+				continue
+			}
+			rNums[n] = true
+			rPrefix = f[:len(f)-len(filepath.Ext(f))]
+		}
+	}
+
+	if len(partNums) > 0 {
+		return gaps(partNums, math.MinInt, func(n int) string {
+			return fmt.Sprintf("%s.part%0*d.rar", partPrefix, partWidth, n)
+		})
+	}
+
+	if len(rNums) > 0 {
+		// A plain .rar is the volume before .r00, so its presence means the
+		// numbered run has to start at zero — .rar plus .r01 is missing .r00.
+		floor := math.MinInt
+		if hasPlainRar {
+			floor = 0
+		}
+		return gaps(rNums, floor, func(n int) string {
+			return fmt.Sprintf("%s.r%02d", rPrefix, n)
+		})
+	}
+
+	return nil
+}
+
+// gaps returns names for every integer missing between the lowest and highest
+// keys present in nums. If floor is not math.MinInt the scan starts there
+// instead of at the lowest key present.
+func gaps(nums map[int]bool, floor int, name func(int) string) []string {
+	lo, hi := math.MaxInt, math.MinInt
+	for n := range nums {
+		if n < lo {
+			lo = n
+		}
+		if n > hi {
+			hi = n
+		}
+	}
+
+	if floor != math.MinInt && floor < lo {
+		lo = floor
+	}
+
+	var missing []string
+	for n := lo; n <= hi; n++ {
+		if !nums[n] {
+			missing = append(missing, name(n))
+		}
+	}
+	return missing
 }
 
 // ArchiveExtensionPatterns converts user-facing archive extension names into

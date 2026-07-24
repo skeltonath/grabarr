@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"grabarr/internal/api"
+	"grabarr/internal/arr"
 	"grabarr/internal/config"
 	"grabarr/internal/executor"
 	"grabarr/internal/gatekeeper"
+	"grabarr/internal/interfaces"
 	"grabarr/internal/notifications"
 	"grabarr/internal/queue"
 	"grabarr/internal/repository"
@@ -100,6 +102,18 @@ func run() error {
 
 	// Initialize and start the sync scanner
 	scanner := internalsync.New(cfg, repo, jobQueue)
+
+	// The scanner is the queue's source of truth for which archive volumes
+	// actually exist, so extraction never runs against a partial set.
+	jobQueue.SetRemoteVolumeLister(scanner)
+
+	// Tell Radarr/Sonarr when a transfer lands locally. Without this they only
+	// learn about completions by polling qBittorrent on the seedbox, which
+	// reports "done" long before the file exists on this machine.
+	if importNotifier := newImportNotifier(cfg); importNotifier != nil {
+		jobQueue.SetImportNotifier(importNotifier)
+	}
+
 	scanner.Start(ctx)
 
 	// Setup HTTP server
@@ -243,4 +257,30 @@ func setupLogging(logConfig config.LoggingConfig) {
 
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
+}
+
+// newImportNotifier builds the Radarr/Sonarr notifier from config, or returns
+// nil when no usable instance is configured.
+func newImportNotifier(cfg *config.Config) interfaces.ImportNotifier {
+	mm := cfg.GetMediaManagers()
+
+	instances := make([]arr.InstanceConfig, 0, len(mm.Instances))
+	for _, i := range mm.Instances {
+		instances = append(instances, arr.InstanceConfig{
+			Name:       i.Name,
+			Enabled:    i.Enabled,
+			URL:        i.URL,
+			APIKey:     i.APIKey,
+			Categories: i.Categories,
+		})
+	}
+
+	notifier := arr.NewNotifier(instances, mm.Debounce)
+	if !notifier.HasTargets() {
+		slog.Info("no media managers configured, import notifications disabled")
+		return nil
+	}
+
+	slog.Info("import notifications enabled", "debounce", mm.Debounce)
+	return notifier
 }

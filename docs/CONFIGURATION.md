@@ -306,6 +306,46 @@ logging:
 - `json`: Structured JSON logs (recommended for production)
 - `text`: Human-readable text logs (easier for local development)
 
+### media_managers
+
+Radarr/Sonarr instances that should be told when a transfer has landed on local
+disk.
+
+```yaml
+media_managers:
+  debounce: "30s"
+  instances:
+    - name: "radarr"
+      enabled: true
+      url: "http://radarr:7878"
+      api_key: "${RADARR_API_KEY}"
+      categories: ["dp-movies"]
+    - name: "sonarr"
+      enabled: true
+      url: "http://sonarr:8989"
+      api_key: "${SONARR_API_KEY}"
+      categories: ["dp-tv", "dp-anime"]
+```
+
+**Why this exists:** the *arrs' download client is qBittorrent on the seedbox,
+which reports a torrent "complete" the moment it finishes there — long before
+grabarr has rsynced the file locally. Left to poll, they attempt an import
+against a path that does not exist yet, log `path does not exist`, and retry
+passively. On job completion grabarr sends `RefreshMonitoredDownloads`, which
+makes the instance re-check its queue immediately.
+
+**Fields:**
+- `debounce`: how long to wait for a burst of completions to settle before
+  issuing one refresh. Jobs are per-file, so a season pack completes dozens of
+  them; the command is idempotent, so they coalesce. Defaults to `30s`.
+- `enabled`: instances that are disabled, or missing a `url` or `api_key`, are
+  skipped.
+- `categories`: matched case-insensitively against the job's category. A job
+  with **no** category — everything the sync scanner discovers, since it lists
+  one seedbox directory shared by all categories — refreshes every instance.
+
+Omit the section entirely to disable import notifications.
+
 ## Environment Variables
 
 ### .env File
@@ -314,6 +354,10 @@ logging:
 # Pushover Notifications (optional)
 PUSHOVER_TOKEN=your_pushover_app_token
 PUSHOVER_USER=your_pushover_user_key
+
+# Radarr/Sonarr API keys (optional, required for import notifications)
+RADARR_API_KEY=your_radarr_api_key
+SONARR_API_KEY=your_sonarr_api_key
 
 # Timezone (optional, defaults to system timezone)
 TZ=America/Los_Angeles

@@ -19,6 +19,8 @@ type JobQueue interface {
 	RetryJob(id int64) error
 	GetSummary() (*models.JobSummary, error)
 	SetJobExecutor(executor JobExecutor)
+	SetRemoteVolumeLister(lister RemoteVolumeLister)
+	SetImportNotifier(notifier ImportNotifier)
 }
 
 // JobExecutor executes individual jobs
@@ -57,6 +59,20 @@ type JobRepository interface {
 	GetJob(id int64) (*models.Job, error)
 	GetJobs(filter models.JobFilter) ([]*models.Job, error)
 	CountJobs(filter models.JobFilter) (int, error)
+}
+
+// RemoteVolumeLister reports which archive volumes exist on the source for a
+// given archive group. It lets the queue confirm it holds the whole set before
+// extracting, rather than trusting that the volumes it happens to know about
+// are all of them.
+type RemoteVolumeLister interface {
+	ListArchiveVolumes(ctx context.Context, groupKey string) ([]string, error)
+}
+
+// ImportNotifier tells downstream media managers that a download has landed on
+// local disk and is ready to import.
+type ImportNotifier interface {
+	NotifyCompleted(ctx context.Context, category string)
 }
 
 // Notifier handles sending notifications for various events

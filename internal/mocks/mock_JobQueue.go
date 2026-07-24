@@ -437,6 +437,39 @@ func (_c *MockJobQueue_RetryJob_Call) RunAndReturn(run func(int64) error) *MockJ
 	return _c
 }
 
+// SetImportNotifier provides a mock function with given fields: notifier
+func (_m *MockJobQueue) SetImportNotifier(notifier interfaces.ImportNotifier) {
+	_m.Called(notifier)
+}
+
+// MockJobQueue_SetImportNotifier_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetImportNotifier'
+type MockJobQueue_SetImportNotifier_Call struct {
+	*mock.Call
+}
+
+// SetImportNotifier is a helper method to define mock.On call
+//   - notifier interfaces.ImportNotifier
+func (_e *MockJobQueue_Expecter) SetImportNotifier(notifier interface{}) *MockJobQueue_SetImportNotifier_Call {
+	return &MockJobQueue_SetImportNotifier_Call{Call: _e.mock.On("SetImportNotifier", notifier)}
+}
+
+func (_c *MockJobQueue_SetImportNotifier_Call) Run(run func(notifier interfaces.ImportNotifier)) *MockJobQueue_SetImportNotifier_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interfaces.ImportNotifier))
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_SetImportNotifier_Call) Return() *MockJobQueue_SetImportNotifier_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockJobQueue_SetImportNotifier_Call) RunAndReturn(run func(interfaces.ImportNotifier)) *MockJobQueue_SetImportNotifier_Call {
+	_c.Run(run)
+	return _c
+}
+
 // SetJobExecutor provides a mock function with given fields: executor
 func (_m *MockJobQueue) SetJobExecutor(executor interfaces.JobExecutor) {
 	_m.Called(executor)
@@ -466,6 +499,39 @@ func (_c *MockJobQueue_SetJobExecutor_Call) Return() *MockJobQueue_SetJobExecuto
 }
 
 func (_c *MockJobQueue_SetJobExecutor_Call) RunAndReturn(run func(interfaces.JobExecutor)) *MockJobQueue_SetJobExecutor_Call {
+	_c.Run(run)
+	return _c
+}
+
+// SetRemoteVolumeLister provides a mock function with given fields: lister
+func (_m *MockJobQueue) SetRemoteVolumeLister(lister interfaces.RemoteVolumeLister) {
+	_m.Called(lister)
+}
+
+// MockJobQueue_SetRemoteVolumeLister_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetRemoteVolumeLister'
+type MockJobQueue_SetRemoteVolumeLister_Call struct {
+	*mock.Call
+}
+
+// SetRemoteVolumeLister is a helper method to define mock.On call
+//   - lister interfaces.RemoteVolumeLister
+func (_e *MockJobQueue_Expecter) SetRemoteVolumeLister(lister interface{}) *MockJobQueue_SetRemoteVolumeLister_Call {
+	return &MockJobQueue_SetRemoteVolumeLister_Call{Call: _e.mock.On("SetRemoteVolumeLister", lister)}
+}
+
+func (_c *MockJobQueue_SetRemoteVolumeLister_Call) Run(run func(lister interfaces.RemoteVolumeLister)) *MockJobQueue_SetRemoteVolumeLister_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interfaces.RemoteVolumeLister))
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_SetRemoteVolumeLister_Call) Return() *MockJobQueue_SetRemoteVolumeLister_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockJobQueue_SetRemoteVolumeLister_Call) RunAndReturn(run func(interfaces.RemoteVolumeLister)) *MockJobQueue_SetRemoteVolumeLister_Call {
 	_c.Run(run)
 	return _c
 }
