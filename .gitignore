@@ -70,3 +70,6 @@ dist/
 
 # Bruno directory
 bruno/
+# Tool working directories
+.playwright-mcp/
+.superpowers/
