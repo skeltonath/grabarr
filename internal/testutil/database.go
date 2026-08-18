@@ -1,17 +1,23 @@
 package testutil
 
 import (
-	"grabarr/internal/repository"
 	"os"
+	"path/filepath"
 	"testing"
+
+	"grabarr/internal/repository"
 )
 
-// SetupTestDB creates an in-memory SQLite database for testing
+// SetupTestDB creates a throwaway SQLite database for testing.
+//
+// It is file-backed rather than ":memory:" because the repository runs a
+// connection pool, and every connection to ":memory:" gets its own private,
+// empty database — so any code that queries from a second goroutine sees no
+// tables at all. The file lives in the test's temp dir and goes away with it.
 func SetupTestDB(t *testing.T) *repository.Repository {
 	t.Helper()
 
-	// Use in-memory database
-	repo, err := repository.New(":memory:")
+	repo, err := repository.New(filepath.Join(t.TempDir(), "grabarr-test.db"))
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}

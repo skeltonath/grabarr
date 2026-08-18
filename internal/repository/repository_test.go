@@ -560,3 +560,69 @@ func TestRepository_MigrationAddsDownloadConfig(t *testing.T) {
 	assert.NotNil(t, retrieved.DownloadConfig)
 	assert.Equal(t, 2, *retrieved.DownloadConfig.Transfers)
 }
+
+func TestRepository_GetSchedulableJobs(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	create := func(name string, status models.JobStatus, priority int) *models.Job {
+		job := &models.Job{
+			Name:       name,
+			RemotePath: "/remote/" + name,
+			LocalPath:  "/local/" + name,
+			Status:     status,
+			Priority:   priority,
+			MaxRetries: 3,
+		}
+		require.NoError(t, repo.CreateJob(job))
+		return job
+	}
+
+	create("oldest", models.JobStatusQueued, 0)
+	create("middle", models.JobStatusPending, 0)
+	create("running", models.JobStatusRunning, 0)
+	create("done", models.JobStatusCompleted, 0)
+	create("failed", models.JobStatusFailed, 0)
+	create("newest", models.JobStatusQueued, 0)
+	create("urgent", models.JobStatusQueued, 5)
+
+	jobs, err := repo.GetSchedulableJobs(10)
+	require.NoError(t, err)
+
+	names := make([]string, len(jobs))
+	for i, job := range jobs {
+		names[i] = job.Name
+	}
+
+	// Priority first, then submission order. Jobs that are running or already
+	// finished are not schedulable.
+	assert.Equal(t, []string{"urgent", "oldest", "middle", "newest"}, names)
+}
+
+func TestRepository_GetSchedulableJobs_RespectsLimit(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	for _, name := range []string{"a", "b", "c"} {
+		job := &models.Job{
+			Name:       name,
+			RemotePath: "/remote/" + name,
+			LocalPath:  "/local/" + name,
+			Status:     models.JobStatusQueued,
+			MaxRetries: 3,
+		}
+		require.NoError(t, repo.CreateJob(job))
+	}
+
+	jobs, err := repo.GetSchedulableJobs(2)
+	require.NoError(t, err)
+	require.Len(t, jobs, 2)
+	assert.Equal(t, "a", jobs[0].Name)
+	assert.Equal(t, "b", jobs[1].Name)
+}
+
+func TestRepository_GetSchedulableJobs_Empty(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	jobs, err := repo.GetSchedulableJobs(10)
+	require.NoError(t, err)
+	assert.Empty(t, jobs)
+}

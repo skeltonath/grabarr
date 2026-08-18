@@ -37,7 +37,7 @@ func TestNew(t *testing.T) {
 	assert.Equal(t, mockChecker, queue.gatekeeper)
 	assert.Equal(t, mockNotifier, queue.notifier)
 	assert.NotNil(t, queue.activeJobs)
-	assert.NotNil(t, queue.jobQueue)
+	assert.NotNil(t, queue.wake)
 	assert.False(t, queue.running)
 }
 

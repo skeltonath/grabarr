@@ -28,7 +28,7 @@ type queue struct {
 	mu              sync.RWMutex
 	running         bool
 	activeJobs      map[int64]context.CancelFunc
-	jobQueue        chan *models.Job
+	wake            chan struct{}
 	schedulerCtx    context.Context
 	schedulerCancel context.CancelFunc
 
@@ -65,7 +65,7 @@ func New(repo *repository.Repository, config *config.Config, gatekeeper interfac
 		repo:        repo,
 		config:      config,
 		activeJobs:  make(map[int64]context.CancelFunc),
-		jobQueue:    make(chan *models.Job, 1000), // Buffered channel for job queue
+		wake:        make(chan struct{}, 1),
 		gatekeeper:  gatekeeper,
 		notifier:    notifier,
 		lastCleanup: time.Now(),
@@ -208,15 +208,17 @@ func (q *queue) Enqueue(job *models.Job) error {
 		return fmt.Errorf(errMsg)
 	}
 
-	// Add to in-memory queue
+	slog.Info("job enqueued", "job_id", job.ID, "name", job.Name)
+	q.wakeScheduler()
+	return nil
+}
+
+// wakeScheduler asks the scheduler to look for work now rather than waiting for
+// the next tick. Non-blocking: a pending wake-up already covers this one.
+func (q *queue) wakeScheduler() {
 	select {
-	case q.jobQueue <- job:
-		slog.Info("job enqueued", "job_id", job.ID, "name", job.Name)
-		return nil
+	case q.wake <- struct{}{}:
 	default:
-		// Queue is full, job is still in database but not in memory queue
-		slog.Warn("job queue full, job saved to database", "job_id", job.ID)
-		return nil
 	}
 }
 
@@ -303,13 +305,8 @@ func (q *queue) RetryJob(id int64) error {
 		return fmt.Errorf("failed to update job status: %w", err)
 	}
 
-	// Re-enqueue the job
-	select {
-	case q.jobQueue <- job:
-		slog.Info("job retried", "job_id", id, "retries", job.Retries)
-	default:
-		return fmt.Errorf("job queue is full, cannot retry job")
-	}
+	slog.Info("job retried", "job_id", id, "retries", job.Retries)
+	q.wakeScheduler()
 
 	return nil
 }
@@ -318,37 +315,30 @@ func (q *queue) GetSummary() (*models.JobSummary, error) {
 	return q.repo.GetJobSummary()
 }
 
+// loadExistingJobs returns jobs interrupted by a restart to the waiting pool.
+// The scheduler reads that pool straight from the database, so recovery only
+// has to fix up statuses — a job left "running" by a hard stop is not running
+// any more, and one left "pending" should be reconsidered from scratch.
 func (q *queue) loadExistingJobs() error {
-	// Load jobs that need to be recovered: queued, pending, and running
 	jobs, err := q.repo.GetJobs(models.JobFilter{
-		Status:    []models.JobStatus{models.JobStatusQueued, models.JobStatusPending, models.JobStatusRunning},
-		SortBy:    "priority",
-		SortOrder: "DESC",
+		Status: []models.JobStatus{models.JobStatusPending, models.JobStatusRunning},
 	})
 	if err != nil {
 		return err
 	}
 
 	for _, job := range jobs {
-		// Reset pending and running jobs to queued for recovery
-		if job.Status == models.JobStatusPending || job.Status == models.JobStatusRunning {
-			oldStatus := job.Status
-			job.Status = models.JobStatusQueued
-			if err := q.repo.UpdateJob(job); err != nil {
-				slog.Error("failed to reset job to queued", "job_id", job.ID, "old_status", oldStatus, "error", err)
-				continue
-			}
-			slog.Info("recovered interrupted job", "job_id", job.ID, "name", job.Name, "previous_status", oldStatus)
+		oldStatus := job.Status
+		job.Status = models.JobStatusQueued
+		if err := q.repo.UpdateJob(job); err != nil {
+			slog.Error("failed to reset job to queued", "job_id", job.ID, "old_status", oldStatus, "error", err)
+			continue
 		}
-
-		select {
-		case q.jobQueue <- job:
-		default:
-			slog.Warn("job queue full during startup, some jobs may be delayed", "job_id", job.ID)
-		}
+		slog.Info("recovered interrupted job", "job_id", job.ID, "name", job.Name, "previous_status", oldStatus)
 	}
 
-	slog.Info("loaded existing jobs", "count", len(jobs))
+	slog.Info("recovered interrupted jobs", "count", len(jobs))
+	q.wakeScheduler()
 	return nil
 }
 
@@ -362,75 +352,80 @@ func (q *queue) scheduler() {
 			return
 		case <-ticker.C:
 			q.processQueue()
-		case job := <-q.jobQueue:
-			// Process job immediately if resources allow
-			if q.canScheduleNewJob() && q.canStartJobNow(job) {
-				q.scheduleJob(job)
-			} else {
-				// Put job back in queue for later
-				job.Status = models.JobStatusPending
-				if err := q.repo.UpdateJob(job); err != nil {
-					slog.Error("failed to update job status to pending", "job_id", job.ID, "error", err)
-				}
-
-				select {
-				case q.jobQueue <- job:
-				default:
-					slog.Error("failed to re-queue job", "job_id", job.ID)
-				}
-			}
+		case <-q.wake:
+			q.processQueue()
 		}
 	}
 }
 
+// processQueue starts as many waiting jobs as the concurrency limit and the
+// gatekeeper allow, always taking the oldest first.
+//
+// It reads the waiting pool from the database rather than an in-memory queue so
+// that order is a property of the data, not of how jobs happened to be shuffled
+// by re-queuing. That shuffling is what made a burst of downloads finish in
+// arbitrary order.
 func (q *queue) processQueue() {
-	if !q.canScheduleNewJob() {
-		return
-	}
-
-	// Try to process jobs from the queue
 	for q.canScheduleNewJob() {
-		select {
-		case job := <-q.jobQueue:
-			if q.canStartJobNow(job) {
-				q.scheduleJob(job)
-			} else {
-				// Put back in queue
-				select {
-				case q.jobQueue <- job:
-				default:
-					job.Status = models.JobStatusPending
-					q.repo.UpdateJob(job)
-				}
-				return
-			}
-		default:
-			// No jobs in queue, try to load from database
-			jobs, err := q.repo.GetJobs(models.JobFilter{
-				Status:    []models.JobStatus{models.JobStatusQueued, models.JobStatusPending},
-				SortBy:    "priority",
-				SortOrder: "DESC",
-				Limit:     10,
-			})
-			if err != nil {
-				slog.Error("failed to load jobs from database", "error", err)
-				return
-			}
-
-			if len(jobs) == 0 {
-				return // No more jobs to process
-			}
-
-			// Add jobs to queue
-			for _, job := range jobs {
-				if q.canScheduleNewJob() && q.canStartJobNow(job) {
-					q.scheduleJob(job)
-				} else {
-					break
-				}
-			}
+		job, err := q.nextWaitingJob()
+		if err != nil {
+			slog.Error("failed to load waiting jobs from database", "error", err)
 			return
 		}
+		if job == nil {
+			return // nothing waiting
+		}
+
+		if !q.canStartJobNow(job) {
+			// The oldest waiting job holds the line. Skipping past it to a job
+			// that happens to fit is exactly the hopping-around this ordering
+			// exists to prevent, so wait for it instead.
+			q.markPending(job)
+			return
+		}
+
+		if !q.scheduleJob(job) {
+			return
+		}
+	}
+}
+
+// nextWaitingJob returns the oldest job that is waiting and not already running,
+// or nil when there is nothing to start.
+//
+// The database status is the primary guard against starting a job twice, but a
+// job that was just handed to scheduleJob is still marked queued for the moment
+// it takes its goroutine to mark it started — hence the activeJobs check too.
+func (q *queue) nextWaitingJob() (*models.Job, error) {
+	q.mu.RLock()
+	limit := q.config.GetJobs().MaxConcurrent + len(q.activeJobs) + 1
+	q.mu.RUnlock()
+
+	jobs, err := q.repo.GetSchedulableJobs(limit)
+	if err != nil {
+		return nil, err
+	}
+
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	for _, job := range jobs {
+		if _, active := q.activeJobs[job.ID]; !active {
+			return job, nil
+		}
+	}
+	return nil, nil
+}
+
+// markPending records that a job is waiting on resources rather than on its turn.
+func (q *queue) markPending(job *models.Job) {
+	if job.Status == models.JobStatusPending {
+		return // already recorded; don't churn the row every tick
+	}
+
+	job.Status = models.JobStatusPending
+	if err := q.repo.UpdateJob(job); err != nil {
+		slog.Error("failed to update job status to pending", "job_id", job.ID, "error", err)
 	}
 }
 
@@ -455,34 +450,49 @@ func (q *queue) canScheduleNewJob() bool {
 	return len(q.activeJobs) < maxConcurrent
 }
 
-func (q *queue) scheduleJob(job *models.Job) {
+// scheduleJob claims a concurrency slot for a job and runs it. It reports
+// whether the job was claimed; a job already running is not claimed again.
+func (q *queue) scheduleJob(job *models.Job) bool {
 	q.mu.Lock()
-	defer q.mu.Unlock()
+
+	if _, active := q.activeJobs[job.ID]; active {
+		q.mu.Unlock()
+		return false
+	}
 
 	// Create context for this job
 	ctx, cancel := context.WithCancel(q.schedulerCtx)
 	q.activeJobs[job.ID] = cancel
+	q.mu.Unlock()
 
 	// Start job execution in goroutine
 	go func() {
-		defer func() {
-			q.mu.Lock()
-			delete(q.activeJobs, job.ID)
-			q.mu.Unlock()
-		}()
+		started := q.executeJob(ctx, job)
 
-		q.executeJob(ctx, job)
+		q.mu.Lock()
+		delete(q.activeJobs, job.ID)
+		q.mu.Unlock()
+
+		// A slot just opened; start the next waiting job now instead of at the
+		// next tick. Skipped when the job never got going, so a job that cannot
+		// even be marked started falls back to the tick rather than spinning.
+		if started {
+			q.wakeScheduler()
+		}
 	}()
 
 	slog.Info("job scheduled", "job_id", job.ID, "name", job.Name)
+	return true
 }
 
-func (q *queue) executeJob(ctx context.Context, job *models.Job) {
+// executeJob runs a job to completion and records the outcome. It reports
+// whether the job actually ran.
+func (q *queue) executeJob(ctx context.Context, job *models.Job) bool {
 	// Mark job as started
 	job.MarkStarted()
 	if err := q.repo.UpdateJob(job); err != nil {
 		slog.Error("failed to mark job as started", "job_id", job.ID, "error", err)
-		return
+		return false
 	}
 
 	// Create job attempt record
@@ -550,6 +560,8 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) {
 	if err := q.repo.UpdateJobAttempt(attempt); err != nil {
 		slog.Error("failed to update job attempt", "job_id", job.ID, "error", err)
 	}
+
+	return true
 }
 
 // notifyImportReady tells the media manager that this job's output is on local

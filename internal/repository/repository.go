@@ -225,48 +225,7 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	}
 	defer rows.Close()
 
-	var jobs []*models.Job
-	for rows.Next() {
-		var job models.Job
-		var errorMessage sql.NullString
-		var startedAt, completedAt sql.NullTime
-		var downloadConfig sql.NullString
-
-		err := rows.Scan(
-			&job.ID, &job.Name, &job.RemotePath, &job.LocalPath, &job.Status,
-			&job.Priority, &job.Retries, &job.MaxRetries, &errorMessage,
-			&job.Progress, &job.Metadata, &downloadConfig, &job.CreatedAt, &job.UpdatedAt,
-			&startedAt, &completedAt, &job.FileSize, &job.TransferredBytes,
-			&job.TransferSpeed)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan job: %w", err)
-		}
-
-		if errorMessage.Valid {
-			job.ErrorMessage = errorMessage.String
-		}
-		if downloadConfig.Valid && downloadConfig.String != "" {
-			job.DownloadConfig = &models.DownloadConfig{}
-			if err := job.DownloadConfig.Scan(downloadConfig.String); err != nil {
-				slog.Warn("failed to parse download_config, ignoring", "job_id", job.ID, "error", err)
-				job.DownloadConfig = nil
-			}
-		}
-		if startedAt.Valid {
-			job.StartedAt = &startedAt.Time
-		}
-		if completedAt.Valid {
-			job.CompletedAt = &completedAt.Time
-		}
-
-		jobs = append(jobs, &job)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating jobs: %w", err)
-	}
-
-	return jobs, nil
+	return scanJobRows(rows)
 }
 
 func (r *Repository) CountJobs(filter models.JobFilter) (int, error) {
@@ -329,6 +288,12 @@ func (r *Repository) GetJobsByArchiveGroup(group string) ([]*models.Job, error) 
 	}
 	defer rows.Close()
 
+	return scanJobRows(rows)
+}
+
+// scanJobRows materialises a job result set. Every job query selects the same
+// column list, so they all decode through here.
+func scanJobRows(rows *sql.Rows) ([]*models.Job, error) {
 	var jobs []*models.Job
 	for rows.Next() {
 		var job models.Job
@@ -367,10 +332,37 @@ func (r *Repository) GetJobsByArchiveGroup(group string) ([]*models.Job, error) 
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating archive group jobs: %w", err)
+		return nil, fmt.Errorf("error iterating jobs: %w", err)
 	}
 
 	return jobs, nil
+}
+
+// GetSchedulableJobs returns jobs waiting to run, oldest first.
+//
+// The ordering is the queue's promise to the user: jobs start in the order they
+// were submitted, so downloads finish roughly in the order they were asked for
+// instead of hopping around. Priority still wins (extraction jobs are meant to
+// jump the line), and id breaks ties because created_at only has one-second
+// resolution — a burst of jobs enqueued together shares a timestamp.
+func (r *Repository) GetSchedulableJobs(limit int) ([]*models.Job, error) {
+	query := `
+		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
+			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
+			   completed_at, file_size, transferred_bytes, transfer_speed
+		FROM jobs
+		WHERE status IN ('queued', 'pending')
+		ORDER BY priority DESC, created_at ASC, id ASC
+		LIMIT ?
+	`
+
+	rows, err := r.db.Query(query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query schedulable jobs: %w", err)
+	}
+	defer rows.Close()
+
+	return scanJobRows(rows)
 }
 
 func (r *Repository) UpdateJob(job *models.Job) error {
