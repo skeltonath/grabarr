@@ -312,6 +312,11 @@ body.view-settings #scan-btn { display: none !important; }
   padding: 6px 8px; border-radius: 6px; font-size: 13px; outline: none;
 }
 .setting-control input[type=number] { width: 90px; text-align: right; }
+/* Drop the native spinners — they crowd the field and the values are typed,
+   not nudged. */
+.setting-control input[type=number] { appearance: textfield; -moz-appearance: textfield; }
+.setting-control input[type=number]::-webkit-inner-spin-button,
+.setting-control input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .setting-control input:focus, .setting-control select:focus { border-color: var(--blue); }
 .setting-control input.invalid { border-color: var(--red); }
 .setting-unit { color: var(--muted); font-size: 12px; min-width: 32px; }
