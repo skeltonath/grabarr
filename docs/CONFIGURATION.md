@@ -146,7 +146,7 @@ Resource monitoring and admission control.
 
 | Setting | Type | Required | Description | Default |
 |---------|------|----------|-------------|---------|
-| `gatekeeper.seedbox.bandwidth_limit_mbps` | int | Yes | Maximum bandwidth in Mbps | None |
+| `gatekeeper.seedbox.bandwidth_limit_mbps` | int | Yes | Total bandwidth in Mbps across all jobs; 0 = unlimited | None |
 | `gatekeeper.seedbox.check_interval` | duration | Yes | How often to check bandwidth usage | "30s" |
 
 **Example:**
@@ -157,6 +157,10 @@ gatekeeper:
     bandwidth_limit_mbps: 500  # 500Mbps out of 1Gbps connection
     check_interval: "30s"
 ```
+
+The limit is a total, not a per-job figure: it is divided by
+`jobs.max_concurrent` and passed to each transfer as `rsync --bwlimit`. See
+[GATEKEEPER.md](GATEKEEPER.md#1-bandwidth-limit).
 
 #### Cache Disk
 
@@ -217,10 +221,12 @@ jobs:
 ```
 
 **Notes:**
-- `max_concurrent` controls how many jobs can download simultaneously
+- `max_concurrent` controls how many jobs can download simultaneously, and also
+  divides the total bandwidth limit into a per-job `rsync --bwlimit`
 - Jobs are automatically retried up to `max_retries` times
 - Manual retry via API resets the retry counter
 - Cleanup runs hourly
+- All four settings can be changed at runtime — see [Runtime Settings](#runtime-settings)
 
 ### Database
 
@@ -391,6 +397,36 @@ Durations use Go's duration format:
 - `2h30m` - 2 hours 30 minutes
 - `168h` - 7 days (168 hours)
 
+## Runtime Settings
+
+A subset of the configuration can be changed while the service is running, from
+the **Settings** page in the web UI (the gear icon in the header) or via the
+[settings API](API.md#runtime-settings).
+
+These settings start from `config.yaml`. Changing one stores an override in the
+database, which then wins over the file until you reset it — so an unrelated edit
+to `config.yaml` will not silently revert a value you set from the UI. Overrides
+survive restarts and container upgrades, since they live in the database rather
+than in the image.
+
+| Setting | Effect of a change |
+|---------|--------------------|
+| `jobs.max_concurrent` | Immediate — the scheduler reads it on every pass |
+| `gatekeeper.seedbox.bandwidth_limit_mbps` | Applies to jobs started afterwards; in-flight transfers keep their limit |
+| `gatekeeper.cache_disk.max_usage_percent` | Immediate |
+| `jobs.max_retries` | Applies to newly created jobs |
+| `jobs.cleanup_completed_after` | Immediate — read by the hourly cleanup pass |
+| `jobs.cleanup_failed_after` | Immediate — read by the hourly cleanup pass |
+| `sync.enabled` | Takes effect at the next scan tick |
+| `sync.scan_interval` | Takes effect after the current interval elapses |
+
+Everything else in `config.yaml` — paths, remotes, credentials, media managers —
+is deliberately not editable from the web UI.
+
+**Resetting**: each overridden setting shows a "Reset to config.yaml" link with
+the file's value. Resetting deletes the stored override, so the setting follows
+`config.yaml` again.
+
 ## Configuration Hot-Reload
 
 Grabarr watches for configuration file changes and automatically reloads when `config.yaml` is modified:
@@ -404,6 +440,10 @@ Grabarr watches for configuration file changes and automatically reloads when `c
 - Database path
 - Downloads path (requires restart)
 - Rsync configuration (requires restart)
+
+Settings overridden from the web UI are re-applied after each reload, so editing
+an overridden value in `config.yaml` has no effect until the override is reset.
+See [Runtime Settings](#runtime-settings).
 
 ## Validation
 

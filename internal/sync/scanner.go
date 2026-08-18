@@ -30,6 +30,9 @@ type ScannerRepo interface {
 	DeleteStaleRemoteFiles(watchedPath string, seenAfter time.Time) error
 }
 
+// defaultScanInterval is used when the config leaves scan_interval unset.
+const defaultScanInterval = 5 * time.Minute
+
 // ScanStatus holds the result of the last scan.
 type ScanStatus struct {
 	LastScanAt   *time.Time
@@ -89,41 +92,42 @@ func runSSHCommand(ctx context.Context, remote config.RemoteConfig, command stri
 // Start launches the background scan loop. It returns immediately; scanning
 // happens in a goroutine that respects ctx cancellation.
 func (s *Scanner) Start(ctx context.Context) {
-	syncCfg := s.cfg.GetSync()
-	if !syncCfg.Enabled {
-		slog.Info("sync scanner disabled by config")
-		return
-	}
-
-	interval := syncCfg.ScanInterval
-	if interval <= 0 {
-		interval = 5 * time.Minute
-	}
-
 	totalWatchedPaths := 0
 	for _, r := range s.cfg.GetRemotes() {
 		totalWatchedPaths += len(r.WatchedPaths)
 	}
-	slog.Info("starting sync scanner", "interval", interval, "watched_paths", totalWatchedPaths)
+	slog.Info("starting sync scanner",
+		"enabled", s.cfg.GetSync().Enabled,
+		"interval", s.scanInterval(),
+		"watched_paths", totalWatchedPaths)
 
 	// Full scan loop (SSH → find files, reconcile).
+	//
+	// The loop always runs and re-reads its settings each cycle, so that
+	// enabling scanning or changing the interval from the settings page takes
+	// effect without restarting the service.
 	go func() {
-		if err := s.ScanNow(ctx); err != nil {
-			slog.Error("initial scan failed", "error", err)
+		if s.cfg.GetSync().Enabled {
+			if err := s.ScanNow(ctx); err != nil {
+				slog.Error("initial scan failed", "error", err)
+			}
 		}
 
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		timer := time.NewTimer(s.scanInterval())
+		defer timer.Stop()
 
 		for {
 			select {
 			case <-ctx.Done():
 				slog.Info("sync scanner stopped")
 				return
-			case <-ticker.C:
-				if err := s.ScanNow(ctx); err != nil {
-					slog.Error("periodic scan failed", "error", err)
+			case <-timer.C:
+				if s.cfg.GetSync().Enabled {
+					if err := s.ScanNow(ctx); err != nil {
+						slog.Error("periodic scan failed", "error", err)
+					}
 				}
+				timer.Reset(s.scanInterval())
 			}
 		}
 	}()
@@ -145,6 +149,18 @@ func (s *Scanner) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// scanInterval reports how long to wait before the next scan, re-read from the
+// live config each cycle so a settings change is picked up without a restart.
+// Scanning while disabled is skipped rather than stopped, so the loop keeps
+// polling for the setting being turned back on.
+func (s *Scanner) scanInterval() time.Duration {
+	interval := s.cfg.GetSync().ScanInterval
+	if interval <= 0 {
+		interval = defaultScanInterval
+	}
+	return interval
 }
 
 // ScanNow triggers an immediate full scan across all watched paths.

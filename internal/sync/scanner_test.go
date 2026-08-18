@@ -1,10 +1,13 @@
 package sync
 
 import (
+	"context"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 
+	"grabarr/internal/config"
 	"grabarr/internal/interfaces"
 	"grabarr/internal/mocks"
 	"grabarr/internal/models"
@@ -266,4 +269,60 @@ func TestCancelJobsForStaleFiles(t *testing.T) {
 
 		q.AssertNotCalled(t, "CancelJob", mock.Anything)
 	})
+}
+
+func TestScanInterval_FallsBackWhenUnset(t *testing.T) {
+	cfg := &config.Config{}
+	s := New(cfg, &stubScannerRepo{}, nil)
+
+	assert.Equal(t, defaultScanInterval, s.scanInterval())
+
+	require.NoError(t, cfg.UpdateSettings(map[string]any{"sync.scan_interval": "90s"}))
+	assert.Equal(t, 90*time.Second, s.scanInterval())
+}
+
+// The scan loop keeps running while scanning is switched off, so turning it
+// back on from the settings page takes effect without restarting the service.
+func TestScanLoop_PicksUpEnabledAtRuntime(t *testing.T) {
+	cfg := &config.Config{
+		Sync: config.SyncConfig{Enabled: false, ScanInterval: 20 * time.Millisecond},
+		Remotes: []config.RemoteConfig{{
+			Name:    "whatbox",
+			SSHHost: "seedbox.example",
+			SSHUser: "user",
+			WatchedPaths: []config.WatchedPath{{
+				RemotePath: "/home/user/downloads/",
+				Extensions: []string{"mkv"},
+			}},
+		}},
+	}
+
+	var mu sync.Mutex
+	var calls int
+
+	s := New(cfg, &stubScannerRepo{}, nil)
+	s.runSSH = func(_ context.Context, _ config.RemoteConfig, _ string) (string, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		return "", nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.Start(ctx)
+
+	time.Sleep(80 * time.Millisecond)
+	mu.Lock()
+	disabledCalls := calls
+	mu.Unlock()
+	assert.Zero(t, disabledCalls, "no scans should run while scanning is disabled")
+
+	require.NoError(t, cfg.UpdateSettings(map[string]any{"sync.enabled": true}))
+
+	assert.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return calls > 0
+	}, time.Second, 10*time.Millisecond, "enabling scanning should start scans without a restart")
 }

@@ -71,6 +71,10 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/sync/scan", h.TriggerScan).Methods("POST")
 	api.HandleFunc("/sync/status", h.GetSyncStatus).Methods("GET")
 
+	// Runtime settings endpoints
+	api.HandleFunc("/settings", h.GetSettings).Methods("GET")
+	api.HandleFunc("/settings", h.UpdateSettings).Methods("PATCH")
+
 	// System endpoints
 	api.HandleFunc("/health", h.HealthCheck).Methods("GET")
 	api.HandleFunc("/metrics", h.GetMetrics).Methods("GET")

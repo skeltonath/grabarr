@@ -388,6 +388,100 @@ curl http://localhost:8080/api/v1/metrics
 }
 ```
 
+## Runtime Settings
+
+A subset of the configuration can be read and changed while the service runs.
+Changes take effect immediately and are persisted to the database, so they
+survive restarts. See
+[CONFIGURATION.md](CONFIGURATION.md#runtime-settings) for which settings are
+tunable and when each takes effect.
+
+### Get Settings
+
+**GET** `/settings`
+
+Returns every tunable setting with its current value, the value `config.yaml`
+specifies, and enough metadata (kind, unit, bounds) to build a form.
+
+**Example:**
+
+```bash
+curl http://localhost:8080/api/v1/settings
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "settings": [
+      {
+        "key": "jobs.max_concurrent",
+        "label": "Max concurrent jobs",
+        "description": "How many transfers may run at once. Extra jobs wait in the queue.",
+        "kind": "int",
+        "unit": "jobs",
+        "min": 1,
+        "max": 64,
+        "value": 8,
+        "config_value": 4,
+        "overridden": true
+      }
+    ],
+    "per_job_bandwidth_kib_s": 12207
+  }
+}
+```
+
+**Field notes:**
+
+| Field | Meaning |
+|-------|---------|
+| `kind` | `int`, `bool` or `duration` |
+| `value` | What the service is running with right now |
+| `config_value` | What `config.yaml` specifies |
+| `overridden` | Whether `value` came from an override rather than the file |
+| `per_job_bandwidth_kib_s` | The `rsync --bwlimit` each job currently gets; 0 = unlimited |
+
+Durations are expressed in **seconds** in `value`, `config_value`, `min` and `max`.
+
+### Update Settings
+
+**PATCH** `/settings`
+
+Applies a batch of changes. Send `null` for a setting to clear its override and
+return it to the `config.yaml` value.
+
+The batch is validated in full before anything is applied, so a request with one
+bad value leaves the running configuration untouched.
+
+**Request Body:**
+
+```json
+{
+  "jobs.max_concurrent": 8,
+  "sync.scan_interval": 900,
+  "gatekeeper.seedbox.bandwidth_limit_mbps": null
+}
+```
+
+Durations accept either a number of seconds (`900`) or a Go duration string
+(`"15m"`).
+
+**Example:**
+
+```bash
+curl -X PATCH http://localhost:8080/api/v1/settings \
+  -H "Content-Type: application/json" \
+  -d '{"jobs.max_concurrent": 8}'
+```
+
+**Response:** the full settings payload, in the same shape as `GET /settings`.
+
+**Errors:** returns `400` with an explanatory message for an unknown key, a
+wrong type, or a value outside the setting's `min`/`max`.
+
 ## Error Responses
 
 All errors follow this format:

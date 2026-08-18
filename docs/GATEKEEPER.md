@@ -24,13 +24,17 @@ Gatekeeper continuously monitors:
 
 Before starting a job, Gatekeeper performs three checks:
 
-1. **Bandwidth Check**: Is current transfer speed below the configured limit?
+1. **Bandwidth Check**: Is measured transfer speed below the configured limit?
 2. **Disk Usage Check**: Is cache disk usage below the maximum threshold?
 3. **File Size Check**: Will the file fit in available cache space? (optional)
 
 If any check fails, the job remains **queued** and is automatically retried every 5 seconds.
 
 ## Configuration
+
+`bandwidth_limit_mbps` and `cache_disk.max_usage_percent` can also be changed at
+runtime from the web UI's Settings page, which overrides the values below until
+you reset them. See [CONFIGURATION.md](CONFIGURATION.md#runtime-settings).
 
 ```yaml
 gatekeeper:
@@ -49,37 +53,39 @@ gatekeeper:
 
 ## Resource Checks Explained
 
-### 1. Bandwidth Check
+### 1. Bandwidth Limit
 
 **Purpose**: Prevents overloading your seedbox connection
 
 **How it works**:
-- Queries active rclone transfers for current speed
-- Compares against `bandwidth_limit_mbps`
-- Blocks new jobs if limit is reached
+- `bandwidth_limit_mbps` is a **total** for the service, not a per-job figure
+- It is divided by `jobs.max_concurrent` and passed to each transfer as
+  `rsync --bwlimit`, so the sum of all running jobs stays under the limit
+- `0` means unlimited — no `--bwlimit` flag is passed
+- The limit is read when a job starts, so a change applies to jobs started
+  afterwards, not to transfers already in flight
 
 **Example**:
-- Limit: 500 Mbps
-- Current usage: 450 Mbps
-- Result: ✅ New job allowed (450 < 500)
-
-**Example** (blocked):
-- Limit: 500 Mbps
-- Current usage: 510 Mbps
-- Result: ❌ New job queued (510 >= 500)
+- Limit: 800 Mbps, max_concurrent: 4
+- Each job runs with `--bwlimit=24414` (≈25 MB/s)
+- Four jobs at full speed ≈ 800 Mbps total
 
 **Configuration**:
 ```yaml
 gatekeeper:
   seedbox:
-    bandwidth_limit_mbps: 500  # Set based on your connection (e.g., 500 for 1Gbps)
-    check_interval: "30s"       # Update frequency
+    bandwidth_limit_mbps: 500  # Total across all jobs (e.g., 500 for 1Gbps)
+    check_interval: "30s"       # Resource poll frequency
 ```
 
 **Recommendations**:
 - Set limit to 50-80% of your seedbox's total bandwidth
 - Example: For 1Gbps seedbox, use 500-800 Mbps
 - This leaves headroom for other traffic
+
+**Admission backstop**: the gatekeeper also refuses new jobs when measured
+bandwidth usage is at or above the limit. Since transfers are throttled directly
+by rsync this rarely triggers, and it is skipped entirely when the limit is `0`.
 
 ### 2. Cache Disk Usage Check
 

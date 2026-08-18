@@ -68,8 +68,13 @@ func (g *Gatekeeper) CanStartJob(fileSize int64) interfaces.GateDecision {
 
 	gatekeeperCfg := g.config.GetGatekeeper()
 
-	// Rule 1: Check bandwidth availability
-	if g.bandwidthUsage >= float64(gatekeeperCfg.Seedbox.BandwidthLimitMbps) {
+	// Rule 1: Check bandwidth availability.
+	//
+	// Transfers are throttled directly by rsync --bwlimit, so this is a backstop
+	// rather than the primary control. A limit of zero means unlimited — without
+	// this guard it would read as "no bandwidth available" and block everything.
+	if gatekeeperCfg.Seedbox.BandwidthLimitMbps > 0 &&
+		g.bandwidthUsage >= float64(gatekeeperCfg.Seedbox.BandwidthLimitMbps) {
 		return interfaces.GateDecision{
 			Allowed: false,
 			Reason:  "Bandwidth limit reached",

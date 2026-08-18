@@ -101,3 +101,19 @@ func TestGetResourceStatus(t *testing.T) {
 		t.Errorf("Expected cache max 80%%, got: %d", status.CacheMaxPercent)
 	}
 }
+
+// A zero bandwidth limit means "unlimited". Read naively the usage check would
+// treat it as "no bandwidth available" and stall the whole queue.
+func TestCanStartJob_ZeroBandwidthLimitMeansUnlimited(t *testing.T) {
+	cfg := createTestConfig()
+	cfg.Gatekeeper.Seedbox.BandwidthLimitMbps = 0
+	gk := New(cfg)
+
+	gk.cacheUsage = 10
+
+	decision := gk.CanStartJob(1000)
+
+	if !decision.Allowed {
+		t.Errorf("Expected job to be allowed with an unlimited bandwidth setting, got: %s", decision.Reason)
+	}
+}

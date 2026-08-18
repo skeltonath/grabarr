@@ -83,7 +83,8 @@ body { background: var(--bg); color: var(--text); }
 .btn-primary:disabled { opacity: 0.5; cursor: default; }
 .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--border); }
-#theme-toggle { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 4px; }
+#theme-toggle, #settings-toggle { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 4px; }
+#settings-toggle.active { color: var(--primary); }
 /* ---- Mobile hamburger menu ---- */
 #hamburger-wrap { display: none; position: relative; }
 .btn-hamburger { background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; padding: 8px; line-height: 1; }
@@ -278,6 +279,70 @@ body { background: var(--bg); color: var(--text); }
 #toast.show { opacity: 1; }
 #toast.error { border-color: var(--red); color: var(--red); }
 
+/* ---- Settings page ---- */
+#settings-view { display: none; max-width: 760px; margin: 0 auto; padding: 0 32px; }
+body.view-settings #settings-view { display: block; }
+body.view-settings #sidebar,
+body.view-settings #mobile-source-picker,
+body.view-settings #tree-container,
+body.view-settings #empty-state,
+body.view-settings #search,
+body.view-settings #status-filter,
+body.view-settings #scan-btn { display: none !important; }
+
+.settings-head { margin-bottom: 4px; }
+.settings-head h2 { font-size: 18px; font-weight: 600; }
+.settings-head p { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+.setting-row {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 16px 0; border-bottom: 1px solid var(--border);
+}
+.setting-info { flex: 1; min-width: 0; }
+.setting-label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.setting-desc { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.setting-note { color: var(--blue); font-size: 11px; margin-top: 5px; }
+.setting-badge {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  background: var(--amber-bg); color: var(--amber); padding: 2px 6px; border-radius: 4px;
+}
+.setting-control { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.setting-control input[type=number], .setting-control select {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 8px; border-radius: 6px; font-size: 13px; outline: none;
+}
+.setting-control input[type=number] { width: 90px; text-align: right; }
+.setting-control input:focus, .setting-control select:focus { border-color: var(--blue); }
+.setting-control input.invalid { border-color: var(--red); }
+.setting-unit { color: var(--muted); font-size: 12px; min-width: 32px; }
+.setting-reset {
+  background: none; border: none; color: var(--muted); font-size: 11px;
+  cursor: pointer; padding: 4px 0; text-decoration: underline; text-align: left;
+}
+.setting-reset:hover { color: var(--text); }
+.setting-reset[hidden] { display: none; }
+
+/* Toggle switch for boolean settings */
+.toggle { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; cursor: pointer; border-radius: 22px;
+  background: var(--gray); transition: background 0.15s;
+}
+.toggle-slider::before {
+  content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px;
+  background: #fff; border-radius: 50%; transition: transform 0.15s;
+}
+.toggle input:checked + .toggle-slider { background: var(--green); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+.settings-actions {
+  display: flex; align-items: center; gap: 12px; padding: 20px 0 12px;
+  /* Sits above the fixed footer rather than behind it. */
+  position: sticky; bottom: var(--footer-h); background: var(--bg);
+}
+#settings-dirty-note { color: var(--muted); font-size: 12px; }
+
 /* ---- Mobile responsive ---- */
 @media (max-width: 768px) {
   #hamburger-wrap { display: block; }
@@ -332,6 +397,15 @@ body { background: var(--bg); color: var(--text); }
   }
   #layout { margin-bottom: 48px; }
 
+  #settings-toggle { display: none; }
+  #settings-view { padding: 0 12px; }
+  .setting-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .setting-control { justify-content: flex-start; }
+  .setting-control input[type=number] { flex: 1; max-width: 140px; min-height: 40px; }
+  .setting-control select { min-height: 40px; }
+  /* The footer wraps on narrow screens, so the save bar clears the taller one. */
+  .settings-actions { flex-wrap: wrap; bottom: 48px; }
+
   #modal { width: 100%; padding: 16px; }
   .detail-grid { grid-template-columns: 100px 1fr; gap: 6px 8px; }
 
@@ -366,6 +440,7 @@ body { background: var(--bg); color: var(--text); }
     <option value="failed">Failed</option>
     <option value="ignored">Ignored</option>
   </select>
+  <button id="settings-toggle" title="Settings">⚙️</button>
   <button id="theme-toggle" title="Toggle theme">🌙</button>
   <div id="hamburger-wrap">
     <button id="hamburger-btn" class="btn-hamburger" aria-label="Menu">&#9776;</button>
@@ -373,6 +448,10 @@ body { background: var(--bg); color: var(--text); }
       <button class="menu-item" id="menu-scan-btn">
         <span>🔄</span>
         <span>Scan Now</span>
+      </button>
+      <button class="menu-item" id="menu-settings-btn">
+        <span>⚙️</span>
+        <span id="menu-settings-label">Settings</span>
       </button>
       <button class="menu-item" id="menu-theme-toggle">
         <span id="menu-theme-icon">🌙</span>
@@ -404,6 +483,18 @@ body { background: var(--bg); color: var(--text); }
       <h3>No files found</h3>
       <p>Trigger a scan to discover files on the seedbox.</p>
     </div>
+    <section id="settings-view">
+      <div class="settings-head">
+        <h2>Settings</h2>
+        <p>Changes apply immediately and survive restarts. Values start from config.yaml; anything changed here overrides the file until you reset it.</p>
+      </div>
+      <div id="settings-list"></div>
+      <div class="settings-actions">
+        <button id="settings-save" class="btn btn-primary" disabled>Save changes</button>
+        <button id="settings-discard" class="btn btn-ghost" disabled>Discard</button>
+        <span id="settings-dirty-note"></span>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -440,6 +531,11 @@ let searchQuery = '';
 let statusFilter = 'all';
 let scanPolling = null;
 let refreshTimer = null;
+let currentView = 'files';
+// Settings descriptors from the API, plus the edits not yet saved. A draft
+// value of null means "reset this setting back to config.yaml".
+let settingsData = null;
+let settingsDraft = {};
 
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', () => {
@@ -458,6 +554,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('scan-btn').addEventListener('click', triggerScan);
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+  document.getElementById('settings-toggle').addEventListener('click', () => {
+    setView(currentView === 'settings' ? 'files' : 'settings');
+  });
+  document.getElementById('settings-save').addEventListener('click', saveSettings);
+  document.getElementById('settings-discard').addEventListener('click', () => {
+    settingsDraft = {};
+    renderSettings();
+  });
 
   // Hamburger menu
   const hamburgerBtn = document.getElementById('hamburger-btn');
@@ -478,6 +582,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('menu-scan-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     triggerScan();
+    closeHamburger();
+  });
+  document.getElementById('menu-settings-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    setView(currentView === 'settings' ? 'files' : 'settings');
     closeHamburger();
   });
 
@@ -1112,6 +1221,265 @@ function updateLastScanned(isoDate) {
 }
 
 // ---- Theme ----
+// ---- Settings ----
+function setView(view) {
+  currentView = view;
+  document.body.classList.toggle('view-settings', view === 'settings');
+  document.getElementById('settings-toggle').classList.toggle('active', view === 'settings');
+  document.getElementById('menu-settings-label').textContent =
+    view === 'settings' ? 'Back to files' : 'Settings';
+
+  if (view === 'settings') {
+    fetchSettings();
+  }
+}
+
+async function fetchSettings() {
+  try {
+    const res = await fetch('/api/v1/settings');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed to load settings');
+    settingsData = json.data;
+    settingsDraft = {};
+    renderSettings();
+  } catch (e) {
+    document.getElementById('settings-list').innerHTML =
+      '<p class="setting-desc">Could not load settings. Is the service reachable?</p>';
+    showToast(e.message, true);
+  }
+}
+
+// draftValue returns what the form is currently showing for a setting: the
+// pending edit if there is one, the config.yaml value if it is pending a reset,
+// otherwise the running value.
+function draftValue(s) {
+  if (!(s.key in settingsDraft)) return s.value;
+  if (settingsDraft[s.key] === null) return s.config_value;
+  return settingsDraft[s.key];
+}
+
+// Durations cross the API as seconds; the form shows them in whichever unit
+// divides evenly so "168h" does not read as 604800.
+const DURATION_UNITS = [
+  { label: 'days', seconds: 86400 },
+  { label: 'hours', seconds: 3600 },
+  { label: 'minutes', seconds: 60 },
+  { label: 'seconds', seconds: 1 },
+];
+
+function pickDurationUnit(totalSeconds) {
+  for (const unit of DURATION_UNITS) {
+    if (totalSeconds >= unit.seconds && totalSeconds % unit.seconds === 0) return unit;
+  }
+  return DURATION_UNITS[DURATION_UNITS.length - 1];
+}
+
+function fmtSettingValue(s, value) {
+  if (s.kind === 'bool') return value ? 'on' : 'off';
+  if (s.kind === 'duration') {
+    const unit = pickDurationUnit(value);
+    return (value / unit.seconds) + ' ' + unit.label;
+  }
+  return value + (s.unit ? ' ' + s.unit : '');
+}
+
+function renderSettings() {
+  const list = document.getElementById('settings-list');
+  list.innerHTML = '';
+  if (!settingsData) return;
+
+  for (const s of settingsData.settings) {
+    list.appendChild(renderSettingRow(s));
+  }
+  updateSettingsActions();
+}
+
+function renderSettingRow(s) {
+  const row = document.createElement('div');
+  row.className = 'setting-row';
+
+  const overridden = s.key in settingsDraft ? settingsDraft[s.key] !== null : s.overridden;
+
+  const info = document.createElement('div');
+  info.className = 'setting-info';
+  info.innerHTML =
+    `<div class="setting-label">${escHtml(s.label)}` +
+    (overridden ? '<span class="setting-badge">overridden</span>' : '') +
+    '</div>' +
+    `<div class="setting-desc">${escHtml(s.description)}</div>`;
+
+  // Only worth showing where a value came from once it differs from the file.
+  if (overridden) {
+    const reset = document.createElement('button');
+    reset.className = 'setting-reset';
+    reset.textContent = `Reset to config.yaml (${fmtSettingValue(s, s.config_value)})`;
+    reset.addEventListener('click', () => {
+      if (s.overridden) {
+        settingsDraft[s.key] = null;
+      } else {
+        delete settingsDraft[s.key];
+      }
+      renderSettings();
+    });
+    info.appendChild(reset);
+  }
+
+  const note = settingNote(s);
+  if (note) {
+    const noteEl = document.createElement('div');
+    noteEl.className = 'setting-note';
+    noteEl.textContent = note;
+    info.appendChild(noteEl);
+  }
+
+  row.appendChild(info);
+  row.appendChild(settingControl(s));
+  return row;
+}
+
+function settingControl(s) {
+  const control = document.createElement('div');
+  control.className = 'setting-control';
+  const value = draftValue(s);
+
+  if (s.kind === 'bool') {
+    const wrap = document.createElement('label');
+    wrap.className = 'toggle';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = !!value;
+    input.addEventListener('change', () => stageChange(s, input.checked));
+    const slider = document.createElement('span');
+    slider.className = 'toggle-slider';
+    wrap.appendChild(input);
+    wrap.appendChild(slider);
+    control.appendChild(wrap);
+    return control;
+  }
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  control.appendChild(input);
+
+  if (s.kind === 'duration') {
+    const unit = pickDurationUnit(value);
+    input.value = value / unit.seconds;
+    input.min = 0;
+
+    const select = document.createElement('select');
+    for (const u of DURATION_UNITS) {
+      const opt = document.createElement('option');
+      opt.value = u.seconds;
+      opt.textContent = u.label;
+      opt.selected = u.seconds === unit.seconds;
+      select.appendChild(opt);
+    }
+    control.appendChild(select);
+
+    const commit = () => {
+      const seconds = Math.round(Number(input.value) * Number(select.value));
+      if (!Number.isFinite(seconds)) return;
+      stageChange(s, seconds, input);
+    };
+    input.addEventListener('change', commit);
+    select.addEventListener('change', commit);
+    return control;
+  }
+
+  input.value = value;
+  if (s.min !== undefined) input.min = s.min;
+  if (s.max !== undefined) input.max = s.max;
+  input.addEventListener('change', () => {
+    const n = Number(input.value);
+    if (!Number.isInteger(n)) {
+      input.classList.add('invalid');
+      return;
+    }
+    stageChange(s, n, input);
+  });
+
+  if (s.unit) {
+    const unitEl = document.createElement('span');
+    unitEl.className = 'setting-unit';
+    unitEl.textContent = s.unit;
+    control.appendChild(unitEl);
+  }
+  return control;
+}
+
+// stageChange records an edit without re-rendering the row being typed in,
+// which would otherwise steal focus mid-edit.
+function stageChange(s, value, input) {
+  if (input) {
+    const outOfRange = (s.min !== undefined && value < s.min) || (s.max !== undefined && value > s.max);
+    input.classList.toggle('invalid', outOfRange);
+    if (outOfRange) {
+      updateSettingsActions();
+      return;
+    }
+  }
+
+  if (value === s.value) {
+    delete settingsDraft[s.key];
+  } else {
+    settingsDraft[s.key] = value;
+  }
+
+  // The badge and reset link depend on the draft, and the bandwidth note
+  // depends on other rows, so re-render everything except while typing.
+  renderSettings();
+}
+
+// settingNote explains a value whose effect is not obvious from the number,
+// using the draft so it tracks unsaved edits.
+function settingNote(s) {
+  if (s.key !== 'gatekeeper.seedbox.bandwidth_limit_mbps') return '';
+
+  const limitMbps = draftValue(s);
+  if (!limitMbps || limitMbps <= 0) return 'Unlimited — transfers run at whatever the link allows.';
+
+  const slots = settingsData.settings.find(x => x.key === 'jobs.max_concurrent');
+  const concurrent = slots ? Math.max(1, draftValue(slots)) : 1;
+  const perJobMBps = (limitMbps / 8) / concurrent;
+  return `About ${perJobMBps.toFixed(1)} MB/s per job across ${concurrent} concurrent slot${concurrent === 1 ? '' : 's'}.`;
+}
+
+function hasInvalidSettings() {
+  return document.querySelectorAll('#settings-list input.invalid').length > 0;
+}
+
+function updateSettingsActions() {
+  const count = Object.keys(settingsDraft).length;
+  const invalid = hasInvalidSettings();
+  document.getElementById('settings-save').disabled = count === 0 || invalid;
+  document.getElementById('settings-discard').disabled = count === 0;
+  document.getElementById('settings-dirty-note').textContent =
+    invalid ? 'Some values are out of range.'
+    : count === 0 ? '' : `${count} unsaved change${count === 1 ? '' : 's'}`;
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('settings-save');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settingsDraft),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed to save settings');
+
+    settingsData = json.data;
+    settingsDraft = {};
+    renderSettings();
+    showToast('Settings saved');
+  } catch (e) {
+    showToast(e.message, true);
+    updateSettingsActions();
+  }
+}
+
 function loadTheme() {
   if (localStorage.getItem('grabarr-theme') === 'light') {
     document.body.classList.add('light');

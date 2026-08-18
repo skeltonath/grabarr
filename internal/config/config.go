@@ -28,6 +28,13 @@ type Config struct {
 
 	mu       sync.RWMutex
 	watchers []chan<- struct{}
+
+	// Runtime settings layered on top of the file. baseline holds what
+	// config.yaml specified so an override can be undone, overrides holds the
+	// values set from the web UI, and store persists them across restarts.
+	baseline  map[string]any
+	overrides map[string]any
+	store     SettingsStore
 }
 
 type SyncConfig struct {
@@ -189,6 +196,8 @@ func loadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to create directories: %w", err)
 	}
 
+	config.captureBaselineLocked()
+
 	return &config, nil
 }
 
@@ -306,6 +315,11 @@ func (c *Config) reload(configPath string) error {
 	c.Sync = newConfig.Sync
 	c.Extraction = newConfig.Extraction
 	c.MediaManagers = newConfig.MediaManagers
+
+	// The file is the new baseline, but values set from the web UI still win —
+	// an unrelated edit to config.yaml should not silently revert them.
+	c.captureBaselineLocked()
+	c.applyOverridesLocked()
 
 	slog.Info("configuration reloaded successfully")
 	return nil

@@ -59,6 +59,12 @@ func run() error {
 
 	slog.Info("database initialized", "path", cfg.GetDatabase().Path)
 
+	// Settings changed from the web UI live in the database, layered over
+	// config.yaml. Attaching the store restores whatever was set last run.
+	if err := cfg.AttachSettingsStore(repo); err != nil {
+		return fmt.Errorf("failed to load runtime settings: %w", err)
+	}
+
 	// Initialize gatekeeper
 	gk := gatekeeper.New(cfg)
 	if err := gk.Start(); err != nil {

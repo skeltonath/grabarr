@@ -71,8 +71,14 @@ func (r *RsyncExecutor) Execute(ctx context.Context, job *models.Job) error {
 		"remote_path", remotePath,
 		"local_path", localPath)
 
+	// The configured bandwidth limit is a total for the service, so each job
+	// gets its share of it rather than the whole thing.
+	bwLimit := r.config.PerJobBandwidthKiBps()
+
 	// Start the transfer
-	transfer, err := r.client.Copy(ctx, remotePath, localPath)
+	transfer, err := r.client.Copy(ctx, remotePath, localPath, rsync.CopyOptions{
+		BandwidthLimitKiBps: bwLimit,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to start rsync: %w", err)
 	}

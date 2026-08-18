@@ -50,19 +50,46 @@ type Transfer struct {
 	cancel       context.CancelFunc
 }
 
-// Copy starts an rsync transfer in the background
-func (c *Client) Copy(ctx context.Context, remotePath, localPath string) (*Transfer, error) {
-	// Build rsync command with enhanced options for large file transfers
-	// --partial-dir=.rsync-partial: store partial files in dedicated directory for reliable resume
-	// --timeout=600: abort transfer if no data transferred for 10 minutes (prevents infinite hangs during verification)
-	// --mkpath: automatically create parent directories for destination path
-	// SSH options: UserKnownHostsFile=/dev/null prevents permission issues with .ssh directory
-	// ServerAliveCountMax=30: Allow 30 minutes (60s * 30) of no SSH response during intensive verification phase
+// CopyOptions carries the per-transfer knobs that come from runtime settings
+// rather than from the connection itself.
+type CopyOptions struct {
+	// BandwidthLimitKiBps caps this transfer's throughput, in kibibytes per
+	// second, via rsync --bwlimit. Zero or less means unlimited.
+	BandwidthLimitKiBps int
+}
+
+// buildArgs assembles the rsync argument list for a transfer.
+//
+// --partial-dir=.rsync-partial: store partial files in dedicated directory for reliable resume
+// --timeout=600: abort transfer if no data transferred for 10 minutes (prevents infinite hangs during verification)
+// --mkpath: automatically create parent directories for destination path
+// SSH options: UserKnownHostsFile=/dev/null prevents permission issues with .ssh directory
+// ServerAliveCountMax=30: Allow 30 minutes (60s * 30) of no SSH response during intensive verification phase
+func (c *Client) buildArgs(remotePath, localPath string, opts CopyOptions) []string {
 	sshCmd := fmt.Sprintf("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -i %s", c.sshKeyFile)
 	remoteSource := fmt.Sprintf("%s@%s:%s", c.sshUser, c.sshHost, remotePath)
 
+	args := []string{"-avz", "--info=progress2", "--partial-dir=.rsync-partial", "--mkpath", "--timeout=600"}
+
+	// rsync reads a bare --bwlimit number as KiB/s, which is the unit the
+	// caller already converted to.
+	if opts.BandwidthLimitKiBps > 0 {
+		args = append(args, fmt.Sprintf("--bwlimit=%d", opts.BandwidthLimitKiBps))
+	}
+
+	return append(args, "-e", sshCmd, remoteSource, localPath)
+}
+
+// Copy starts an rsync transfer in the background
+func (c *Client) Copy(ctx context.Context, remotePath, localPath string, opts CopyOptions) (*Transfer, error) {
+	args := c.buildArgs(remotePath, localPath, opts)
+
+	if opts.BandwidthLimitKiBps > 0 {
+		slog.Info("starting rsync transfer with bandwidth limit", "bwlimit_kib_s", opts.BandwidthLimitKiBps)
+	}
+
 	cmdCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(cmdCtx, "rsync", "-avz", "--info=progress2", "--partial-dir=.rsync-partial", "--mkpath", "--timeout=600", "-e", sshCmd, remoteSource, localPath)
+	cmd := exec.CommandContext(cmdCtx, "rsync", args...)
 
 	// Get stdout pipe for progress parsing
 	stdout, err := cmd.StdoutPipe()
