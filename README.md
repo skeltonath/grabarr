@@ -77,7 +77,7 @@ logging:
 
 ### 3. Access
 
-- **Web UI**: http://your-server:8080
+- **Web UI**: http://your-server:8080 — files (`/`), raw job queue (`/jobs`), runtime settings (`/settings`)
 - **API**: http://your-server:8080/api/v1
 - **Health Check**: http://your-server:8080/api/v1/health
 

@@ -97,6 +97,19 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 	h.writeSuccess(w, http.StatusCreated, job, "Job created successfully")
 }
 
+// jobSortColumns are the job columns the API will sort by.
+var jobSortColumns = map[string]bool{
+	"id":           true,
+	"name":         true,
+	"status":       true,
+	"priority":     true,
+	"file_size":    true,
+	"created_at":   true,
+	"updated_at":   true,
+	"started_at":   true,
+	"completed_at": true,
+}
+
 func (h *Handlers) GetJobs(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
@@ -141,12 +154,22 @@ func (h *Handlers) GetJobs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Parse sorting
+	// Parse sorting. Both values are interpolated into the ORDER BY clause
+	// rather than bound as parameters, so only known-good ones get through.
 	if sortBy := query.Get("sort_by"); sortBy != "" {
+		if !jobSortColumns[sortBy] {
+			h.writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid sort_by: %s", sortBy), nil)
+			return
+		}
 		filter.SortBy = sortBy
 	}
 	if sortOrder := query.Get("sort_order"); sortOrder != "" {
-		filter.SortOrder = sortOrder
+		order := strings.ToUpper(sortOrder)
+		if order != "ASC" && order != "DESC" {
+			h.writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid sort_order: %s", sortOrder), nil)
+			return
+		}
+		filter.SortOrder = order
 	}
 
 	jobs, err := h.queue.GetJobs(filter)

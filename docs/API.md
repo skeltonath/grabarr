@@ -152,7 +152,7 @@ List jobs with filtering, sorting, and pagination.
 | `torrent_name` | string | Filter by torrent name | All torrents |
 | `limit` | int | Results per page | 50 |
 | `offset` | int | Starting position | 0 |
-| `sort_by` | string | Sort field (created_at, priority, progress, name) | created_at |
+| `sort_by` | string | Sort field (id, name, status, priority, file_size, created_at, updated_at, started_at, completed_at). Anything else is rejected with 400. | created_at |
 | `sort_order` | string | Sort direction (asc, desc) | desc |
 
 **Example:**

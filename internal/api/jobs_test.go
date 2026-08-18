@@ -674,3 +674,43 @@ func TestContains(t *testing.T) {
 		})
 	}
 }
+
+// sort_by and sort_order are interpolated into the ORDER BY clause, so the
+// handler has to reject anything it does not recognise.
+func TestGetJobs_Sorting(t *testing.T) {
+	tests := []struct {
+		name       string
+		query      string
+		wantCode   int
+		wantSortBy string
+		wantOrder  string
+	}{
+		{name: "allowed column", query: "?sort_by=priority&sort_order=asc", wantCode: http.StatusOK, wantSortBy: "priority", wantOrder: "ASC"},
+		{name: "default order kept", query: "?sort_by=file_size", wantCode: http.StatusOK, wantSortBy: "file_size"},
+		{name: "unknown column", query: "?sort_by=secret", wantCode: http.StatusBadRequest},
+		{name: "injection attempt", query: "?sort_by=id%3BDROP+TABLE+jobs", wantCode: http.StatusBadRequest},
+		{name: "bad order", query: "?sort_by=id&sort_order=%3B+DELETE+FROM+jobs", wantCode: http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockQueue := mocks.NewMockJobQueue(t)
+			if tt.wantCode == http.StatusOK {
+				mockQueue.EXPECT().
+					GetJobs(mock.MatchedBy(func(filter models.JobFilter) bool {
+						return filter.SortBy == tt.wantSortBy && filter.SortOrder == tt.wantOrder
+					})).
+					Return([]*models.Job{}, nil).
+					Once()
+				mockQueue.EXPECT().CountJobs(mock.Anything).Return(0, nil).Once()
+			}
+
+			handlers := NewHandlers(mockQueue, mocks.NewMockGatekeeper(t), &config.Config{}, nil, nil)
+
+			rec := httptest.NewRecorder()
+			handlers.GetJobs(rec, httptest.NewRequest("GET", "/api/v1/jobs"+tt.query, nil))
+
+			assert.Equal(t, tt.wantCode, rec.Code)
+		})
+	}
+}
