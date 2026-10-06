@@ -182,3 +182,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **Issues**: [GitHub Issues](https://github.com/yourusername/grabarr/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/grabarr/discussions)
 - **Documentation**: [docs/](docs/)
+
+## Deployment
+
+Deployed to millions by [Komodo](http://komodo.internal) from this repo: pushing to `main`
+rebuilds the image on the NAS and redeploys within ~5 minutes (stack `grabarr`, tagged
+`build-from-source`). Stack config lives in the `nas` repo under `komodo/resources/`.
+The old `make deploy` targets that build on the Mac and ship a tarball are no longer needed.

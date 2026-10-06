@@ -1,6 +1,7 @@
 services:
   grabarr:
     image: grabarr:latest
+    build: .   # built on millions by Komodo
     container_name: grabarr
     restart: unless-stopped
     ports:
