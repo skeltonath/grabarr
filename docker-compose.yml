@@ -4,6 +4,7 @@ services:
     build: .   # built on millions by Komodo
     container_name: grabarr
     restart: unless-stopped
+    mem_limit: 1g
     ports:
       - "8080:8080"
       - "5572:5572"
