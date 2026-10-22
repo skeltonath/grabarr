@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Retry failed jobs from the last N days (default: 2)
 # Usage: ./retry-failed-jobs.sh [host] [days]
-# Example: ./retry-failed-jobs.sh millions:8080 2
+# Example: ./retry-failed-jobs.sh grabarr.internal 2
 
 set -euo pipefail
 
-HOST="${1:-millions:8080}"
+HOST="${1:-grabarr.internal}"
 DAYS="${2:-2}"
 
 BASE_URL="http://${HOST}/api/v1"

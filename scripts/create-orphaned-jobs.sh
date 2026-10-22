@@ -7,7 +7,7 @@
 # 3. Creates jobs for any files that don't have jobs yet
 #
 # Required environment variables:
-# GRABARR_API_URL - Grabarr API endpoint URL (e.g., http://millions:8080/api/v1/jobs)
+# GRABARR_API_URL - Grabarr API endpoint URL (e.g., http://grabarr.internal/api/v1/jobs)
 #
 # Optional environment variables:
 # SEEDBOX_HOST       - SSH host for seedbox (default: whatbox)
@@ -25,7 +25,7 @@ fi
 # Validate required environment variables
 if [[ -z "${GRABARR_API_URL:-}" ]]; then
     echo "Error: GRABARR_API_URL environment variable is required"
-    echo "Example: export GRABARR_API_URL=http://millions:8080/api/v1/jobs"
+    echo "Example: export GRABARR_API_URL=http://grabarr.internal/api/v1/jobs"
     exit 1
 fi
 
