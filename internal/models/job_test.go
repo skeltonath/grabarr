@@ -50,7 +50,6 @@ func TestJobMetadata_MarshalUnmarshal(t *testing.T) {
 		Tags:            []string{"tag1", "tag2"},
 		SourceIP:        "192.168.1.1",
 		UserAgent:       "test-agent",
-		RCloneArgs:      []string{"--arg1", "--arg2"},
 		ExtraFields: map[string]interface{}{
 			"custom": "value",
 			"number": float64(42),
@@ -71,7 +70,6 @@ func TestJobMetadata_MarshalUnmarshal(t *testing.T) {
 	assert.Equal(t, metadata.Tags, decoded.Tags)
 	assert.Equal(t, metadata.SourceIP, decoded.SourceIP)
 	assert.Equal(t, metadata.UserAgent, decoded.UserAgent)
-	assert.Equal(t, metadata.RCloneArgs, decoded.RCloneArgs)
 	assert.Equal(t, metadata.ExtraFields["custom"], decoded.ExtraFields["custom"])
 }
 

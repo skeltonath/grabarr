@@ -180,13 +180,6 @@ setup-config: ## Copy example configs to working configs
 	else \
 		echo "$(YELLOW)→ .env already exists$(NC)"; \
 	fi
-	@if [ ! -f rclone.conf ]; then \
-		cp rclone.conf.template rclone.conf; \
-		echo "$(YELLOW)→ Created rclone.conf from template$(NC)"; \
-		echo "$(RED)⚠ Don't forget to edit rclone.conf with your settings!$(NC)"; \
-	else \
-		echo "$(YELLOW)→ rclone.conf already exists$(NC)"; \
-	fi
 
 ## Help
 

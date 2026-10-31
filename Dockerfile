@@ -1,34 +1,33 @@
-FROM golang:1.23-alpine
+FROM golang:1.27-alpine AS builder
 
-# Install dependencies
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev rclone rsync sshpass openssh-client curl 7zip make g++ && \
-    curl -L -o /tmp/unrarsrc.tar.gz https://www.rarlab.com/rar/unrarsrc-7.1.3.tar.gz && \
+# gcc/musl-dev for go-sqlite3 (CGO); make/g++ to build unrar, which Alpine
+# doesn't package
+RUN apk add --no-cache gcc musl-dev make g++ curl && \
+    curl -fL -o /tmp/unrarsrc.tar.gz https://www.rarlab.com/rar/unrarsrc-7.1.3.tar.gz && \
     tar xzf /tmp/unrarsrc.tar.gz -C /tmp && \
-    cd /tmp/unrar && make -f makefile && install unrar /usr/local/bin/unrar && \
-    rm -rf /tmp/unrar /tmp/unrarsrc.tar.gz
+    make -C /tmp/unrar -f makefile && \
+    install /tmp/unrar/unrar /usr/local/bin/unrar
 
-# Create user for UID 99 (Unraid nobody)
-RUN echo "unraid:x:99:100:unraid:/home/unraid:/bin/sh" >> /etc/passwd && \
-    mkdir -p /data /config /app /home/unraid
-
-# Set working directory
-WORKDIR /app
-
-# Copy everything and build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
-RUN go mod download && \
-    CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o grabarr ./cmd/grabarr
+RUN CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" \
+        -o /out/grabarr ./cmd/grabarr
 
-# Set permissions
-RUN chmod +x grabarr docker-entrypoint.sh && \
-    chown -R 99:100 /app /config
+# Grabarr shells out to rsync/ssh (copies, scans) and unrar/7z (extraction),
+# so the runtime is Alpine with just those tools.
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates tzdata rsync openssh-client 7zip libstdc++ && \
+    echo "unraid:x:99:100:unraid:/home/unraid:/bin/sh" >> /etc/passwd && \
+    mkdir -p /data /config /home/unraid && chown 99:100 /home/unraid
 
-# Expose ports
-EXPOSE 8080 5572
+COPY --from=builder /usr/local/bin/unrar /usr/local/bin/unrar
+WORKDIR /app
+COPY --from=builder /out/grabarr ./grabarr
+COPY web/static ./web/static
 
-# Health check
+EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/v1/health || exit 1
-
-# Run the startup script
-CMD ["./docker-entrypoint.sh"]
+    CMD ["/app/grabarr", "healthcheck"]
+CMD ["/app/grabarr"]

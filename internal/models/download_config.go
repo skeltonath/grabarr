@@ -6,7 +6,8 @@ import (
 	"fmt"
 )
 
-// DownloadConfig represents configurable rclone download settings
+// DownloadConfig holds per-job transfer settings from the rclone era. Jobs still
+// store it, but the rsync executor doesn't read it.
 // All fields are optional - nil values will use defaults
 type DownloadConfig struct {
 	// Transfer settings
@@ -139,50 +140,6 @@ func (dc *DownloadConfig) MergeWithDefaults() *DownloadConfig {
 	}
 
 	return merged
-}
-
-// ToRCloneConfig converts the DownloadConfig to a map suitable for rclone API
-func (dc *DownloadConfig) ToRCloneConfig() map[string]interface{} {
-	// Merge with defaults first to ensure all fields are set
-	merged := dc.MergeWithDefaults()
-
-	config := make(map[string]interface{})
-
-	if merged.Transfers != nil {
-		config["Transfers"] = *merged.Transfers
-	}
-	if merged.Checkers != nil {
-		config["Checkers"] = *merged.Checkers
-	}
-	if merged.BwLimit != nil {
-		config["BwLimit"] = *merged.BwLimit
-	}
-	if merged.BwLimitFile != nil {
-		config["BwLimitFile"] = *merged.BwLimitFile
-	}
-	if merged.BufferSize != nil {
-		config["BufferSize"] = *merged.BufferSize
-	}
-	if merged.UseMmap != nil {
-		config["UseMmap"] = *merged.UseMmap
-	}
-	if merged.MultiThreadStreams != nil {
-		config["MultiThreadStreams"] = *merged.MultiThreadStreams
-	}
-	if merged.MultiThreadCutoff != nil {
-		config["MultiThreadCutoff"] = *merged.MultiThreadCutoff
-	}
-	if merged.IgnoreExisting != nil {
-		config["IgnoreExisting"] = *merged.IgnoreExisting
-	}
-	if merged.NoTraverse != nil {
-		config["NoTraverse"] = *merged.NoTraverse
-	}
-	if merged.UpdateOlder != nil {
-		config["UpdateOlder"] = *merged.UpdateOlder
-	}
-
-	return config
 }
 
 // Database value methods for custom types

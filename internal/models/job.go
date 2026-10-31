@@ -59,7 +59,6 @@ type JobMetadata struct {
 	Tags            []string               `json:"tags,omitempty"`
 	SourceIP        string                 `json:"source_ip,omitempty"`
 	UserAgent       string                 `json:"user_agent,omitempty"`
-	RCloneArgs      []string               `json:"rclone_args,omitempty"`
 	ExtraFields     map[string]interface{} `json:"extra_fields,omitempty"`
 }
 

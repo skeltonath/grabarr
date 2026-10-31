@@ -52,23 +52,3 @@ func classifyRsyncError(err error) error {
 		return err
 	}
 }
-
-// classifyRcloneError inspects the rclone daemon error message string and returns a
-// PermanentError for conditions that cannot be fixed by retrying.
-func classifyRcloneError(errMsg string) error {
-	lower := strings.ToLower(errMsg)
-	permanentPatterns := []string{
-		"not found", "no such file", "no such directory",
-		"permission denied", "access denied",
-		"401", "403", "404",
-	}
-	for _, p := range permanentPatterns {
-		if strings.Contains(lower, p) {
-			return &PermanentError{
-				Cause: fmt.Errorf("%s", errMsg),
-				Msg:   "rclone permanent failure",
-			}
-		}
-	}
-	return fmt.Errorf("rclone job failed: %s", errMsg)
-}

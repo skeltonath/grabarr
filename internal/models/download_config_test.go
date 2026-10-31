@@ -122,43 +122,6 @@ func TestDownloadConfig_MergeWithDefaults_FullCustomConfig(t *testing.T) {
 	assert.Equal(t, config, merged)
 }
 
-func TestDownloadConfig_ToRCloneConfig_NilConfig(t *testing.T) {
-	var config *DownloadConfig = nil
-	rcloneConfig := config.ToRCloneConfig()
-
-	// Should return default config as map
-	assert.Equal(t, 1, rcloneConfig["Transfers"])
-	assert.Equal(t, 1, rcloneConfig["Checkers"])
-	assert.Equal(t, "10M", rcloneConfig["BwLimit"])
-	assert.Equal(t, "10M", rcloneConfig["BwLimitFile"])
-	assert.Equal(t, "32M", rcloneConfig["BufferSize"])
-	assert.Equal(t, true, rcloneConfig["UseMmap"])
-	assert.Equal(t, 1, rcloneConfig["MultiThreadStreams"])
-	assert.Equal(t, "10G", rcloneConfig["MultiThreadCutoff"])
-	assert.Equal(t, true, rcloneConfig["IgnoreExisting"])
-	assert.Equal(t, true, rcloneConfig["NoTraverse"])
-	assert.Equal(t, true, rcloneConfig["UpdateOlder"])
-}
-
-func TestDownloadConfig_ToRCloneConfig_CustomConfig(t *testing.T) {
-	transfers := 5
-	bwLimit := "50M"
-	config := &DownloadConfig{
-		Transfers: &transfers,
-		BwLimit:   &bwLimit,
-	}
-
-	rcloneConfig := config.ToRCloneConfig()
-
-	// Custom values should be in the map
-	assert.Equal(t, 5, rcloneConfig["Transfers"])
-	assert.Equal(t, "50M", rcloneConfig["BwLimit"])
-
-	// Default values should fill in the rest
-	assert.Equal(t, 1, rcloneConfig["Checkers"])
-	assert.Equal(t, "10M", rcloneConfig["BwLimitFile"])
-}
-
 func TestDownloadConfig_DatabaseSerialization(t *testing.T) {
 	transfers := 5
 	bwLimit := "50M"

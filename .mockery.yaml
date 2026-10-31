@@ -17,6 +17,5 @@ packages:
       SyncService:
       SyncRepository:
       BandwidthMonitor:
-      RCloneClient:
       Notifier:
       Gatekeeper:

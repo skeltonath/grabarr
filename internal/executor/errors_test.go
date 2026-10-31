@@ -139,38 +139,3 @@ func TestClassifyRsyncError_NonExitError(t *testing.T) {
 	assert.False(t, IsPermanent(result))
 	assert.Equal(t, err, result)
 }
-
-func TestClassifyRcloneError(t *testing.T) {
-	tests := []struct {
-		name      string
-		errMsg    string
-		permanent bool
-	}{
-		{"not found", "object not found", true},
-		{"no such file", "no such file or directory", true},
-		{"no such directory", "no such directory: /remote/path", true},
-		{"permission denied", "permission denied", true},
-		{"access denied", "Access Denied", true},
-		{"401", "server returned error 401", true},
-		{"403", "403 Forbidden", true},
-		{"404", "404 not found", true},
-		{"connection reset", "connection reset by peer", false},
-		{"timeout", "dial tcp: timeout", false},
-		{"500", "server returned error 500", false},
-		{"generic", "unexpected error occurred", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := classifyRcloneError(tt.errMsg)
-			assert.Equal(t, tt.permanent, IsPermanent(result),
-				"errMsg=%q: expected permanent=%v", tt.errMsg, tt.permanent)
-		})
-	}
-}
-
-func TestClassifyRcloneError_NonPermanentFormat(t *testing.T) {
-	result := classifyRcloneError("connection reset by peer")
-	assert.Contains(t, result.Error(), "rclone job failed")
-	assert.Contains(t, result.Error(), "connection reset by peer")
-}

@@ -31,10 +31,30 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
+
 	if err := run(); err != nil {
 		slog.Error("application failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// healthcheck is the container's HEALTHCHECK: the image has no curl or wget.
+func healthcheck() int {
+	c := http.Client{Timeout: 5 * time.Second}
+	resp, err := c.Get("http://127.0.0.1:8080/api/v1/health")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "unhealthy:", err)
+		return 1
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "unhealthy: status", resp.StatusCode)
+		return 1
+	}
+	return 0
 }
 
 func run() error {
