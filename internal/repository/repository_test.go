@@ -559,3 +559,30 @@ func TestRepository_CountJobsAheadAndTopPriority(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 5, top, "running and finished jobs don't count")
 }
+
+func TestRepository_DeleteRemoteFilesOutside(t *testing.T) {
+	repo := setupTestRepo(t)
+	for _, f := range []*models.RemoteFile{
+		{RemotePath: "/s/dp/old.mkv", Name: "old.mkv", Status: models.FileStatusDownloaded, WatchedPath: "/s/dp/"},
+		{RemotePath: "/s/dp/tv/new.mkv", Name: "new.mkv", Status: models.FileStatusOnSeedbox, WatchedPath: "/s/dp/tv/"},
+		{RemotePath: "/s/books/ebooks/a.epub", Name: "a.epub", Status: models.FileStatusOnSeedbox, WatchedPath: "/s/books/ebooks/"},
+	} {
+		require.NoError(t, repo.UpsertRemoteFile(f))
+	}
+
+	n, err := repo.DeleteRemoteFilesOutside([]string{"/s/dp/tv/", "/s/books/ebooks/"})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), n)
+
+	gone, err := repo.GetRemoteFileByPath("/s/dp/old.mkv")
+	require.NoError(t, err)
+	assert.Nil(t, gone)
+	kept, err := repo.GetRemoteFileByPath("/s/dp/tv/new.mkv")
+	require.NoError(t, err)
+	assert.NotNil(t, kept)
+
+	// No watched paths at all clears everything.
+	n, err = repo.DeleteRemoteFilesOutside(nil)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), n)
+}

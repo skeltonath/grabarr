@@ -315,6 +315,25 @@ func (r *Repository) DeleteStaleRemoteFiles(watchedPath string, seenAfter time.T
 	return nil
 }
 
+// DeleteRemoteFilesOutside removes the records of watched paths that are no
+// longer configured, so a removed or renamed watch path doesn't linger as a
+// source in the UI. Jobs are separate rows and keep their history.
+func (r *Repository) DeleteRemoteFilesOutside(watchedPaths []string) (int64, error) {
+	query := "DELETE FROM remote_files"
+	args := make([]any, len(watchedPaths))
+	if len(watchedPaths) > 0 {
+		query += " WHERE watched_path NOT IN (?" + strings.Repeat(",?", len(watchedPaths)-1) + ")"
+		for i, p := range watchedPaths {
+			args[i] = p
+		}
+	}
+	res, err := r.db.Exec(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete remote files of removed watched paths: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 func scanRemoteFile(rows *sql.Rows) (*models.RemoteFile, error) {
 	var f models.RemoteFile
 	var jobID sql.NullInt64

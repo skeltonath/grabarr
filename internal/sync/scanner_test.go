@@ -22,6 +22,7 @@ type stubScannerRepo struct {
 	staleWithJobs []*models.RemoteFile
 	staleErr      error
 	byPath        map[string]*models.RemoteFile
+	keptPaths     []string // last DeleteRemoteFilesOutside argument
 }
 
 func (s *stubScannerRepo) UpsertRemoteFile(_ *models.RemoteFile) error { return nil }
@@ -39,6 +40,10 @@ func (s *stubScannerRepo) GetStaleRemoteFilesWithJobs(_ string, _ time.Time) ([]
 	return s.staleWithJobs, s.staleErr
 }
 func (s *stubScannerRepo) DeleteStaleRemoteFiles(_ string, _ time.Time) error { return nil }
+func (s *stubScannerRepo) DeleteRemoteFilesOutside(paths []string) (int64, error) {
+	s.keptPaths = paths
+	return 0, nil
+}
 
 // compile-time check that stubScannerRepo satisfies ScannerRepo
 var _ ScannerRepo = (*stubScannerRepo)(nil)
@@ -358,4 +363,19 @@ func TestAutoQueueNewFiles_UsesWatchedPathPriority(t *testing.T) {
 	require.NotNil(t, queued)
 	assert.Equal(t, 5, queued.Priority)
 	assert.Equal(t, "/local/books/ebooks/Book/", queued.LocalPath)
+}
+
+// A full scan forgets files from watched paths that are no longer configured,
+// keeping exactly the configured ones.
+func TestScanNow_ForgetsRemovedWatchedPaths(t *testing.T) {
+	repo := &stubScannerRepo{}
+	cfg := &config.Config{Remotes: []config.RemoteConfig{{Name: "whatbox", WatchedPaths: []config.WatchedPath{
+		{RemotePath: "/s/dp/movies/"},
+		{RemotePath: "/s/dp/tv/"},
+	}}}}
+	s := New(cfg, repo, mocks.NewMockJobQueue(t))
+	s.runSSH = func(context.Context, config.RemoteConfig, string) (string, error) { return "", nil }
+
+	require.NoError(t, s.ScanNow(context.Background()))
+	assert.Equal(t, []string{"/s/dp/movies/", "/s/dp/tv/"}, repo.keptPaths)
 }

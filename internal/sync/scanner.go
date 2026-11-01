@@ -28,6 +28,7 @@ type ScannerRepo interface {
 	LinkRemoteFileToJob(remoteFileID, jobID int64, status models.FileStatus) error
 	GetStaleRemoteFilesWithJobs(watchedPath string, seenBefore time.Time) ([]*models.RemoteFile, error)
 	DeleteStaleRemoteFiles(watchedPath string, seenAfter time.Time) error
+	DeleteRemoteFilesOutside(watchedPaths []string) (int64, error)
 }
 
 // defaultScanInterval is used when the config leaves scan_interval unset.
@@ -183,9 +184,11 @@ func (s *Scanner) ScanNow(ctx context.Context) error {
 
 	scanStart := time.Now()
 	totalFound := 0
+	var configured []string
 
 	for _, remote := range s.cfg.GetRemotes() {
 		for _, wp := range remote.WatchedPaths {
+			configured = append(configured, wp.RemotePath)
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -199,6 +202,14 @@ func (s *Scanner) ScanNow(ctx context.Context) error {
 			}
 			totalFound += n
 		}
+	}
+
+	// Forget files from watched paths that were removed from the config. Files
+	// that moved to a new watched path were re-assigned by the upserts above.
+	if n, err := s.repo.DeleteRemoteFilesOutside(configured); err != nil {
+		slog.Error("failed to forget files of removed watched paths", "error", err)
+	} else if n > 0 {
+		slog.Info("forgot files of removed watched paths", "files", n)
 	}
 
 	// Sync job statuses for all files linked to a job.
