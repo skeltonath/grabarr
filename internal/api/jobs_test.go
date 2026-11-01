@@ -743,3 +743,43 @@ func TestGetJobs_ActiveFirst(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code, tc.query)
 	}
 }
+
+func TestStartJobNow(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		code int
+	}{
+		{"started", nil, http.StatusOK},
+		{"refused", errors.New("only a waiting job can be started now"), http.StatusConflict},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockQueue := mocks.NewMockJobQueue(t)
+			mockQueue.EXPECT().StartNow(int64(123)).Return(tc.err).Once()
+			handlers := NewHandlers(mockQueue, mocks.NewMockGatekeeper(t), &config.Config{}, nil, nil)
+
+			rec := httptest.NewRecorder()
+			handlers.StartJobNow(rec, withURLParam(httptest.NewRequest("POST", "/api/v1/jobs/123/start-now", nil), "id", "123"))
+			assert.Equal(t, tc.code, rec.Code)
+			if tc.err != nil {
+				assert.Contains(t, rec.Body.String(), tc.err.Error())
+			}
+		})
+	}
+}
+
+func TestGetJob_JobsAhead(t *testing.T) {
+	mockQueue := mocks.NewMockJobQueue(t)
+	mockQueue.EXPECT().GetJob(int64(7)).Return(&models.Job{ID: 7, Status: models.JobStatusQueued}, nil).Once()
+	mockQueue.EXPECT().JobsAhead(int64(7)).Return(4, nil).Once()
+	handlers := NewHandlers(mockQueue, mocks.NewMockGatekeeper(t), &config.Config{}, nil, nil)
+
+	rec := httptest.NewRecorder()
+	handlers.GetJob(rec, withURLParam(httptest.NewRequest("GET", "/api/v1/jobs/7", nil), "id", "7"))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp APIResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	data := resp.Data.(map[string]interface{})
+	assert.Equal(t, float64(4), data["jobs_ahead"])
+	assert.Equal(t, float64(7), data["id"])
+}

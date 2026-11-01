@@ -519,3 +519,43 @@ func TestRepository_GetSchedulableJobs_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, jobs)
 }
+
+// The "N jobs ahead" count must match the order the scheduler actually uses.
+func TestRepository_CountJobsAheadAndTopPriority(t *testing.T) {
+	repo := setupTestRepo(t)
+	top, err := repo.TopWaitingPriority()
+	require.NoError(t, err)
+	assert.Equal(t, 0, top, "nothing waiting")
+
+	mk := func(name string, status models.JobStatus, priority int) *models.Job {
+		j := &models.Job{Name: name, RemotePath: "/r", LocalPath: "/l", Status: status, Priority: priority, MaxRetries: 3}
+		require.NoError(t, repo.CreateJob(j))
+		return j
+	}
+	a := mk("a", models.JobStatusQueued, 0)
+	b := mk("b", models.JobStatusQueued, 0)
+	book := mk("book", models.JobStatusQueued, 5)
+	mk("running", models.JobStatusRunning, 9) // not waiting: never counted
+	mk("done", models.JobStatusCompleted, 9)  // ditto
+	c := mk("c", models.JobStatusPending, 0)
+
+	order, err := repo.GetSchedulableJobs(10)
+	require.NoError(t, err)
+	for i, j := range order {
+		ahead, err := repo.CountJobsAhead(j.ID)
+		require.NoError(t, err)
+		assert.Equal(t, i, ahead, "job %s is position %d in the scheduler's order", j.Name, i)
+	}
+	ahead, _ := repo.CountJobsAhead(book.ID)
+	assert.Equal(t, 0, ahead)
+	ahead, _ = repo.CountJobsAhead(a.ID)
+	assert.Equal(t, 1, ahead)
+	ahead, _ = repo.CountJobsAhead(b.ID)
+	assert.Equal(t, 2, ahead)
+	ahead, _ = repo.CountJobsAhead(c.ID)
+	assert.Equal(t, 3, ahead)
+
+	top, err = repo.TopWaitingPriority()
+	require.NoError(t, err)
+	assert.Equal(t, 5, top, "running and finished jobs don't count")
+}

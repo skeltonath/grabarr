@@ -11,6 +11,7 @@ import (
 	"github.com/skeltonath/grabarr/internal/interfaces"
 	"github.com/skeltonath/grabarr/internal/mocks"
 	"github.com/skeltonath/grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/repository"
 	"github.com/skeltonath/grabarr/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
@@ -733,4 +734,66 @@ func TestQueueIntegration_SimpleExecution(t *testing.T) {
 	updatedJob, err := q.GetJob(job.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, models.JobStatusQueued, updatedJob.Status)
+}
+
+// "Download now" starts a waiting job past max_concurrent and past the
+// bandwidth ceiling, but not onto a full cache disk.
+func TestStartNow(t *testing.T) {
+	setup := func(t *testing.T, decision interfaces.GateDecision) (*queue, *repository.Repository, *mocks.MockJobExecutor) {
+		repo := testutil.SetupTestDB(t)
+		cfg := &config.Config{Jobs: config.JobsConfig{MaxConcurrent: 1}}
+		gk := mocks.NewMockGatekeeper(t)
+		gk.EXPECT().CanStartJob(mock.Anything).Return(decision).Maybe()
+		exec := mocks.NewMockJobExecutor(t)
+		q := New(repo, cfg, gk, nil).(*queue)
+		q.SetJobExecutor(exec)
+		q.running = true
+		q.schedulerCtx = context.Background()
+		// One copy already running: the normal limit is full.
+		q.activeJobs[999] = func() {}
+		return q, repo, exec
+	}
+
+	t.Run("starts an extra copy past the limit", func(t *testing.T) {
+		q, r, exec := setup(t, interfaces.GateDecision{Allowed: false, Reason: "Bandwidth limit reached"})
+		job := testutil.CreateTestJob(func(j *models.Job) { j.Status = models.JobStatusQueued })
+		require.NoError(t, r.CreateJob(job))
+		done := make(chan struct{})
+		exec.EXPECT().Execute(mock.Anything, mock.Anything).RunAndReturn(func(context.Context, *models.Job) error {
+			close(done)
+			return nil
+		}).Once()
+
+		require.NoError(t, q.StartNow(job.ID))
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("job didn't start")
+		}
+		assert.False(t, q.canScheduleNewJob(), "the regular queue still sees the limit as full")
+	})
+
+	t.Run("refuses a full cache disk", func(t *testing.T) {
+		q, r, _ := setup(t, interfaces.GateDecision{Allowed: false, Reason: "Cache disk usage too high"})
+		job := testutil.CreateTestJob(func(j *models.Job) { j.Status = models.JobStatusQueued })
+		require.NoError(t, r.CreateJob(job))
+		err := q.StartNow(job.ID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cache disk usage too high")
+	})
+
+	t.Run("only waiting jobs", func(t *testing.T) {
+		q, r, _ := setup(t, interfaces.GateDecision{Allowed: true})
+		job := testutil.CreateTestJob(func(j *models.Job) { j.Status = models.JobStatusCompleted })
+		require.NoError(t, r.CreateJob(job))
+		assert.ErrorIs(t, q.StartNow(job.ID), ErrNotWaiting)
+	})
+
+	t.Run("not while the scheduler is off (preview)", func(t *testing.T) {
+		q, r, _ := setup(t, interfaces.GateDecision{Allowed: true})
+		q.running = false
+		job := testutil.CreateTestJob(func(j *models.Job) { j.Status = models.JobStatusQueued })
+		require.NoError(t, r.CreateJob(job))
+		assert.ErrorIs(t, q.StartNow(job.ID), ErrNotRunning)
+	})
 }

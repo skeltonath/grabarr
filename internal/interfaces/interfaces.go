@@ -18,6 +18,14 @@ type JobQueue interface {
 	DeleteJob(id int64) error
 	RetryJob(id int64) error
 	GetSummary() (*models.JobSummary, error)
+	// StartNow starts a waiting job immediately, as an extra copy beyond the
+	// concurrency limit. The cache-disk checks still apply.
+	StartNow(id int64) error
+	// JobsAhead counts waiting jobs that will start before this one.
+	JobsAhead(id int64) (int, error)
+	// TopPriority is one above the highest waiting priority: a job given it
+	// starts next.
+	TopPriority() (int, error)
 	SetJobExecutor(executor JobExecutor)
 	SetRemoteVolumeLister(lister RemoteVolumeLister)
 	SetImportNotifier(notifier ImportNotifier)

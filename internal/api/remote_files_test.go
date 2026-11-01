@@ -520,3 +520,77 @@ func TestQueue_UsesWatchedPathPriority(t *testing.T) {
 		})
 	}
 }
+
+// ---- Download now ----
+
+func TestQueueRemoteFile_Now(t *testing.T) {
+	setup := func(t *testing.T) (*Handlers, *mocks.MockJobQueue, **models.Job) {
+		h, repo, queue := setupRemoteFileHandlers(t)
+		repo.EXPECT().GetRemoteFile(int64(1)).Return(&models.RemoteFile{
+			ID: 1, RemotePath: "/seedbox/dp/x/a.mkv", Name: "a.mkv", Status: models.FileStatusOnSeedbox, WatchedPath: "/seedbox/dp/",
+		}, nil).Once()
+		queue.EXPECT().TopPriority().Return(6, nil).Once()
+		var got *models.Job
+		queue.EXPECT().Enqueue(mock.AnythingOfType("*models.Job")).
+			RunAndReturn(func(j *models.Job) error { got = j; j.ID = 9; return nil }).Once()
+		repo.EXPECT().LinkRemoteFileToJob(int64(1), int64(9), models.FileStatusQueued).Return(nil).Once()
+		return h, queue, &got
+	}
+	call := func(h *Handlers) map[string]interface{} {
+		rec := httptest.NewRecorder()
+		h.QueueRemoteFile(rec, withURLParam(httptest.NewRequest("POST", "/api/v1/remote-files/1/queue?now=true", nil), "id", "1"))
+		require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+		var resp APIResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+		return resp.Data.(map[string]interface{})
+	}
+
+	t.Run("starts first in line", func(t *testing.T) {
+		h, queue, got := setup(t)
+		queue.EXPECT().StartNow(int64(9)).Return(nil).Once()
+		data := call(h)
+		assert.Equal(t, 6, (*got).Priority)
+		assert.Equal(t, true, data["started"])
+	})
+
+	t.Run("stays first in line when it can't start", func(t *testing.T) {
+		h, queue, got := setup(t)
+		queue.EXPECT().StartNow(int64(9)).Return(errors.New("can't start now: cache disk usage too high")).Once()
+		data := call(h)
+		assert.Equal(t, 6, (*got).Priority)
+		assert.Equal(t, false, data["started"])
+		assert.Equal(t, "can't start now: cache disk usage too high", data["not_started"])
+	})
+}
+
+func TestQueueFolder_Now(t *testing.T) {
+	h, repo, queue := setupRemoteFileHandlers(t)
+	repo.EXPECT().GetRemoteFilesByPathPrefix("/seedbox/dp/", "/ShowA").Return([]*models.RemoteFile{
+		{ID: 1, RemotePath: "/seedbox/dp/ShowA/E01.mkv", Name: "E01.mkv", Status: models.FileStatusOnSeedbox, WatchedPath: "/seedbox/dp/"},
+		{ID: 2, RemotePath: "/seedbox/dp/ShowA/E02.mkv", Name: "E02.mkv", Status: models.FileStatusOnSeedbox, WatchedPath: "/seedbox/dp/"},
+	}, nil).Once()
+	queue.EXPECT().TopPriority().Return(3, nil).Once()
+	var priorities []int
+	nextID := int64(10)
+	queue.EXPECT().Enqueue(mock.AnythingOfType("*models.Job")).
+		RunAndReturn(func(j *models.Job) error {
+			priorities = append(priorities, j.Priority)
+			j.ID = nextID
+			nextID++
+			return nil
+		}).Twice()
+	repo.EXPECT().LinkRemoteFileToJob(mock.Anything, mock.Anything, models.FileStatusQueued).Return(nil).Twice()
+	queue.EXPECT().StartNow(int64(10)).Return(nil).Once() // only the first
+
+	body, _ := json.Marshal(map[string]any{"watched_path": "/seedbox/dp/", "folder_path": "/ShowA", "now": true})
+	rec := httptest.NewRecorder()
+	h.QueueFolder(rec, httptest.NewRequest("POST", "/api/v1/remote-files/queue-folder", bytes.NewReader(body)))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var resp APIResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	data := resp.Data.(map[string]interface{})
+	assert.Equal(t, float64(2), data["queued"])
+	assert.Equal(t, true, data["started"])
+	assert.Equal(t, []int{3, 3}, priorities)
+}

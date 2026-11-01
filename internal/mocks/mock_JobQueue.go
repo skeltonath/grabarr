@@ -640,3 +640,158 @@ func NewMockJobQueue(t interface {
 
 	return mock
 }
+
+// StartNow provides a mock function with given fields: id
+func (_m *MockJobQueue) StartNow(id int64) error {
+	ret := _m.Called(id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StartNow")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int64) error); ok {
+		r0 = rf(id)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockJobQueue_StartNow_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'StartNow'
+type MockJobQueue_StartNow_Call struct {
+	*mock.Call
+}
+
+// StartNow is a helper method to define mock.On call
+//   - id int64
+func (_e *MockJobQueue_Expecter) StartNow(id interface{}) *MockJobQueue_StartNow_Call {
+	return &MockJobQueue_StartNow_Call{Call: _e.mock.On("StartNow", id)}
+}
+
+func (_c *MockJobQueue_StartNow_Call) Run(run func(id int64)) *MockJobQueue_StartNow_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int64))
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_StartNow_Call) Return(_a0 error) *MockJobQueue_StartNow_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockJobQueue_StartNow_Call) RunAndReturn(run func(int64) error) *MockJobQueue_StartNow_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// JobsAhead provides a mock function with given fields: id
+func (_m *MockJobQueue) JobsAhead(id int64) (int, error) {
+	ret := _m.Called(id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for JobsAhead")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int64) (int, error)); ok {
+		return rf(id)
+	}
+	if rf, ok := ret.Get(0).(func(int64) int); ok {
+		r0 = rf(id)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if rf, ok := ret.Get(1).(func(int64) error); ok {
+		r1 = rf(id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockJobQueue_JobsAhead_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'JobsAhead'
+type MockJobQueue_JobsAhead_Call struct {
+	*mock.Call
+}
+
+// JobsAhead is a helper method to define mock.On call
+//   - id int64
+func (_e *MockJobQueue_Expecter) JobsAhead(id interface{}) *MockJobQueue_JobsAhead_Call {
+	return &MockJobQueue_JobsAhead_Call{Call: _e.mock.On("JobsAhead", id)}
+}
+
+func (_c *MockJobQueue_JobsAhead_Call) Run(run func(id int64)) *MockJobQueue_JobsAhead_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int64))
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_JobsAhead_Call) Return(_a0 int, _a1 error) *MockJobQueue_JobsAhead_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockJobQueue_JobsAhead_Call) RunAndReturn(run func(int64) (int, error)) *MockJobQueue_JobsAhead_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// TopPriority provides a mock function with no fields
+func (_m *MockJobQueue) TopPriority() (int, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for TopPriority")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (int, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockJobQueue_TopPriority_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TopPriority'
+type MockJobQueue_TopPriority_Call struct {
+	*mock.Call
+}
+
+// TopPriority is a helper method to define mock.On call
+func (_e *MockJobQueue_Expecter) TopPriority() *MockJobQueue_TopPriority_Call {
+	return &MockJobQueue_TopPriority_Call{Call: _e.mock.On("TopPriority")}
+}
+
+func (_c *MockJobQueue_TopPriority_Call) Run(run func()) *MockJobQueue_TopPriority_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockJobQueue_TopPriority_Call) Return(_a0 int, _a1 error) *MockJobQueue_TopPriority_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockJobQueue_TopPriority_Call) RunAndReturn(run func() (int, error)) *MockJobQueue_TopPriority_Call {
+	_c.Call.Return(run)
+	return _c
+}

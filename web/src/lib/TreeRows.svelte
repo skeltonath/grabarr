@@ -8,7 +8,7 @@
 	 * One level of the file tree. Folders toggle open (or are all open while
 	 * filtering); a file opens its detail sheet.
 	 */
-	let { node, depth = 0, keep, allOpen, expanded, onfile, onqueue, onretry, busy } = $props();
+	let { node, depth = 0, keep, allOpen, expanded, onfile, ondownload, onretry, busy } = $props();
 
 	const rows = $derived(visibleChildren(node, keep));
 	const stateLabel = { seedbox: 'on seedbox', queued: 'queued', copying: 'copying', copied: 'copied', failed: 'failed', ignored: 'ignored' };
@@ -35,14 +35,14 @@
 			</span>
 			<span class="act">
 				{#if t.seedbox}
-					<button class="secondary small" disabled={busy} onclick={() => onqueue(row.folder)}>Queue {t.seedbox}</button>
+					<button class="secondary small" disabled={busy} onclick={() => ondownload(row.folder)}>Download now</button>
 				{:else if t.failed}
 					<button class="secondary small" disabled={busy} onclick={() => onretry(row.folder)}>Retry {t.failed}</button>
 				{/if}
 			</span>
 		</div>
 		{#if open}
-			<Self node={row.folder} depth={depth + 1} {keep} {allOpen} {expanded} {onfile} {onqueue} {onretry} {busy} />
+			<Self node={row.folder} depth={depth + 1} {keep} {allOpen} {expanded} {onfile} {ondownload} {onretry} {busy} />
 		{/if}
 	{:else}
 		{@const f = row.file}
@@ -167,6 +167,7 @@
 		padding: 0.4rem 0.9rem;
 		font-size: 0.9rem;
 		min-height: 36px;
+		white-space: nowrap;
 	}
 	.state {
 		font-size: 0.85rem;
@@ -187,7 +188,7 @@
 	@media (min-width: 900px) {
 		.row,
 		.file {
-			grid-template-columns: minmax(0, 1fr) 90px 300px 110px;
+			grid-template-columns: minmax(0, 1fr) 90px 300px 140px;
 			grid-template-areas: 'name size progress act';
 			padding: 0.55rem 0 0.55rem calc(var(--depth) * 20px);
 		}

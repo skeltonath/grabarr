@@ -298,6 +298,12 @@ When resources become available:
 - If same priority, **older jobs** run first
 - Ensures important jobs aren't starved
 
+### Download Now
+
+"Download now" in the web UI (or `POST /api/v1/jobs/{id}/start-now`) starts a
+queued job straight away as an extra copy: it ignores `max_concurrent` and the
+bandwidth check, but the cache disk and file size checks still apply.
+
 ### Concurrent Job Limits
 
 Gatekeeper works with job concurrency limits:

@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { api, apiPage } from '$lib/api.js';
@@ -44,8 +44,12 @@
 
 	const needle = $derived(text.trim().toLowerCase());
 	const visible = $derived(needle ? jobs.filter((j) => j.name.toLowerCase().includes(needle)) : jobs);
-	let fetched = $state(null); // a selected job that isn't in the loaded rows
+	// The selected job fetched on its own: when it isn't in the loaded rows, and
+	// when it's waiting, for how many jobs are ahead of it.
+	let fetched = $state(null);
 	const selected = $derived(jobs.find((j) => j.id === selectedId) ?? (fetched?.id === selectedId ? fetched : null));
+	const ahead = $derived(fetched?.id === selectedId ? fetched.jobs_ahead : undefined);
+	const waiting = (j) => j.status === 'queued' || j.status === 'pending';
 
 	async function load() {
 		// Running and starting jobs first, then newest first.
@@ -56,15 +60,25 @@
 			jobs = data;
 			total = pagination?.total ?? data.length;
 			loadError = '';
-			if (selectedId && !data.some((j) => j.id === selectedId)) {
-				fetched = await api(`/api/v1/jobs/${selectedId}`).catch(() => null);
-			}
+			await loadSelected();
 		} catch (e) {
 			loadError = e.message;
 		} finally {
 			loaded = true;
 		}
 	}
+
+	async function loadSelected() {
+		const id = selectedId;
+		const row = jobs.find((j) => j.id === id);
+		if (!id || (row && !waiting(row))) return;
+		const j = await api(`/api/v1/jobs/${id}`).catch(() => null);
+		if (selectedId === id) fetched = j;
+	}
+	$effect(() => {
+		selectedId;
+		untrack(loadSelected);
+	});
 
 	// Reload from the top when the filter changes.
 	$effect(() => {
@@ -93,6 +107,7 @@
 	}
 
 	function flash(m) {
+		m = m.charAt(0).toUpperCase() + m.slice(1);
 		message = m;
 		setTimeout(() => (message === m ? (message = '') : null), 4000);
 	}
@@ -106,7 +121,7 @@
 				flash('Deleted');
 			} else {
 				await api(`/api/v1/jobs/${job.id}/${action}`, 'POST');
-				flash(action === 'retry' ? 'Retrying' : 'Cancelled');
+				flash({ retry: 'Retrying', 'start-now': 'Started' }[action] ?? 'Cancelled');
 			}
 			await load();
 		} catch (e) {
@@ -140,7 +155,7 @@
 		<Bar value={j.progress?.percentage ?? 0} />
 		<p class="muted small">{progressText(j)}</p>
 	{:else}
-		<p class="state {j.status}">{statusText(j)}</p>
+		<p class="state {j.status}">{statusText(j)}{j.status === 'queued' && ahead !== undefined ? ` · ${ahead ? `${ahead} ${ahead === 1 ? 'job' : 'jobs'} ahead` : 'next up'}` : ''}</p>
 	{/if}
 	{#if j.error_message}<p class="error">{j.error_message}</p>{/if}
 	<dl>
@@ -159,6 +174,7 @@
 		{:else if j.status === 'completed'}
 			<button class="secondary" disabled={busy} onclick={() => act(j, 'delete')}>Remove from list</button>
 		{:else}
+			{#if j.status === 'queued'}<button disabled={busy} onclick={() => act(j, 'start-now')}>Download now</button>{/if}
 			<button class="danger" disabled={busy} onclick={() => act(j, 'cancel')}>Cancel copy</button>
 		{/if}
 	</div>

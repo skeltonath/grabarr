@@ -89,7 +89,7 @@ curl -X POST https://grabarr.internal.dppeppel.me/api/v1/jobs \
 
 **GET** `/jobs/{id}`
 
-Retrieve details for a specific job.
+Retrieve details for a specific job. A queued or starting job also has `jobs_ahead`: how many waiting jobs will start before it.
 
 **Example:**
 
@@ -229,6 +229,23 @@ curl -X POST https://grabarr.internal.dppeppel.me/api/v1/jobs/1/retry
   "message": "Job queued for retry"
 }
 ```
+
+### Start Job Now
+
+**POST** `/jobs/{id}/start-now`
+
+"Download now": start a queued job immediately as an extra copy, past `jobs.max_concurrent` and the bandwidth limit. The cache-disk checks still apply. Returns 409 with the reason when the job isn't waiting, the cache disk is too full, or grabarr runs in preview mode.
+
+```bash
+curl -X POST https://grabarr.internal.dppeppel.me/api/v1/jobs/1/start-now
+```
+
+### Download Seedbox Files Now
+
+The web UI's Files page uses two more endpoints:
+
+- **POST** `/remote-files/{id}/queue?now=true` creates the file's job first in line (above every waiting job's priority) and starts it as with `start-now`. The response's `data` is `{"job": {...}, "started": true}`; when it can't start, `started` is false, `not_started` says why, and the job stays first in line. Without `now` the file is queued at its watched path's priority.
+- **POST** `/remote-files/queue-folder` with `{"watched_path": "...", "folder_path": "...", "now": true}` puts every file in the folder first in line and starts only the first one, so a big folder doesn't become dozens of extra copies. The response has `queued`, `failed`, and `started` / `not_started`.
 
 ### Cancel Job
 

@@ -64,6 +64,7 @@ func (h *Handlers) RegisterRoutes(r chi.Router) {
 		api.Delete("/jobs/{id:[0-9]+}", h.DeleteJob)
 		api.Post("/jobs/{id:[0-9]+}/cancel", h.CancelJob)
 		api.Post("/jobs/{id:[0-9]+}/retry", h.RetryJob)
+		api.Post("/jobs/{id:[0-9]+}/start-now", h.StartJobNow)
 
 		// Remote files (seedbox scanner) endpoints
 		api.Get("/remote-files", h.ListRemoteFiles)

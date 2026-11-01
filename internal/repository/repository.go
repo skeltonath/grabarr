@@ -521,3 +521,30 @@ func (r *Repository) CleanupOldJobs(completedBefore, failedBefore time.Time) (in
 	slog.Info("cleaned up old jobs", "count", rowsAffected)
 	return int(rowsAffected), nil
 }
+
+// TopWaitingPriority returns the highest priority among waiting (queued or
+// pending) jobs, or 0 when nothing is waiting. One above it puts a job first.
+func (r *Repository) TopWaitingPriority() (int, error) {
+	var p int
+	err := r.db.QueryRow(`SELECT COALESCE(MAX(priority), 0) FROM jobs WHERE status IN ('queued', 'pending')`).Scan(&p)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get top waiting priority: %w", err)
+	}
+	return p, nil
+}
+
+// CountJobsAhead counts waiting jobs the scheduler will start before this one,
+// using GetSchedulableJobs' order (priority DESC, created_at ASC, id ASC).
+func (r *Repository) CountJobsAhead(id int64) (int, error) {
+	var n int
+	err := r.db.QueryRow(`
+		SELECT COUNT(*) FROM jobs j, jobs me
+		WHERE me.id = ? AND j.id != me.id AND j.status IN ('queued', 'pending')
+		  AND (j.priority > me.priority
+		       OR (j.priority = me.priority AND (j.created_at < me.created_at
+		           OR (j.created_at = me.created_at AND j.id < me.id))))`, id).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count jobs ahead: %w", err)
+	}
+	return n, nil
+}

@@ -219,7 +219,33 @@ func (h *Handlers) GetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.writeSuccess(w, http.StatusOK, job, "")
+	// A waiting job also says how many jobs will start before it.
+	resp := struct {
+		*models.Job
+		JobsAhead *int `json:"jobs_ahead,omitempty"`
+	}{Job: job}
+	if job.Status == models.JobStatusQueued || job.Status == models.JobStatusPending {
+		if n, err := h.queue.JobsAhead(id); err == nil {
+			resp.JobsAhead = &n
+		}
+	}
+	h.writeSuccess(w, http.StatusOK, resp, "")
+}
+
+// StartJobNow starts a waiting job immediately as an extra copy, past the
+// concurrency limit ("Download now"). Refused for a job that isn't waiting,
+// onto a full cache disk, and in preview mode.
+func (h *Handlers) StartJobNow(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid job ID", err)
+		return
+	}
+	if err := h.queue.StartNow(id); err != nil {
+		h.writeError(w, http.StatusConflict, err.Error(), nil)
+		return
+	}
+	h.writeSuccess(w, http.StatusOK, nil, "Started")
 }
 
 func (h *Handlers) DeleteJob(w http.ResponseWriter, r *http.Request) {

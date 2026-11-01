@@ -123,6 +123,17 @@ func (h *Handlers) QueueRemoteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	job.FileSize = rf.Size
 
+	// ?now=true is "Download now": first in line, and started immediately.
+	now := r.URL.Query().Get("now") == "true"
+	if now {
+		top, err := h.queue.TopPriority()
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, "failed to read the queue", err)
+			return
+		}
+		job.Priority = top
+	}
+
 	if err := h.queue.Enqueue(job); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "failed to enqueue job", err)
 		return
@@ -130,6 +141,16 @@ func (h *Handlers) QueueRemoteFile(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.remoteFileRepo.LinkRemoteFileToJob(rf.ID, job.ID, models.FileStatusQueued); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "failed to link file to job", err)
+		return
+	}
+
+	if now {
+		// If it can't start (cache disk full, preview), it stays first in line.
+		res := downloadNowResult{Job: job, Started: true}
+		if err := h.queue.StartNow(job.ID); err != nil {
+			res.Started, res.NotStarted = false, err.Error()
+		}
+		h.writeSuccess(w, http.StatusCreated, res, "")
 		return
 	}
 
@@ -579,11 +600,24 @@ func buildFileTree(watchedPath, displayName string, files []*models.RemoteFile, 
 type queueFolderRequest struct {
 	WatchedPath string `json:"watched_path"`
 	FolderPath  string `json:"folder_path"`
+	// Now ("Download now") puts the folder's files first in line and starts
+	// the first one immediately, past the concurrency limit.
+	Now bool `json:"now"`
 }
 
 type queueFolderResponse struct {
 	Queued int `json:"queued"`
 	Failed int `json:"failed"`
+	// With now: whether the first file started, and why not if it didn't.
+	Started    bool   `json:"started,omitempty"`
+	NotStarted string `json:"not_started,omitempty"`
+}
+
+// downloadNowResult is the queue endpoint's answer to ?now=true.
+type downloadNowResult struct {
+	Job        *models.Job `json:"job"`
+	Started    bool        `json:"started"`
+	NotStarted string      `json:"not_started,omitempty"`
 }
 
 // QueueFolder creates download jobs for all on_seedbox files under the given folder path.
@@ -611,7 +645,16 @@ func (h *Handlers) QueueFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	top := 0
+	if req.Now {
+		if top, err = h.queue.TopPriority(); err != nil {
+			h.writeError(w, http.StatusInternalServerError, "failed to read the queue", err)
+			return
+		}
+	}
+
 	var queued, failed int
+	var firstJob int64
 	for _, rf := range files {
 		wp := h.findWatchedPath(rf.WatchedPath)
 		baseLocalPath := h.config.GetDownloads().LocalPath
@@ -629,6 +672,9 @@ func (h *Handlers) QueueFolder(w http.ResponseWriter, r *http.Request) {
 			MaxRetries: h.config.GetJobs().MaxRetries,
 			FileSize:   rf.Size,
 		}
+		if req.Now {
+			job.Priority = top
+		}
 
 		if err := h.queue.Enqueue(job); err != nil {
 			slog.Warn("queue-folder: failed to enqueue job", "file", rf.RemotePath, "error", err)
@@ -641,10 +687,22 @@ func (h *Handlers) QueueFolder(w http.ResponseWriter, r *http.Request) {
 			// Job was created but linking failed; count as queued anyway.
 		}
 
+		if firstJob == 0 {
+			firstJob = job.ID
+		}
 		queued++
 	}
 
 	resp := queueFolderResponse{Queued: queued, Failed: failed}
+	if req.Now && firstJob != 0 {
+		// Only the first file starts now; the rest wait at the front of the
+		// line, so a big folder doesn't become dozens of extra copies.
+		if err := h.queue.StartNow(firstJob); err != nil {
+			resp.NotStarted = err.Error()
+		} else {
+			resp.Started = true
+		}
+	}
 	if queued == 0 && failed > 0 {
 		h.writeError(w, http.StatusInternalServerError, "failed to queue any files", nil)
 		return

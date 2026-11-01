@@ -85,10 +85,20 @@
 	async function scan() {
 		await run(() => api('/api/v1/sync/scan', 'POST'), 'Scan started');
 	}
-	const queueFolder = (folder) =>
+	// "Download now" on a folder puts its files first in line and starts the
+	// first one; on a file it starts that file as an extra copy.
+	const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+	const downloadFolder = (folder) =>
 		run(async () => {
-			const r = await api('/api/v1/remote-files/queue-folder', 'POST', { watched_path: root.watched_path, folder_path: folder.path });
-			flash(`Queued ${r?.queued ?? 0} files`);
+			const r = await api('/api/v1/remote-files/queue-folder', 'POST', { watched_path: root.watched_path, folder_path: folder.path, now: true });
+			const n = r?.queued ?? 0;
+			const rest = n > 1 ? `, the other ${n - 1} are next` : '';
+			flash(r?.started ? `Started the first file${rest}` : `Queued ${n === 1 ? '' : `${n} `}first in line.${cap(r?.not_started ?? '')}`);
+		});
+	const downloadFile = (f) =>
+		run(async () => {
+			const r = await api(`/api/v1/remote-files/${f.id}/queue?now=true`, 'POST');
+			flash(r?.started ? 'Started' : `Queued first in line. ${cap(r?.not_started ?? '')}`);
 		});
 	const retryFolder = (folder) =>
 		run(async () => {
@@ -145,7 +155,7 @@
 		{:else}
 			<div class="head" aria-hidden="true"><span>Name</span><span>Size</span><span>Progress</span><span></span></div>
 			<div class="tree">
-				<TreeRows node={root} {keep} {allOpen} {expanded} {busy} onfile={(f) => (selected = f)} onqueue={queueFolder} onretry={retryFolder} />
+				<TreeRows node={root} {keep} {allOpen} {expanded} {busy} onfile={(f) => (selected = f)} ondownload={downloadFolder} onretry={retryFolder} />
 			</div>
 		{/if}
 	</main>
@@ -170,13 +180,14 @@
 		</dl>
 		<div class="actions">
 			{#if st === 'seedbox'}
-				<button disabled={busy} onclick={() => fileAction(`/api/v1/remote-files/${f.id}/queue`, 'Queued')}>Queue</button>
-				<button class="secondary" disabled={busy} onclick={() => fileAction(`/api/v1/remote-files/${f.id}/ignore`, 'Ignored')}>Ignore</button>
+				<button disabled={busy} onclick={() => downloadFile(f)}>Download now</button>
+				<button class="secondary" disabled={busy} onclick={() => fileAction(`/api/v1/remote-files/${f.id}/ignore`, 'Skipped')}>Skip</button>
 			{:else if st === 'ignored'}
 				<button class="secondary" disabled={busy} onclick={() => fileAction(`/api/v1/remote-files/${f.id}/restore`, 'Restored')}>Restore</button>
 			{:else if st === 'failed'}
 				<button disabled={busy} onclick={() => fileAction(`/api/v1/jobs/${p.job_id}/retry`, 'Retrying')}>Retry</button>
 			{:else if (st === 'queued' || st === 'copying') && p?.job_id}
+				{#if st === 'queued'}<button disabled={busy} onclick={() => fileAction(`/api/v1/jobs/${p.job_id}/start-now`, 'Started')}>Download now</button>{/if}
 				<button class="danger" disabled={busy} onclick={() => fileAction(`/api/v1/jobs/${p.job_id}/cancel`, 'Cancelled')}>Cancel copy</button>
 			{/if}
 		</div>
@@ -312,7 +323,7 @@
 		}
 		.head {
 			display: grid;
-			grid-template-columns: minmax(0, 1fr) 90px 300px 110px;
+			grid-template-columns: minmax(0, 1fr) 90px 300px 140px;
 			column-gap: 12px;
 			color: var(--muted);
 			font-size: 0.85rem;

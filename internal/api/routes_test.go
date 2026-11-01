@@ -45,6 +45,7 @@ func TestRouteTable(t *testing.T) {
 		"POST /api/v1/jobs",
 		"POST /api/v1/jobs/{id:[0-9]+}/cancel",
 		"POST /api/v1/jobs/{id:[0-9]+}/retry",
+		"POST /api/v1/jobs/{id:[0-9]+}/start-now",
 		"POST /api/v1/remote-files/queue-folder",
 		"POST /api/v1/remote-files/{id:[0-9]+}/ignore",
 		"POST /api/v1/remote-files/{id:[0-9]+}/queue",

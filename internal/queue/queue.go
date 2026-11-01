@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -313,6 +314,55 @@ func (q *queue) RetryJob(id int64) error {
 
 func (q *queue) GetSummary() (*models.JobSummary, error) {
 	return q.repo.GetJobSummary()
+}
+
+// ErrNotWaiting is returned by StartNow for a job that isn't queued or pending.
+var ErrNotWaiting = errors.New("only a waiting job can be started now")
+
+// ErrNotRunning is returned by StartNow when the scheduler isn't running (the
+// local preview), so nothing can copy.
+var ErrNotRunning = errors.New("copying is off (preview mode)")
+
+// StartNow starts a waiting job right away as an extra copy, ignoring
+// max_concurrent and the bandwidth ceiling (the person asked for it now). The
+// cache-disk rules still apply: copying onto a full cache disk breaks more than
+// grabarr. While it runs it counts as active, so the regular queue simply
+// starts one fewer job until it finishes.
+func (q *queue) StartNow(id int64) error {
+	q.mu.RLock()
+	running := q.running
+	q.mu.RUnlock()
+	if !running {
+		return ErrNotRunning
+	}
+
+	job, err := q.repo.GetJob(id)
+	if err != nil {
+		return err
+	}
+	if job.Status != models.JobStatusQueued && job.Status != models.JobStatusPending {
+		return ErrNotWaiting
+	}
+	if d := q.gatekeeper.CanStartJob(job.FileSize); !d.Allowed && d.Reason != "Bandwidth limit reached" {
+		return fmt.Errorf("can't start now: %s", strings.ToLower(d.Reason))
+	}
+	if !q.scheduleJob(job) {
+		return fmt.Errorf("job %d is already starting", id)
+	}
+	slog.Info("job started now by request", "job_id", id, "name", job.Name)
+	return nil
+}
+
+func (q *queue) JobsAhead(id int64) (int, error) {
+	return q.repo.CountJobsAhead(id)
+}
+
+func (q *queue) TopPriority() (int, error) {
+	top, err := q.repo.TopWaitingPriority()
+	if err != nil {
+		return 0, err
+	}
+	return top + 1, nil
 }
 
 // loadExistingJobs returns jobs interrupted by a restart to the waiting pool.
