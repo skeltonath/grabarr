@@ -41,6 +41,9 @@ remotes:
         recursive: true
       - label: "Books"
         remote_path: "/home/psychomanteum/downloads/completed/books/"
+        # Books copy in seconds; run them ahead of any video backlog (0) and
+        # archive extraction (1).
+        priority: 5
         local_path: "data/downloads/books/"
         extensions: ["epub", "m4b", "jpg"]
         archive_extensions: ["rar", "zip"]

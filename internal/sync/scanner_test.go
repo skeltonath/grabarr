@@ -21,13 +21,16 @@ import (
 type stubScannerRepo struct {
 	staleWithJobs []*models.RemoteFile
 	staleErr      error
+	byPath        map[string]*models.RemoteFile
 }
 
 func (s *stubScannerRepo) UpsertRemoteFile(_ *models.RemoteFile) error { return nil }
 func (s *stubScannerRepo) GetRemoteFilesLinkedToJobs() ([]*models.RemoteFile, error) {
 	return nil, nil
 }
-func (s *stubScannerRepo) GetRemoteFileByPath(_ string) (*models.RemoteFile, error)  { return nil, nil }
+func (s *stubScannerRepo) GetRemoteFileByPath(path string) (*models.RemoteFile, error) {
+	return s.byPath[path], nil
+}
 func (s *stubScannerRepo) UpdateRemoteFileStatus(_ int64, _ models.FileStatus) error { return nil }
 func (s *stubScannerRepo) LinkRemoteFileToJob(_ int64, _ int64, _ models.FileStatus) error {
 	return nil
@@ -325,4 +328,34 @@ func TestScanLoop_PicksUpEnabledAtRuntime(t *testing.T) {
 		defer mu.Unlock()
 		return calls > 0
 	}, time.Second, 10*time.Millisecond, "enabling scanning should start scans without a restart")
+}
+
+// Jobs the scanner queues take their watched path's priority, so a book
+// skips a video backlog.
+func TestAutoQueueNewFiles_UsesWatchedPathPriority(t *testing.T) {
+	rf := &models.RemoteFile{
+		ID:         7,
+		RemotePath: "/seedbox/books/ebooks/Book/book.epub",
+		Name:       "book.epub",
+		Size:       1024,
+		Status:     models.FileStatusOnSeedbox,
+	}
+	repo := &stubScannerRepo{byPath: map[string]*models.RemoteFile{rf.RemotePath: rf}}
+	q := mocks.NewMockJobQueue(t)
+	var queued *models.Job
+	q.On("Enqueue", mock.Anything).Run(func(args mock.Arguments) {
+		queued = args.Get(0).(*models.Job)
+	}).Return(nil)
+	q.On("GetJob", mock.Anything).Maybe().Return(&models.Job{}, nil)
+
+	s := &Scanner{cfg: &config.Config{}, repo: repo, queue: q}
+	s.autoQueueNewFiles(context.Background(), []*models.RemoteFile{rf}, config.WatchedPath{
+		RemotePath: "/seedbox/books/",
+		LocalPath:  "/local/books/",
+		Priority:   5,
+	})
+
+	require.NotNil(t, queued)
+	assert.Equal(t, 5, queued.Priority)
+	assert.Equal(t, "/local/books/ebooks/Book/", queued.LocalPath)
 }

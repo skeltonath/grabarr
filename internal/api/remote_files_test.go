@@ -460,3 +460,63 @@ func TestGetRemoteFileTree_LabelsAndConfigOrder(t *testing.T) {
 		"old||/old/",                      // no longer configured: last, named after its folder
 	}, got)
 }
+
+// Queueing from the web UI, a single file or a whole folder, uses the watched
+// path's priority, as the scanner does; files from a path no longer in the
+// config get 0.
+func TestQueue_UsesWatchedPathPriority(t *testing.T) {
+	newHandlers := func(t *testing.T) (*Handlers, *mocks.MockRemoteFileRepo, *mocks.MockJobQueue) {
+		repo := mocks.NewMockRemoteFileRepo(t)
+		queue := mocks.NewMockJobQueue(t)
+		cfg := &config.Config{
+			Remotes: []config.RemoteConfig{{Name: "whatbox", WatchedPaths: []config.WatchedPath{
+				{RemotePath: "/seedbox/dp/"},
+				{RemotePath: "/seedbox/books/", Priority: 5},
+			}}},
+			Downloads: config.DownloadsConfig{LocalPath: "/downloads/"},
+		}
+		return NewHandlers(queue, mocks.NewMockGatekeeper(t), cfg, repo, nil), repo, queue
+	}
+
+	for _, tc := range []struct {
+		watched string
+		want    int
+	}{
+		{"/seedbox/books/", 5},
+		{"/seedbox/dp/", 0},
+		{"/seedbox/gone/", 0},
+	} {
+		t.Run("file "+tc.watched, func(t *testing.T) {
+			h, repo, queue := newHandlers(t)
+			repo.EXPECT().GetRemoteFile(int64(1)).Return(&models.RemoteFile{
+				ID: 1, RemotePath: tc.watched + "x/a.epub", Name: "a.epub", Status: models.FileStatusOnSeedbox, WatchedPath: tc.watched,
+			}, nil).Once()
+			var got *models.Job
+			queue.EXPECT().Enqueue(mock.AnythingOfType("*models.Job")).
+				RunAndReturn(func(j *models.Job) error { got = j; j.ID = 9; return nil }).Once()
+			repo.EXPECT().LinkRemoteFileToJob(int64(1), int64(9), models.FileStatusQueued).Return(nil).Once()
+
+			rec := httptest.NewRecorder()
+			h.QueueRemoteFile(rec, withURLParam(httptest.NewRequest("POST", "/api/v1/remote-files/1/queue", nil), "id", "1"))
+			require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+			assert.Equal(t, tc.want, got.Priority)
+		})
+
+		t.Run("folder "+tc.watched, func(t *testing.T) {
+			h, repo, queue := newHandlers(t)
+			repo.EXPECT().GetRemoteFilesByPathPrefix(tc.watched, "/x").Return([]*models.RemoteFile{
+				{ID: 1, RemotePath: tc.watched + "x/a.epub", Name: "a.epub", Status: models.FileStatusOnSeedbox, WatchedPath: tc.watched},
+			}, nil).Once()
+			var got *models.Job
+			queue.EXPECT().Enqueue(mock.AnythingOfType("*models.Job")).
+				RunAndReturn(func(j *models.Job) error { got = j; j.ID = 9; return nil }).Once()
+			repo.EXPECT().LinkRemoteFileToJob(int64(1), int64(9), models.FileStatusQueued).Return(nil).Once()
+
+			body, _ := json.Marshal(map[string]string{"watched_path": tc.watched, "folder_path": "/x"})
+			rec := httptest.NewRecorder()
+			h.QueueFolder(rec, httptest.NewRequest("POST", "/api/v1/remote-files/queue-folder", bytes.NewReader(body)))
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			assert.Equal(t, tc.want, got.Priority)
+		})
+	}
+}

@@ -118,7 +118,7 @@ func (h *Handlers) QueueRemoteFile(w http.ResponseWriter, r *http.Request) {
 		RemotePath: rf.RemotePath,
 		LocalPath:  localPath,
 		Status:     models.JobStatusQueued,
-		Priority:   0,
+		Priority:   priorityOf(wp),
 		MaxRetries: h.config.GetJobs().MaxRetries,
 	}
 	job.FileSize = rf.Size
@@ -286,6 +286,15 @@ func (h *Handlers) watchedPathNames(watchedPath string) (label, remoteName strin
 		}
 	}
 	return "", ""
+}
+
+// priorityOf is the priority for jobs queued from a watched path: its
+// configured priority, or 0 for files from a path no longer in the config.
+func priorityOf(wp *config.WatchedPath) int {
+	if wp == nil {
+		return 0
+	}
+	return wp.Priority
 }
 
 // parseID parses a string path variable into an int64.
@@ -616,7 +625,7 @@ func (h *Handlers) QueueFolder(w http.ResponseWriter, r *http.Request) {
 			RemotePath: rf.RemotePath,
 			LocalPath:  localPath,
 			Status:     models.JobStatusQueued,
-			Priority:   0,
+			Priority:   priorityOf(wp),
 			MaxRetries: h.config.GetJobs().MaxRetries,
 			FileSize:   rf.Size,
 		}

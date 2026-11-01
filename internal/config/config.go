@@ -92,6 +92,10 @@ type WatchedPath struct {
 	ExcludePatterns   []string `yaml:"exclude_patterns"`   // regex patterns applied to filename
 	AutoDownload      bool     `yaml:"auto_download"`
 	Recursive         bool     `yaml:"recursive"`
+	// Priority for jobs queued from this path, by the scanner or from the web
+	// UI. Higher runs first (default 0), so small files like books don't wait
+	// behind a video backlog. Extraction jobs use 1.
+	Priority int `yaml:"priority"`
 }
 
 type ServerConfig struct {

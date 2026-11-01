@@ -26,7 +26,11 @@ func TestDeployConfig(t *testing.T) {
 	require.Len(t, cfg.Remotes, 1)
 	assert.Equal(t, "/config/grabarr_rsa", cfg.Remotes[0].SSHKeyFile,
 		"the SSH key stays in the host config folder, outside git")
-	assert.Len(t, cfg.Remotes[0].WatchedPaths, 2)
+	require.Len(t, cfg.Remotes[0].WatchedPaths, 2)
+	video, books := cfg.Remotes[0].WatchedPaths[0], cfg.Remotes[0].WatchedPaths[1]
+	assert.Equal(t, "Books", books.Label)
+	assert.Greater(t, books.Priority, 1, "books run ahead of video and of extraction jobs (priority 1)")
+	assert.Equal(t, 0, video.Priority)
 	assert.Equal(t, "/data/grabarr.db", cfg.Database.Path)
 	assert.True(t, cfg.Auth.OIDC.Enabled())
 	assert.False(t, cfg.Auth.DevLogin, "dev login must never be on in production")

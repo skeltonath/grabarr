@@ -437,7 +437,7 @@ func (s *Scanner) autoQueueNewFiles(ctx context.Context, files []*models.RemoteF
 			RemotePath: f.RemotePath,
 			LocalPath:  localPath,
 			Status:     models.JobStatusQueued,
-			Priority:   0,
+			Priority:   wp.Priority,
 			MaxRetries: s.cfg.GetJobs().MaxRetries,
 			FileSize:   f.Size,
 		}

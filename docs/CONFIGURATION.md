@@ -58,6 +58,7 @@ Each watched path:
 | `exclude_patterns` | Regexes on the file name to skip, such as samples. |
 | `auto_download` | Queue new files automatically; otherwise they wait in Files for a Queue click. |
 | `recursive` | Look in subfolders. |
+| `priority` | Priority of jobs queued from this path, by the scan or from the web UI. Higher runs first; default 0. Books use 5 so they skip a video backlog; extraction jobs use 1. Only new jobs take it. |
 
 ### downloads
 

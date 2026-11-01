@@ -50,6 +50,9 @@ remotes:
       # Lands in /mnt/user/media/downloads/books/, which Shelfmark sees as /downloads/books.
       - label: "Books"
         remote_path: "/home/psychomanteum/downloads/completed/books/"
+        # Books copy in seconds; run them ahead of any video backlog (0) and
+        # archive extraction (1).
+        priority: 5
         local_path: "/unraid/user/media/downloads/books/"
         extensions: ["epub", "kepub", "mobi", "azw", "azw3", "pdf", "fb2", "cbz", "cbr", "cb7", "m4b", "m4a", "mp3", "flac", "opus", "ogg", "aac", "jpg", "png", "cue", "nfo"]
         archive_extensions: ["rar", "zip"]
