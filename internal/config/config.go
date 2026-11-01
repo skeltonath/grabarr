@@ -25,6 +25,7 @@ type Config struct {
 	Sync          SyncConfig          `yaml:"sync"`
 	Extraction    ExtractionConfig    `yaml:"extraction"`
 	MediaManagers MediaManagersConfig `yaml:"media_managers"`
+	Auth          AuthConfig          `yaml:"auth"`
 
 	mu       sync.RWMutex
 	watchers []chan<- struct{}
@@ -90,6 +91,39 @@ type ServerConfig struct {
 	Port            int           `yaml:"port"`
 	Host            string        `yaml:"host"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+	// BaseURL is the public origin. The OIDC redirect URI is
+	// <base_url>/auth/callback, and an https origin makes cookies Secure.
+	BaseURL string `yaml:"base_url"`
+}
+
+// AuthConfig controls sign-in. Every request except the health check needs a
+// browser session or an API token, so one of OIDC or dev login must be set.
+type AuthConfig struct {
+	OIDC OIDCConfig `yaml:"oidc"`
+	// DevLogin signs anyone in without a password. Local preview only.
+	DevLogin bool `yaml:"dev_login"`
+	// SessionDays is how long a browser session lasts. Default 90.
+	SessionDays int `yaml:"session_days"`
+}
+
+type OIDCConfig struct {
+	Issuer       string `yaml:"issuer"`
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+}
+
+func (o OIDCConfig) Enabled() bool { return o.Issuer != "" }
+
+// SecureCookies reports whether cookies should carry the Secure flag.
+func (c *Config) SecureCookies() bool {
+	return strings.HasPrefix(c.Server.BaseURL, "https://")
+}
+
+// GetAuth returns the sign-in settings. They are fixed at startup.
+func (c *Config) GetAuth() AuthConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Auth
 }
 
 type DownloadsConfig struct {
@@ -214,6 +248,13 @@ func (c *Config) validate() error {
 		return fmt.Errorf("max_retries cannot be negative")
 	}
 
+	if err := c.Auth.validate(c.Server.BaseURL); err != nil {
+		return err
+	}
+	if c.Auth.SessionDays == 0 {
+		c.Auth.SessionDays = 90
+	}
+
 	if c.Notifications.Pushover.Enabled {
 		if c.Notifications.Pushover.Token == "" || strings.HasPrefix(c.Notifications.Pushover.Token, "${") {
 			return fmt.Errorf("pushover token is required when notifications are enabled")
@@ -223,6 +264,25 @@ func (c *Config) validate() error {
 		}
 	}
 
+	return nil
+}
+
+func (a AuthConfig) validate(baseURL string) error {
+	if !a.OIDC.Enabled() && !a.DevLogin {
+		return fmt.Errorf("auth: set auth.oidc (production) or auth.dev_login (local preview)")
+	}
+	if a.OIDC.Enabled() {
+		if a.OIDC.ClientID == "" || strings.HasPrefix(a.OIDC.ClientID, "${") ||
+			a.OIDC.ClientSecret == "" || strings.HasPrefix(a.OIDC.ClientSecret, "${") {
+			return fmt.Errorf("auth.oidc needs client_id and client_secret")
+		}
+		if baseURL == "" {
+			return fmt.Errorf("server.base_url is required for OIDC sign-in")
+		}
+	}
+	if a.SessionDays < 0 {
+		return fmt.Errorf("auth.session_days cannot be negative")
+	}
 	return nil
 }
 

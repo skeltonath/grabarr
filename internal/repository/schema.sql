@@ -96,6 +96,35 @@ BEGIN
     UPDATE remote_files SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
+-- People who have signed in through Pocket ID (or dev login, locally).
+CREATE TABLE IF NOT EXISTS users (
+    id           INTEGER PRIMARY KEY,
+    oidc_issuer  TEXT NOT NULL,
+    oidc_subject TEXT NOT NULL,
+    email        TEXT NOT NULL DEFAULT '',
+    name         TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (oidc_issuer, oidc_subject)
+);
+
+-- Browser sessions. Only the SHA-256 of the cookie value is stored.
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+-- Bearer tokens for scripts, created with `grabarr token create`. Only the
+-- SHA-256 of the token is stored.
+CREATE TABLE IF NOT EXISTS api_tokens (
+    name         TEXT PRIMARY KEY,
+    token_hash   TEXT NOT NULL UNIQUE,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT
+);
+
 -- Initial system configuration values
 INSERT OR IGNORE INTO system_config (key, value, description) VALUES
     ('schema_version', '1', 'Database schema version'),

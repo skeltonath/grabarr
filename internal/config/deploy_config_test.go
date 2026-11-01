@@ -14,7 +14,7 @@ import (
 // The production config lives in git and Komodo deploys every push to main, so
 // a broken file would only surface as a crash-looping container. Catch it here.
 func TestDeployConfig(t *testing.T) {
-	for _, v := range []string{"PUSHOVER_TOKEN", "PUSHOVER_USER", "RADARR_API_KEY", "SONARR_API_KEY"} {
+	for _, v := range []string{"PUSHOVER_TOKEN", "PUSHOVER_USER", "RADARR_API_KEY", "SONARR_API_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"} {
 		t.Setenv(v, "test-"+v)
 	}
 	data, err := os.ReadFile("../../deploy/config.yaml")
@@ -29,6 +29,9 @@ func TestDeployConfig(t *testing.T) {
 		"the SSH key stays in the host config folder, outside git")
 	assert.Len(t, cfg.Remotes[0].WatchedPaths, 2)
 	assert.Equal(t, "/data/grabarr.db", cfg.Database.Path)
+	assert.True(t, cfg.Auth.OIDC.Enabled())
+	assert.False(t, cfg.Auth.DevLogin, "dev login must never be on in production")
+	assert.True(t, cfg.SecureCookies())
 }
 
 // Every ${VAR} in deploy/config.yaml must be passed into the container by

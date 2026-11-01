@@ -12,6 +12,7 @@ import (
 
 	"grabarr/internal/api"
 	"grabarr/internal/arr"
+	"grabarr/internal/auth"
 	"grabarr/internal/config"
 	"grabarr/internal/executor"
 	"grabarr/internal/gatekeeper"
@@ -31,8 +32,13 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
-		os.Exit(healthcheck())
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "healthcheck":
+			os.Exit(healthcheck())
+		case "token":
+			os.Exit(tokenCommand(os.Args[2:], os.Stdout, os.Stderr))
+		}
 	}
 
 	if err := run(); err != nil {
@@ -145,6 +151,10 @@ func run() error {
 	// Setup HTTP server
 	router := mux.NewRouter()
 
+	// Everything but the health check needs a Pocket ID session or an API token.
+	authService := auth.New(repo, cfg)
+	authService.RegisterRoutes(router)
+
 	// Setup API handlers
 	handlers := api.NewHandlers(jobQueue, gk, cfg, repo, scanner)
 	handlers.RegisterRoutes(router)
@@ -156,7 +166,7 @@ func run() error {
 	serverConfig := cfg.GetServer()
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", serverConfig.Host, serverConfig.Port),
-		Handler:      router,
+		Handler:      authService.Middleware(router),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

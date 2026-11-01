@@ -94,7 +94,7 @@ body { background: var(--bg); color: var(--text); }
 .btn-primary:disabled { opacity: 0.5; cursor: default; }
 .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--border); }
-#theme-toggle, #settings-toggle { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 4px; line-height: 1; text-decoration: none; }
+#theme-toggle, #settings-toggle, #signout-btn { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 4px; line-height: 1; text-decoration: none; }
 #settings-toggle.active { color: var(--primary); }
 
 /* ---- Header nav ---- */
@@ -495,7 +495,7 @@ body { background: var(--bg); color: var(--text); }
   }
   #layout { margin-bottom: 48px; }
 
-  #settings-toggle { display: none; }
+  #settings-toggle, #signout-btn { display: none; }
   #nav { display: none; }
   #settings-view { padding: 0 12px; }
 
@@ -572,6 +572,7 @@ body { background: var(--bg); color: var(--text); }
   </select>
   <a id="settings-toggle" href="/settings" data-link title="Settings">⚙️</a>
   <button id="theme-toggle" title="Toggle theme">🌙</button>
+  <button id="signout-btn" title="Sign out">⏻</button>
   <div id="hamburger-wrap">
     <button id="hamburger-btn" class="btn-hamburger" aria-label="Menu">&#9776;</button>
     <div id="hamburger-menu">
@@ -595,6 +596,10 @@ body { background: var(--bg); color: var(--text); }
       <button class="menu-item" id="menu-theme-toggle">
         <span id="menu-theme-icon">🌙</span>
         <span id="menu-theme-label">Dark mode</span>
+      </button>
+      <button class="menu-item" id="menu-signout-btn">
+        <span>⏻</span>
+        <span>Sign out</span>
       </button>
     </div>
   </div>
@@ -699,6 +704,30 @@ body { background: var(--bg); color: var(--text); }
 
 <script>
 'use strict';
+
+// ---- Auth ----
+// The server sends page loads to Pocket ID, but a session can expire while the
+// page is open. Any API call that comes back 401 starts sign-in again and
+// returns to this page afterwards.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await nativeFetch(...args);
+  if (res.status === 401) {
+    location.href = '/auth/login?return_to=' + encodeURIComponent(location.pathname + location.search);
+  }
+  return res;
+};
+
+async function signOut() {
+  await nativeFetch('/auth/logout', { method: 'POST' });
+  location.href = '/';
+}
+
+nativeFetch('/auth/me').then(r => r.ok ? r.json() : null).then(body => {
+  if (body?.data?.name) document.getElementById('signout-btn').title = 'Sign out ' + body.data.name;
+}).catch(() => {});
+document.getElementById('signout-btn').addEventListener('click', signOut);
+document.getElementById('menu-signout-btn').addEventListener('click', signOut);
 
 // ---- State ----
 let treeData = null;

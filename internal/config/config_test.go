@@ -17,6 +17,8 @@ func TestLoadConfig(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "data", "grabarr.db")
 
 	configContent := `
+auth:
+  dev_login: true
 server:
   port: 8080
   host: "0.0.0.0"
@@ -111,6 +113,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "invalid port - negative",
 			config: &Config{
 				Server: ServerConfig{Port: -1},
+				Auth:   AuthConfig{DevLogin: true},
 				Jobs:   JobsConfig{MaxConcurrent: 1},
 			},
 			expectError: true,
@@ -120,6 +123,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "invalid port - too high",
 			config: &Config{
 				Server: ServerConfig{Port: 99999},
+				Auth:   AuthConfig{DevLogin: true},
 				Jobs:   JobsConfig{MaxConcurrent: 1},
 			},
 			expectError: true,
@@ -129,6 +133,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "invalid max concurrent",
 			config: &Config{
 				Server: ServerConfig{Port: 8080},
+				Auth:   AuthConfig{DevLogin: true},
 				Jobs:   JobsConfig{MaxConcurrent: 0},
 			},
 			expectError: true,
@@ -138,6 +143,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "invalid max retries",
 			config: &Config{
 				Server: ServerConfig{Port: 8080},
+				Auth:   AuthConfig{DevLogin: true},
 				Jobs:   JobsConfig{MaxConcurrent: 1, MaxRetries: -1},
 			},
 			expectError: true,
@@ -147,6 +153,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "pushover enabled without token",
 			config: &Config{
 				Server: ServerConfig{Port: 8080},
+				Auth:   AuthConfig{DevLogin: true},
 				Jobs:   JobsConfig{MaxConcurrent: 1},
 				Notifications: NotificationsConfig{
 					Pushover: PushoverConfig{
@@ -160,9 +167,43 @@ func TestConfigValidation(t *testing.T) {
 			errorMsg:    "pushover token is required",
 		},
 		{
+			name: "no sign-in configured",
+			config: &Config{
+				Server: ServerConfig{Port: 8080},
+				Jobs:   JobsConfig{MaxConcurrent: 1},
+			},
+			expectError: true,
+			errorMsg:    "auth: set auth.oidc",
+		},
+		{
+			name: "oidc without client secret",
+			config: &Config{
+				Server: ServerConfig{Port: 8080, BaseURL: "https://grabarr.example"},
+				Auth: AuthConfig{OIDC: OIDCConfig{
+					Issuer: "https://id.example", ClientID: "grabarr", ClientSecret: "${OIDC_CLIENT_SECRET}",
+				}},
+				Jobs: JobsConfig{MaxConcurrent: 1},
+			},
+			expectError: true,
+			errorMsg:    "auth.oidc needs client_id and client_secret",
+		},
+		{
+			name: "oidc without base url",
+			config: &Config{
+				Server: ServerConfig{Port: 8080},
+				Auth: AuthConfig{OIDC: OIDCConfig{
+					Issuer: "https://id.example", ClientID: "grabarr", ClientSecret: "s",
+				}},
+				Jobs: JobsConfig{MaxConcurrent: 1},
+			},
+			expectError: true,
+			errorMsg:    "server.base_url is required",
+		},
+		{
 			name: "valid config",
 			config: &Config{
 				Server: ServerConfig{Port: 8080},
+				Auth:   AuthConfig{DevLogin: true},
 				Jobs:   JobsConfig{MaxConcurrent: 3, MaxRetries: 3},
 				Notifications: NotificationsConfig{
 					Pushover: PushoverConfig{Enabled: false},
@@ -189,6 +230,7 @@ func TestConfigValidation(t *testing.T) {
 func TestConfigGetters(t *testing.T) {
 	cfg := &Config{
 		Server: ServerConfig{Port: 8080, Host: "localhost"},
+		Auth:   AuthConfig{DevLogin: true},
 		Jobs: JobsConfig{
 			MaxConcurrent: 5,
 			MaxRetries:    3,
@@ -237,6 +279,8 @@ func TestLoadConfigWithEnvVars(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "data", "test.db")
 
 	configContent := `
+auth:
+  dev_login: true
 server:
   port: 8080
   host: "${HOST_BIND}"
@@ -336,6 +380,8 @@ func TestLoadConfigMediaManagers(t *testing.T) {
 	t.Setenv("TEST_RADARR_KEY", "secret-radarr-key")
 
 	configContent := `
+auth:
+  dev_login: true
 server:
   port: 8080
 database:
@@ -386,6 +432,8 @@ func TestMediaManagersDebounceDefaultsWhenUnset(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	configContent := `
+auth:
+  dev_login: true
 server:
   port: 8080
 database:

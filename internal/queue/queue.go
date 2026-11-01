@@ -205,7 +205,7 @@ func (q *queue) Enqueue(job *models.Job) error {
 			)
 		}
 
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	slog.Info("job enqueued", "job_id", job.ID, "name", job.Name)

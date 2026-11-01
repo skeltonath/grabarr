@@ -7,7 +7,8 @@
 # 3. Creates jobs for any files that don't have jobs yet
 #
 # Required environment variables:
-# GRABARR_API_URL - Grabarr API endpoint URL (e.g., http://grabarr.internal/api/v1/jobs)
+# GRABARR_API_URL - Grabarr API endpoint URL (e.g., https://grabarr.internal.dppeppel.me/api/v1/jobs)
+# GRABARR_TOKEN   - API token: docker exec grabarr /app/grabarr token create NAME
 #
 # Optional environment variables:
 # SEEDBOX_HOST       - SSH host for seedbox (default: whatbox)
@@ -25,9 +26,15 @@ fi
 # Validate required environment variables
 if [[ -z "${GRABARR_API_URL:-}" ]]; then
     echo "Error: GRABARR_API_URL environment variable is required"
-    echo "Example: export GRABARR_API_URL=http://grabarr.internal/api/v1/jobs"
+    echo "Example: export GRABARR_API_URL=https://grabarr.internal.dppeppel.me/api/v1/jobs"
     exit 1
 fi
+if [[ -z "${GRABARR_TOKEN:-}" ]]; then
+    echo "Error: GRABARR_TOKEN environment variable is required"
+    echo "Create one with: docker exec grabarr /app/grabarr token create NAME"
+    exit 1
+fi
+AUTH=(-H "Authorization: Bearer ${GRABARR_TOKEN}")
 
 # Set defaults for optional variables
 SEEDBOX_HOST="${SEEDBOX_HOST:-whatbox}"
@@ -84,7 +91,7 @@ LIMIT=1000
 TOTAL_JOBS=0
 
 while true; do
-    RESPONSE=$(curl -s "${GRABARR_API_URL%/jobs}/jobs?limit=$LIMIT&offset=$OFFSET")
+    RESPONSE=$(curl -s "${AUTH[@]}" "${GRABARR_API_URL%/jobs}/jobs?limit=$LIMIT&offset=$OFFSET")
 
     # Extract remote_path from each job
     echo "$RESPONSE" | jq -r '.data[]?.remote_path // empty' >> "$TEMP_JOBS"
@@ -140,7 +147,7 @@ JSONEOF
         ((CREATED_COUNT++))
     else
         # Create job via API
-        HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null \
+        HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null "${AUTH[@]}" \
             -X POST "$GRABARR_API_URL" \
             -H "Content-Type: application/json" \
             -d "$JSON")

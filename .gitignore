@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-grabarr
+/grabarr
 
 # Test binary, built with `go test -c`
 *.test

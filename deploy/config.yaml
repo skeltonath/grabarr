@@ -15,6 +15,18 @@ server:
   port: 8080
   host: "0.0.0.0"
   shutdown_timeout: "30s"
+  # Public origin. The Pocket ID redirect URI is <base_url>/auth/callback.
+  base_url: "https://grabarr.internal.dppeppel.me"
+
+# Sign-in. The Pocket ID client "grabarr" only admits the household group.
+# Scripts use API tokens instead: `docker exec grabarr /app/grabarr token create NAME`.
+auth:
+  oidc:
+    issuer: "https://id.dppeppel.me"
+    client_id: "${OIDC_CLIENT_ID}"
+    client_secret: "${OIDC_CLIENT_SECRET}"
+  dev_login: false
+  session_days: 90
 
 downloads:
   local_path: "/unraid/user/media/downloads/"
