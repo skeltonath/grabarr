@@ -48,7 +48,8 @@
 	const selected = $derived(jobs.find((j) => j.id === selectedId) ?? (fetched?.id === selectedId ? fetched : null));
 
 	async function load() {
-		const q = new URLSearchParams({ limit: String(shown), offset: '0', sort_by: 'created_at', sort_order: 'desc' });
+		// Running and starting jobs first, then newest first.
+		const q = new URLSearchParams({ limit: String(shown), offset: '0', sort_by: 'created_at', sort_order: 'desc', active_first: 'true' });
 		if (filter !== 'all') q.set('status', filter);
 		try {
 			const { data, pagination } = await apiPage(`/api/v1/jobs?${q}`);
@@ -166,8 +167,8 @@
 <div class="split">
 	<main>
 		<div class="tools">
-			<Chips options={chipOptions} value={filter} onchange={(id) => setParam('status', id)} />
 			<input type="search" placeholder="Filter jobs" bind:value={text} aria-label="Filter jobs" />
+			<Chips options={chipOptions} value={filter} onchange={(id) => setParam('status', id)} />
 		</div>
 		{#if message}<p class="message" role="status">{message}</p>{/if}
 
@@ -352,13 +353,12 @@
 		}
 		.tools {
 			flex-direction: row;
-			align-items: center;
+			align-items: flex-start;
 			padding: 0 0 0.8rem;
 		}
 		.tools input {
 			width: 220px;
 			flex: none;
-			margin-left: auto;
 		}
 		.message,
 		.pad {

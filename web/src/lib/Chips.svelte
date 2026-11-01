@@ -26,6 +26,9 @@
 		gap: 8px;
 		overflow-x: auto;
 		scrollbar-width: none;
+		/* A sideways-scrolling row clips vertically too; the padding keeps
+		   the chips' borders inside it. */
+		padding: 2px 0;
 	}
 	/* Phones scroll the row sideways; desktop has room to wrap. */
 	@media (min-width: 900px) {

@@ -180,7 +180,11 @@ func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	if filter.SortOrder != "" {
 		sortOrder = filter.SortOrder
 	}
-	query += fmt.Sprintf(" ORDER BY %s %s, id ASC", sortBy, sortOrder)
+	activeFirst := ""
+	if filter.ActiveFirst {
+		activeFirst = "status IN ('running', 'pending') DESC, "
+	}
+	query += fmt.Sprintf(" ORDER BY %s%s %s, id ASC", activeFirst, sortBy, sortOrder)
 
 	// Pagination
 	if filter.Limit > 0 {

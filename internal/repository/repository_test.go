@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -235,6 +236,35 @@ func TestRepository_GetJobs_Sorting(t *testing.T) {
 	for i := 0; i < len(results)-1; i++ {
 		assert.GreaterOrEqual(t, results[i].Priority, results[i+1].Priority)
 	}
+}
+
+// The Jobs page lists running and starting jobs first, newest-first after
+// that, and pagination has to respect it so Load more doesn't repeat rows.
+func TestRepository_GetJobs_ActiveFirst(t *testing.T) {
+	repo := setupTestRepo(t)
+	statuses := []models.JobStatus{
+		models.JobStatusCompleted, models.JobStatusRunning, models.JobStatusQueued,
+		models.JobStatusPending, models.JobStatusFailed, models.JobStatusRunning,
+	}
+	for i, st := range statuses {
+		job := &models.Job{Name: fmt.Sprintf("job%d", i), RemotePath: "/r", LocalPath: "/l", Status: st, MaxRetries: 3}
+		require.NoError(t, repo.CreateJob(job))
+	}
+
+	all, err := repo.GetJobs(models.JobFilter{ActiveFirst: true, SortBy: "id", SortOrder: "DESC"})
+	require.NoError(t, err)
+	var got []string
+	for _, j := range all {
+		got = append(got, j.Name)
+	}
+	// job5 and job1 run, job3 is starting; then everything else, newest first.
+	assert.Equal(t, []string{"job5", "job3", "job1", "job4", "job2", "job0"}, got)
+
+	page2, err := repo.GetJobs(models.JobFilter{ActiveFirst: true, SortBy: "id", SortOrder: "DESC", Limit: 2, Offset: 2})
+	require.NoError(t, err)
+	require.Len(t, page2, 2)
+	assert.Equal(t, "job1", page2[0].Name)
+	assert.Equal(t, "job4", page2[1].Name)
 }
 
 func TestRepository_GetJobSummary(t *testing.T) {

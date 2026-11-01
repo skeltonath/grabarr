@@ -722,3 +722,24 @@ func withURLParam(r *http.Request, key, value string) *http.Request {
 	rctx.URLParams.Add(key, value)
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
+
+func TestGetJobs_ActiveFirst(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+		want  bool
+	}{
+		{"/api/v1/jobs?active_first=true", true},
+		{"/api/v1/jobs", false},
+	} {
+		mockQueue := mocks.NewMockJobQueue(t)
+		mockQueue.EXPECT().
+			GetJobs(mock.MatchedBy(func(f models.JobFilter) bool { return f.ActiveFirst == tc.want })).
+			Return([]*models.Job{}, nil).Once()
+		mockQueue.EXPECT().CountJobs(mock.Anything).Return(0, nil).Once()
+		h := NewHandlers(mockQueue, mocks.NewMockGatekeeper(t), &config.Config{}, nil, nil)
+
+		rec := httptest.NewRecorder()
+		h.GetJobs(rec, httptest.NewRequest("GET", tc.query, nil))
+		assert.Equal(t, http.StatusOK, rec.Code, tc.query)
+	}
+}

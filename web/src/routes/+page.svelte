@@ -298,7 +298,7 @@
 		}
 		.tools {
 			flex-direction: row;
-			align-items: center;
+			align-items: flex-start;
 			padding: 0 0 0.8rem;
 		}
 		input[type='search'] {

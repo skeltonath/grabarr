@@ -203,6 +203,9 @@ type JobFilter struct {
 	Offset      int         `json:"offset,omitempty"`
 	SortBy      string      `json:"sort_by,omitempty"`
 	SortOrder   string      `json:"sort_order,omitempty"`
+	// ActiveFirst lists running and starting (pending) jobs before the rest,
+	// which keep the SortBy order.
+	ActiveFirst bool `json:"active_first,omitempty"`
 }
 
 // JobSummary represents aggregated job statistics

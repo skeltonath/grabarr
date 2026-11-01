@@ -170,6 +170,8 @@ func (h *Handlers) GetJobs(w http.ResponseWriter, r *http.Request) {
 		filter.SortOrder = order
 	}
 
+	filter.ActiveFirst = query.Get("active_first") == "true"
+
 	jobs, err := h.queue.GetJobs(filter)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Failed to get jobs", err)
