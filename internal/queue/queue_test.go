@@ -228,12 +228,12 @@ func TestStop_HandlesMultipleRunningJobs(t *testing.T) {
 
 	queue := q.(*queue)
 	for _, job := range jobs {
-		// Create in database
+		// Insert already running. The scheduler is live, so a job inserted as
+		// queued could be picked up (calling the gatekeeper mock) before it
+		// was marked running.
+		job.MarkStarted()
 		err = repo.CreateJob(job)
 		require.NoError(t, err)
-
-		// Mark as running
-		job.MarkStarted()
 		err = repo.UpdateJob(job)
 		require.NoError(t, err)
 
