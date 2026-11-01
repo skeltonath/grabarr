@@ -44,13 +44,13 @@ One entry per seedbox. Grabarr only talks to it over SSH (scans with `find`, cop
 | `name` | Shown in the UI under each source. |
 | `ssh_host`, `ssh_user` | Where to connect. |
 | `ssh_key_file` | Private key inside the container (`/config/grabarr_rsa`, from the host's config folder; not in git). |
-| `watched_paths` | The folders scanned for new files (below). |
+| `watched_paths` | The folders scanned for new files (below). Production has one per qBittorrent category (Movies, TV, Anime, Ebooks, Audiobooks), none inside another. When a watched path is removed, the next scan forgets its files; jobs keep their history. |
 
 Each watched path:
 
 | Key | Meaning |
 |---|---|
-| `label` | The source's name in the web UI ("Video", "Books"). Without one the UI shows the remote's name. |
+| `label` | The source's name in the web UI ("Movies", "Ebooks"). Without one the UI shows the remote's name. |
 | `remote_path` | Folder on the seedbox, with a trailing slash. |
 | `local_path` | Where its files land locally; empty means `downloads.local_path`. The folder structure under `remote_path` is kept. |
 | `extensions` | File types to copy. |
@@ -58,7 +58,7 @@ Each watched path:
 | `exclude_patterns` | Regexes on the file name to skip, such as samples. |
 | `auto_download` | Queue new files automatically; otherwise they wait in Files until you click Download now. |
 | `recursive` | Look in subfolders. |
-| `priority` | Priority of jobs queued from this path, by the scan or from the web UI. Higher runs first; default 0. Books use 5 so they skip a video backlog; extraction jobs use 1. Only new jobs take it. |
+| `priority` | Priority of jobs queued from this path, by the scan or from the web UI. Higher runs first; default 0. Ebooks and Audiobooks use 5 so they skip a video backlog; extraction jobs use 1. Only new jobs take it. |
 
 ### downloads
 

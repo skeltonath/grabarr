@@ -37,24 +37,54 @@ remotes:
     ssh_host: "pandora.whatbox.ca"
     ssh_user: "psychomanteum"
     ssh_key_file: "/config/grabarr_rsa"
+    # One watched path per qBittorrent category, each in its own folder under
+    # completed/dp/ (the friends' md/ and sn/ are separate): dp-movies, dp-tv and
+    # dp-anime save to dp/<kind>/, dp-books and dp-audiobooks to dp/books/<kind>/.
+    # Files land in the matching folder under downloads/. Sonarr and Radarr map
+    # completed/dp/ to /media/downloads/, so the <kind>/ subfolder carries
+    # through; Shelfmark maps completed/dp/books to /downloads/books.
     watched_paths:
-      - label: "Video"
-        remote_path: "/home/psychomanteum/downloads/completed/dp/"
-        local_path: ""
+      - label: "Movies"
+        remote_path: "/home/psychomanteum/downloads/completed/dp/movies/"
+        local_path: "/unraid/user/media/downloads/movies/"
         extensions: ["mkv", "mp4", "avi", "srt", "sub"]
         archive_extensions: ["rar", "zip"]
         exclude_patterns: ["(?i)\\.sample\\.", "(?i)sample\\."]
         auto_download: true
         recursive: true
-      # Books (Shelfmark): categories dp-books / dp-audiobooks save under completed/books/.
-      # Lands in /mnt/user/media/downloads/books/, which Shelfmark sees as /downloads/books.
-      - label: "Books"
-        remote_path: "/home/psychomanteum/downloads/completed/books/"
-        # Books copy in seconds; run them ahead of any video backlog (0) and
-        # archive extraction (1).
+      - label: "TV"
+        remote_path: "/home/psychomanteum/downloads/completed/dp/tv/"
+        local_path: "/unraid/user/media/downloads/tv/"
+        extensions: ["mkv", "mp4", "avi", "srt", "sub"]
+        archive_extensions: ["rar", "zip"]
+        exclude_patterns: ["(?i)\\.sample\\.", "(?i)sample\\."]
+        auto_download: true
+        recursive: true
+      - label: "Anime"
+        remote_path: "/home/psychomanteum/downloads/completed/dp/anime/"
+        local_path: "/unraid/user/media/downloads/anime/"
+        extensions: ["mkv", "mp4", "avi", "srt", "sub"]
+        archive_extensions: ["rar", "zip"]
+        exclude_patterns: ["(?i)\\.sample\\.", "(?i)sample\\."]
+        auto_download: true
+        recursive: true
+      # Books (Shelfmark) land in /mnt/user/media/downloads/books/, which
+      # Shelfmark sees as /downloads/books. They copy in seconds, so they run
+      # ahead of any video backlog (0) and archive extraction (1).
+      - label: "Ebooks"
+        remote_path: "/home/psychomanteum/downloads/completed/dp/books/ebooks/"
+        local_path: "/unraid/user/media/downloads/books/ebooks/"
         priority: 5
-        local_path: "/unraid/user/media/downloads/books/"
-        extensions: ["epub", "kepub", "mobi", "azw", "azw3", "pdf", "fb2", "cbz", "cbr", "cb7", "m4b", "m4a", "mp3", "flac", "opus", "ogg", "aac", "jpg", "png", "cue", "nfo"]
+        extensions: ["epub", "kepub", "mobi", "azw", "azw3", "pdf", "fb2", "cbz", "cbr", "cb7"]
+        archive_extensions: ["rar", "zip"]
+        exclude_patterns: ["(?i)\\.sample\\.", "(?i)sample\\."]
+        auto_download: true
+        recursive: true
+      - label: "Audiobooks"
+        remote_path: "/home/psychomanteum/downloads/completed/dp/books/audiobooks/"
+        local_path: "/unraid/user/media/downloads/books/audiobooks/"
+        priority: 5
+        extensions: ["m4b", "m4a", "mp3", "flac", "opus", "ogg", "aac", "jpg", "png", "cue"]
         archive_extensions: ["rar", "zip"]
         exclude_patterns: ["(?i)\\.sample\\.", "(?i)sample\\."]
         auto_download: true

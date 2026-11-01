@@ -4,6 +4,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/goccy/go-yaml"
@@ -26,11 +27,27 @@ func TestDeployConfig(t *testing.T) {
 	require.Len(t, cfg.Remotes, 1)
 	assert.Equal(t, "/config/grabarr_rsa", cfg.Remotes[0].SSHKeyFile,
 		"the SSH key stays in the host config folder, outside git")
-	require.Len(t, cfg.Remotes[0].WatchedPaths, 2)
-	video, books := cfg.Remotes[0].WatchedPaths[0], cfg.Remotes[0].WatchedPaths[1]
-	assert.Equal(t, "Books", books.Label)
-	assert.Greater(t, books.Priority, 1, "books run ahead of video and of extraction jobs (priority 1)")
-	assert.Equal(t, 0, video.Priority)
+	paths := map[string]WatchedPath{}
+	for _, wp := range cfg.Remotes[0].WatchedPaths {
+		paths[wp.Label] = wp
+	}
+	require.Len(t, paths, 5, "one watched path per qBittorrent category")
+	for _, label := range []string{"Movies", "TV", "Anime"} {
+		assert.Equal(t, 0, paths[label].Priority, label)
+	}
+	for _, label := range []string{"Ebooks", "Audiobooks"} {
+		assert.Greater(t, paths[label].Priority, 1, "%s run ahead of video and of extraction jobs (priority 1)", label)
+	}
+	assert.NotContains(t, paths["Ebooks"].Extensions, "jpg", "ebook torrents shouldn't pull their images")
+	// A watched path inside another would be scanned twice, and its files
+	// would flip between the two sources on every scan.
+	for _, a := range cfg.Remotes[0].WatchedPaths {
+		for _, b := range cfg.Remotes[0].WatchedPaths {
+			if a.Label != b.Label {
+				assert.False(t, strings.HasPrefix(b.RemotePath, a.RemotePath), "%s is inside %s", b.Label, a.Label)
+			}
+		}
+	}
 	assert.Equal(t, "/data/grabarr.db", cfg.Database.Path)
 	assert.True(t, cfg.Auth.OIDC.Enabled())
 	assert.False(t, cfg.Auth.DevLogin, "dev login must never be on in production")
