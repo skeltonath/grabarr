@@ -353,16 +353,18 @@ func (r *Repository) DeleteJob(id int64) error {
 	return nil
 }
 
+// GetJobSummary counts jobs by status. COALESCE because SUM over no rows is
+// NULL, which would fail the scan on an empty database.
 func (r *Repository) GetJobSummary() (*models.JobSummary, error) {
 	query := `
 		SELECT
 			COUNT(*) as total,
-			SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) as queued,
-			SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-			SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
-			SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-			SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-			SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+			COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0) as queued,
+			COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
+			COALESCE(SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END), 0) as running,
+			COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
+			COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
+			COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) as cancelled
 		FROM jobs
 	`
 

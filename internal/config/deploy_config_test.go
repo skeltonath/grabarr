@@ -30,6 +30,7 @@ func TestDeployConfig(t *testing.T) {
 	assert.Equal(t, "/data/grabarr.db", cfg.Database.Path)
 	assert.True(t, cfg.Auth.OIDC.Enabled())
 	assert.False(t, cfg.Auth.DevLogin, "dev login must never be on in production")
+	assert.False(t, cfg.Preview, "preview mode would stop all copying")
 	assert.True(t, cfg.SecureCookies())
 }
 
@@ -58,4 +59,22 @@ func TestDeployConfigVarsReachContainer(t *testing.T) {
 	sort.Strings(missing)
 	assert.Empty(t, missing, "referenced in deploy/config.yaml but not in docker-compose.yml's environment")
 	assert.Equal(t, "/etc/grabarr/config.yaml", env["GRABARR_CONFIG"])
+}
+
+// config.preview.yaml backs `make preview`; it must parse strictly, need no
+// secrets, and stay in preview mode so it can never touch the seedbox.
+func TestPreviewConfig(t *testing.T) {
+	data, err := os.ReadFile("../../config.preview.yaml")
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "${", "the preview needs no secrets")
+
+	cfg, err := parseConfig(data)
+	require.NoError(t, err)
+	assert.True(t, cfg.Preview)
+	assert.True(t, cfg.Auth.DevLogin)
+	assert.False(t, cfg.Auth.OIDC.Enabled())
+	assert.False(t, cfg.Sync.Enabled)
+	assert.False(t, cfg.Notifications.Pushover.Enabled)
+	assert.Empty(t, cfg.MediaManagers.Instances)
+	assert.Equal(t, "127.0.0.1", cfg.Server.Host, "dev login must not be reachable from the network")
 }

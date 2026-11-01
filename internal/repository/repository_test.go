@@ -276,6 +276,14 @@ func TestRepository_GetJobSummary(t *testing.T) {
 	assert.Equal(t, 1, summary.CancelledJobs)
 }
 
+func TestRepository_GetJobSummary_Empty(t *testing.T) {
+	repo := setupTestRepo(t)
+
+	summary, err := repo.GetJobSummary()
+	require.NoError(t, err, "a fresh database has no jobs to sum")
+	assert.Equal(t, models.JobSummary{}, *summary)
+}
+
 func TestRepository_CleanupOldJobs(t *testing.T) {
 	repo := setupTestRepo(t)
 

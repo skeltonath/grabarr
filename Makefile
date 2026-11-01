@@ -21,7 +21,7 @@ NC=\033[0m # No Color
 
 .PHONY: help build run clean test test-verbose test-coverage test-race test-coverage-summary test-ci fmt vet deps gen-mocks gen-bruno
 .PHONY: docker-build docker-run docker-stop docker-logs docker-shell
-.PHONY: setup-config
+.PHONY: setup-config preview
 
 # Default target
 all: fmt vet test build
@@ -125,6 +125,15 @@ docker-shell: ## Open shell in running container
 	@echo "$(GREEN)Opening shell in ${DOCKER_IMAGE} container...$(NC)"
 	@docker exec -it grabarr /bin/sh
 
+## Preview
+
+# Local UI preview: fresh demo data (cmd/seed) served in preview mode, so nothing
+# touches the seedbox. Open http://localhost:8080/ (dev login signs you in).
+preview: ## Run grabarr on seeded demo data at http://localhost:8080
+	@mkdir -p data
+	go run ./cmd/seed -db data/preview.db -reset
+	GRABARR_CONFIG=config.preview.yaml go run ./cmd/grabarr
+
 ## Utility Targets
 
 clean: ## Clean build artifacts and temporary files
@@ -166,7 +175,7 @@ help: ## Show this help message
 	@echo "$(GREEN)Usage:$(NC) make [target]"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(build|run|fmt|vet|gen-mocks):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(build|run|preview|fmt|vet|gen-mocks):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Testing:$(NC)"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^test' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'

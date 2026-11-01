@@ -26,6 +26,10 @@ type Config struct {
 	Extraction    ExtractionConfig    `yaml:"extraction"`
 	MediaManagers MediaManagersConfig `yaml:"media_managers"`
 	Auth          AuthConfig          `yaml:"auth"`
+	// Preview serves the web UI and API from the database without starting
+	// the scheduler, executor, seedbox scanner or notifications, so seeded
+	// demo data stays put. Local only (config.preview.yaml, `make preview`).
+	Preview bool `yaml:"preview"`
 
 	mu       sync.RWMutex
 	watchers []chan<- struct{}

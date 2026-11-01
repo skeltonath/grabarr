@@ -1,0 +1,80 @@
+# Local preview against seeded demo data (`make preview`, then open
+# http://localhost:8080/). preview: true means nothing scans the seedbox, copies,
+# extracts or notifies; the API and UI just serve data/preview.db, which
+# cmd/seed rebuilds on every `make preview`. No secrets needed.
+
+preview: true
+
+server:
+  port: 8080
+  host: "127.0.0.1"
+  shutdown_timeout: "5s"
+  base_url: "http://localhost:8080"
+
+auth:
+  # Signs you in as "dev" with no password. Never set this in deploy/config.yaml
+  # (a test fails if you do).
+  dev_login: true
+
+database:
+  path: "data/preview.db"
+
+downloads:
+  local_path: "data/downloads/"
+  allowed_categories: ["dp-movies", "dp-tv", "dp-anime", "dp-books", "dp-audiobooks"]
+
+# Same watch paths as production so the Files tree looks real. Never scanned in
+# preview, so the SSH key doesn't need to exist.
+remotes:
+  - name: "whatbox"
+    ssh_host: "seedbox.invalid"
+    ssh_user: "preview"
+    ssh_key_file: "data/no-such-key"
+    watched_paths:
+      - remote_path: "/home/psychomanteum/downloads/completed/dp/"
+        local_path: ""
+        extensions: ["mkv", "mp4", "avi", "srt", "sub"]
+        archive_extensions: ["rar", "zip"]
+        exclude_patterns: ["(?i)\\.sample\\.", "(?i)sample\\."]
+        auto_download: true
+        recursive: true
+      - remote_path: "/home/psychomanteum/downloads/completed/books/"
+        local_path: "data/downloads/books/"
+        extensions: ["epub", "m4b", "jpg"]
+        archive_extensions: ["rar", "zip"]
+        exclude_patterns: []
+        auto_download: true
+        recursive: true
+
+gatekeeper:
+  seedbox:
+    bandwidth_limit_mbps: 500
+    check_interval: "30s"
+  cache_disk:
+    path: "data"   # reports this disk's real usage
+    max_usage_percent: 80
+    check_interval: "30s"
+  rules:
+    require_filesize_check: true
+
+jobs:
+  max_concurrent: 3
+  max_retries: 5
+  cleanup_completed_after: "168h"
+  cleanup_failed_after: "720h"
+
+notifications:
+  pushover:
+    enabled: false
+
+logging:
+  level: "info"
+  format: "text"
+
+sync:
+  enabled: false
+  scan_interval: "5m"
+
+extraction:
+  enabled: false
+  cleanup_archives: false

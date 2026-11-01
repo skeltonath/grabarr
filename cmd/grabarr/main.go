@@ -108,45 +108,49 @@ func run() error {
 	jobExecutor := executor.NewRsyncExecutor(cfg, gk, repo)
 	jobQueue.SetJobExecutor(jobExecutor)
 
-	// Start job queue and executor
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start the progress monitor
-	jobExecutor.Start(ctx)
-	defer jobExecutor.Stop()
-
-	if err := jobQueue.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start job queue: %w", err)
-	}
-
-	// Send startup notification
-	if notifier.IsEnabled() {
-		slog.Info("sending startup notification")
-		if err := notifier.NotifySystemAlert(
-			"Service Started",
-			"Grabarr has started successfully and is ready to process jobs.",
-			0, // Normal priority
-		); err != nil {
-			slog.Warn("failed to send startup notification", "error", err)
-		}
-	}
-
-	// Initialize and start the sync scanner
-	scanner := internalsync.New(cfg, repo, jobQueue)
-
 	// The scanner is the queue's source of truth for which archive volumes
 	// actually exist, so extraction never runs against a partial set.
+	scanner := internalsync.New(cfg, repo, jobQueue)
 	jobQueue.SetRemoteVolumeLister(scanner)
 
-	// Tell Radarr/Sonarr when a transfer lands locally. Without this they only
-	// learn about completions by polling qBittorrent on the seedbox, which
-	// reports "done" long before the file exists on this machine.
-	if importNotifier := newImportNotifier(cfg); importNotifier != nil {
-		jobQueue.SetImportNotifier(importNotifier)
-	}
+	if cfg.Preview {
+		// Demo data only: nothing copies, scans or notifies, and the scan
+		// button reports the scanner as unavailable.
+		slog.Warn("preview mode: scheduler, executor, scanner and notifications are off")
+		scanner = nil
+	} else {
+		// Start the progress monitor
+		jobExecutor.Start(ctx)
+		defer jobExecutor.Stop()
 
-	scanner.Start(ctx)
+		if err := jobQueue.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start job queue: %w", err)
+		}
+
+		// Send startup notification
+		if notifier.IsEnabled() {
+			slog.Info("sending startup notification")
+			if err := notifier.NotifySystemAlert(
+				"Service Started",
+				"Grabarr has started successfully and is ready to process jobs.",
+				0, // Normal priority
+			); err != nil {
+				slog.Warn("failed to send startup notification", "error", err)
+			}
+		}
+
+		// Tell Radarr/Sonarr when a transfer lands locally. Without this they only
+		// learn about completions by polling qBittorrent on the seedbox, which
+		// reports "done" long before the file exists on this machine.
+		if importNotifier := newImportNotifier(cfg); importNotifier != nil {
+			jobQueue.SetImportNotifier(importNotifier)
+		}
+
+		scanner.Start(ctx)
+	}
 
 	// Setup HTTP server
 	router := chi.NewRouter()
