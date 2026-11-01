@@ -271,15 +271,21 @@ func (h *Handlers) findWatchedPath(watchedPath string) *config.WatchedPath {
 }
 
 // findWatchedPathRemoteName returns the remote name for the given watched path.
-func (h *Handlers) findWatchedPathRemoteName(watchedPath string) string {
+// watchedPathNames returns a watched path's label (falling back to its
+// remote's name) and the remote's name, or empty strings for a path that's no
+// longer configured.
+func (h *Handlers) watchedPathNames(watchedPath string) (label, remoteName string) {
 	for _, remote := range h.config.GetRemotes() {
 		for _, wp := range remote.WatchedPaths {
 			if wp.RemotePath == watchedPath {
-				return remote.Name
+				if wp.Label != "" {
+					return wp.Label, remote.Name
+				}
+				return remote.Name, remote.Name
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // parseID parses a string path variable into an int64.
@@ -332,15 +338,16 @@ type treeNode struct {
 
 type treeRoot struct {
 	WatchedPath string           `json:"watched_path"`
-	Type        string           `json:"type"` // always "folder"
-	Name        string           `json:"name"`
-	Path        string           `json:"path"` // always "/"
+	Type        string           `json:"type"`   // always "folder"
+	Name        string           `json:"name"`   // the watched path's label, else its remote's name
+	Remote      string           `json:"remote"` // the remote's name
+	Path        string           `json:"path"`   // always "/"
 	Stats       *treeFolderStats `json:"stats"`
 	Children    []*treeNode      `json:"children"`
 }
 
 type treeResponse struct {
-	ScannedAt time.Time   `json:"scanned_at"`
+	ScannedAt *time.Time  `json:"scanned_at"`
 	Roots     []*treeRoot `json:"roots"`
 }
 
@@ -359,20 +366,33 @@ func (h *Handlers) GetRemoteFileTree(w http.ResponseWriter, r *http.Request) {
 		byWatched[f.WatchedPath] = append(byWatched[f.WatchedPath], f)
 	}
 
-	// Determine scanned_at from scanner if available.
-	scannedAt := time.Now()
+	// scanned_at is null until the scanner has finished a scan (and always in
+	// preview, where it doesn't run).
+	var scannedAt *time.Time
 	if h.scanner != nil {
-		if st := h.scanner.GetStatus(); st.LastScanAt != nil {
-			scannedAt = *st.LastScanAt
-		}
+		scannedAt = h.scanner.GetStatus().LastScanAt
 	}
 
-	// Build ordered list of watched paths.
+	// Sources come in config order (so the UI lists them as configured), then
+	// any files left from watched paths no longer in the config.
 	watchedPaths := make([]string, 0, len(byWatched))
-	for wp := range byWatched {
-		watchedPaths = append(watchedPaths, wp)
+	seen := make(map[string]bool)
+	for _, remote := range h.config.GetRemotes() {
+		for _, wp := range remote.WatchedPaths {
+			if _, ok := byWatched[wp.RemotePath]; ok && !seen[wp.RemotePath] {
+				watchedPaths = append(watchedPaths, wp.RemotePath)
+				seen[wp.RemotePath] = true
+			}
+		}
 	}
-	sort.Strings(watchedPaths)
+	var leftovers []string
+	for wp := range byWatched {
+		if !seen[wp] {
+			leftovers = append(leftovers, wp)
+		}
+	}
+	sort.Strings(leftovers)
+	watchedPaths = append(watchedPaths, leftovers...)
 
 	roots := make([]*treeRoot, 0, len(watchedPaths))
 	for _, wp := range watchedPaths {
@@ -390,9 +410,9 @@ func (h *Handlers) GetRemoteFileTree(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Use remote name as display name if available.
-		displayName := h.findWatchedPathRemoteName(wp)
+		displayName, remoteName := h.watchedPathNames(wp)
 		root := buildFileTree(wp, displayName, wpFiles, jobMap)
+		root.Remote = remoteName
 		roots = append(roots, root)
 	}
 

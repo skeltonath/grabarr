@@ -1,3 +1,11 @@
+# The web UI: SvelteKit built to static files, embedded in the Go binary.
+FROM node:24-alpine AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-fund --no-audit
+COPY web/ ./
+RUN npm run build
+
 FROM golang:1.27-alpine AS builder
 
 # make/g++ to build unrar, which Alpine doesn't package. Grabarr itself is
@@ -12,6 +20,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+COPY --from=web /web/build ./web/build
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
         -o /out/grabarr ./cmd/grabarr
 
@@ -25,7 +34,6 @@ RUN apk add --no-cache ca-certificates tzdata rsync openssh-client 7zip libstdc+
 COPY --from=builder /usr/local/bin/unrar /usr/local/bin/unrar
 WORKDIR /app
 COPY --from=builder /out/grabarr ./grabarr
-COPY web/static ./web/static
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

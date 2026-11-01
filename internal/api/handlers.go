@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"net/http"
 
@@ -18,6 +19,7 @@ type Handlers struct {
 	config         *config.Config
 	remoteFileRepo RemoteFileRepo
 	scanner        *sync.Scanner
+	ui             fs.FS // the web UI's files; nil means the embedded build
 }
 
 type APIResponse struct {

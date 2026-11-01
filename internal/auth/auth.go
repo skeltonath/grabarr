@@ -89,13 +89,24 @@ func PrincipalFrom(ctx context.Context) (Principal, bool) {
 	return p, ok
 }
 
+// publicFiles are the web app's files a browser fetches without the session
+// cookie (the manifest is requested without credentials) or before signing in.
+// None of them hold data; pages and the API stay behind sign-in.
+var publicFiles = map[string]bool{
+	"/manifest.webmanifest": true,
+	"/icon.svg":             true,
+	"/apple-touch-icon.png": true,
+	"/favicon.ico":          true,
+}
+
 // public reports whether a path is reachable without signing in: the sign-in
-// flow itself, static assets, and the health check that the container
-// healthcheck and Glance poll.
+// flow itself, the app's build assets and icons, and the health check that the
+// container healthcheck and Glance poll.
 func public(path string) bool {
 	return path == "/api/v1/health" ||
 		strings.HasPrefix(path, "/auth/") ||
-		strings.HasPrefix(path, "/static/")
+		strings.HasPrefix(path, "/_app/") ||
+		publicFiles[path]
 }
 
 // Middleware requires a session cookie or an API token on everything except

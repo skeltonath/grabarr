@@ -58,7 +58,10 @@ func TestMiddleware_Unauthenticated(t *testing.T) {
 		wantLocation       string
 	}{
 		{"health stays open", "GET", "/api/v1/health", http.StatusOK, ""},
-		{"static assets stay open", "GET", "/static/images/logo.png", http.StatusOK, ""},
+		{"build assets stay open", "GET", "/_app/immutable/entry/app.js", http.StatusOK, ""},
+		{"the manifest stays open", "GET", "/manifest.webmanifest", http.StatusOK, ""},
+		{"icons stay open", "GET", "/icon.svg", http.StatusOK, ""},
+		{"other root files need auth", "GET", "/secret.txt", http.StatusFound, "/auth/login?return_to=%2Fsecret.txt"},
 		{"api read needs auth", "GET", "/api/v1/jobs", http.StatusUnauthorized, ""},
 		{"api write needs auth", "POST", "/api/v1/jobs", http.StatusUnauthorized, ""},
 		{"metrics needs auth", "GET", "/api/v1/metrics", http.StatusUnauthorized, ""},

@@ -96,7 +96,7 @@ curl http://millions:8080/api/v1/status
 ## Common Troubleshooting
 - Container startup failures: Check config.yaml for missing fields
 - File permission issues: Ensure 99:100 ownership in container
-- Web UI not found: Files should be at `web/static/index.html`
+- Web UI shows "web UI not built": run `make web` (the Dockerfile builds it in a Node stage)
 
 ## Key Dependencies
 - rsync (for file transfers with SSH key authentication)
@@ -112,3 +112,8 @@ curl http://millions:8080/api/v1/status
 - `config.yaml` - Main application configuration
 - `rclone.conf` - RClone configuration with seedbox credentials (no templating)
 - `TODO.md` - Development tasks and feature requests (add TODOs here, not in CLAUDE.md)
+## Web UI
+- SvelteKit SPA (Svelte 5, plain JS) in `web/`, built to `web/build` and embedded in the binary (`web/embed.go`, served by `internal/api/web.go`).
+- UI follows the house-style skill (~/.claude/skills/house-style); web/src/lib/house.css is a vendored copy.
+- Mock first (phone width, dark theme), then preview locally, then deploy.
+- Local: `make preview` (Go API + built UI on :8080, seeded demo data, dev login), and `make dev-web` for hot reload on :5173. The `preview` and `preview-web` configs in `.claude/launch.json` start them in the browser pane.

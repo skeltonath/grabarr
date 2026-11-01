@@ -3,94 +3,73 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
-
-	"github.com/skeltonath/grabarr/internal/config"
-	"github.com/skeltonath/grabarr/internal/mocks"
+	"testing/fstest"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/mocks"
 )
-
-// serveDashboard resolves the shell relative to the working directory, so the
-// test plants one there rather than reaching into the repo's real web/static.
-func withDashboardShell(t *testing.T, body string) {
-	t.Helper()
-
-	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "web", "static"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "web", "static", "v2.html"), []byte(body), 0o644))
-
-	cwd, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(dir))
-	t.Cleanup(func() { _ = os.Chdir(cwd) })
-}
 
 func newWebRouter(t *testing.T) chi.Router {
 	t.Helper()
-
-	handlers := NewHandlers(mocks.NewMockJobQueue(t), mocks.NewMockGatekeeper(t), &config.Config{}, nil, nil)
+	h := NewHandlers(mocks.NewMockJobQueue(t), mocks.NewMockGatekeeper(t), &config.Config{}, nil, nil)
+	h.ui = fstest.MapFS{
+		"index.html":                  {Data: []byte("<html>grabarr app</html>")},
+		"icon.svg":                    {Data: []byte("<svg/>")},
+		"_app/immutable/entry/app.js": {Data: []byte("console.log(1)")},
+	}
 	r := chi.NewRouter()
-	handlers.registerWebRoutes(r)
+	h.RegisterRoutes(r)
 	return r
 }
 
-// Every client-side route has to serve the same shell, otherwise a deep link
-// or a refresh on /jobs 404s instead of loading the app.
-func TestSPARoutesServeDashboard(t *testing.T) {
-	withDashboardShell(t, "<html>grabarr shell</html>")
+func get(r http.Handler, method, path string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
+	return rec
+}
+
+// Every client-side route serves the app, so a deep link or a refresh on
+// /jobs?job=7 loads it instead of a 404.
+func TestWebUI_PagesServeTheApp(t *testing.T) {
 	r := newWebRouter(t)
-
-	for _, path := range []string{"/", "/jobs", "/settings"} {
-		t.Run(path, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
-
-			assert.Equal(t, http.StatusOK, rec.Code)
-			assert.Contains(t, rec.Body.String(), "grabarr shell")
-		})
+	for _, path := range []string{"/", "/jobs", "/jobs?status=failed&job=7", "/settings", "/jobs/"} {
+		rec := get(r, "GET", path)
+		assert.Equal(t, http.StatusOK, rec.Code, path)
+		assert.Contains(t, rec.Body.String(), "grabarr app", path)
+		assert.Equal(t, "no-cache", rec.Header().Get("Cache-Control"), path)
 	}
 }
 
-func TestUnknownRouteNotFound(t *testing.T) {
-	withDashboardShell(t, "<html>grabarr shell</html>")
+func TestWebUI_Assets(t *testing.T) {
 	r := newWebRouter(t)
 
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest("GET", "/nope", nil))
+	rec := get(r, "GET", "/_app/immutable/entry/app.js")
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Header().Get("Cache-Control"), "immutable", "hashed build files cache forever")
 
-	assert.Equal(t, http.StatusNotFound, rec.Code)
+	rec = get(r, "GET", "/icon.svg")
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "no-cache", rec.Header().Get("Cache-Control"))
+	assert.NotEmpty(t, rec.Header().Get("ETag"))
+
+	rec = get(r, "GET", "/_app/immutable/missing.js")
+	assert.Equal(t, http.StatusNotFound, rec.Code, "a missing asset is a 404, not the app's HTML")
 }
 
-func TestServeDashboardMissingShell(t *testing.T) {
-	withDashboardShell(t, "")
-	require.NoError(t, os.Remove(filepath.Join("web", "static", "v2.html")))
+func TestWebUI_LeavesTheAPIAlone(t *testing.T) {
 	r := newWebRouter(t)
 
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
-
+	rec := get(r, "GET", "/api/v1/nope")
 	assert.Equal(t, http.StatusNotFound, rec.Code)
-}
+	assert.NotContains(t, rec.Body.String(), "grabarr app")
 
-// A trailing slash should reach the app, not a 404. The client tolerates it
-// too, but the canonical URL is the one without.
-func TestSPARoutesRedirectTrailingSlash(t *testing.T) {
-	withDashboardShell(t, "<html>grabarr shell</html>")
-	r := newWebRouter(t)
+	rec = get(r, "PUT", "/api/v1/settings")
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 
-	for _, path := range []string{"/jobs/", "/settings/"} {
-		t.Run(path, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
-
-			assert.Equal(t, http.StatusMovedPermanently, rec.Code)
-			assert.Equal(t, strings.TrimSuffix(path, "/"), rec.Header().Get("Location"))
-		})
-	}
+	rec = get(r, "POST", "/jobs")
+	assert.Equal(t, http.StatusNotFound, rec.Code, "pages are GET only")
 }

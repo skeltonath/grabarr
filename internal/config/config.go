@@ -82,6 +82,9 @@ type RemoteConfig struct {
 }
 
 type WatchedPath struct {
+	// Label names the source in the web UI ("Video", "Books"); without one
+	// the UI shows the remote's name, which repeats when a remote has two.
+	Label             string   `yaml:"label"`
 	RemotePath        string   `yaml:"remote_path"`
 	LocalPath         string   `yaml:"local_path"`
 	Extensions        []string `yaml:"extensions"`

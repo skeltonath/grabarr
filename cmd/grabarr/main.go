@@ -163,9 +163,6 @@ func run() error {
 	handlers := api.NewHandlers(jobQueue, gk, cfg, repo, scanner)
 	handlers.RegisterRoutes(router)
 
-	// Log registered routes for debugging
-	slog.Info("routes registered", "web_ui_available", "check /dashboard and /ui endpoints")
-
 	// Create HTTP server
 	serverConfig := cfg.GetServer()
 	server := &http.Server{

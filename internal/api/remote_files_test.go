@@ -408,3 +408,55 @@ func TestQueueFolder_PartialFailure(t *testing.T) {
 	assert.Equal(t, float64(1), data["queued"])
 	assert.Equal(t, float64(1), data["failed"])
 }
+
+// Two watched paths on one remote used to show as two identical "whatbox"
+// sources. Labels tell them apart, and sources keep their config order.
+func TestGetRemoteFileTree_LabelsAndConfigOrder(t *testing.T) {
+	repo := mocks.NewMockRemoteFileRepo(t)
+	cfg := &config.Config{
+		Remotes: []config.RemoteConfig{{
+			Name: "whatbox",
+			WatchedPaths: []config.WatchedPath{
+				{Label: "Video", RemotePath: "/seedbox/dp/"},
+				{Label: "Books", RemotePath: "/seedbox/books/"},
+				{RemotePath: "/seedbox/other/"},
+			},
+		}},
+	}
+	h := NewHandlers(mocks.NewMockJobQueue(t), mocks.NewMockGatekeeper(t), cfg, repo, nil)
+
+	repo.EXPECT().GetRemoteFiles(mock.AnythingOfType("models.RemoteFileFilter")).Return([]*models.RemoteFile{
+		{ID: 1, RemotePath: "/seedbox/books/a.epub", Name: "a.epub", WatchedPath: "/seedbox/books/", Status: models.FileStatusOnSeedbox},
+		{ID: 2, RemotePath: "/seedbox/other/c.mkv", Name: "c.mkv", WatchedPath: "/seedbox/other/", Status: models.FileStatusOnSeedbox},
+		{ID: 3, RemotePath: "/old/gone.mkv", Name: "gone.mkv", WatchedPath: "/old/", Status: models.FileStatusOnSeedbox},
+		{ID: 4, RemotePath: "/seedbox/dp/b.mkv", Name: "b.mkv", WatchedPath: "/seedbox/dp/", Status: models.FileStatusOnSeedbox},
+	}, nil).Once()
+
+	rec := httptest.NewRecorder()
+	h.GetRemoteFileTree(rec, httptest.NewRequest("GET", "/api/v1/remote-files/tree", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Data struct {
+			ScannedAt *time.Time `json:"scanned_at"`
+			Roots     []struct {
+				WatchedPath string `json:"watched_path"`
+				Name        string `json:"name"`
+				Remote      string `json:"remote"`
+			} `json:"roots"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	assert.Nil(t, resp.Data.ScannedAt, "no scanner, so no scan time")
+
+	var got []string
+	for _, r := range resp.Data.Roots {
+		got = append(got, r.Name+"|"+r.Remote+"|"+r.WatchedPath)
+	}
+	assert.Equal(t, []string{
+		"Video|whatbox|/seedbox/dp/",
+		"Books|whatbox|/seedbox/books/",
+		"whatbox|whatbox|/seedbox/other/", // no label: the remote's name
+		"old||/old/",                      // no longer configured: last, named after its folder
+	}, got)
+}

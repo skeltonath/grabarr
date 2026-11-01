@@ -1,0 +1,111 @@
+/*
+ * House style: shared tokens and base components.
+ * Canonical copy lives in ~/.claude/skills/house-style/tokens.css.
+ * Apps vendor this file unchanged (e.g. src/lib/house.css) and put app-specific
+ * styles in their own components. Change it here first, then re-copy.
+ *
+ * Every color is defined once with light-dark(), so any container can force a
+ * theme with `color-scheme: dark` (or light) and all tokens follow.
+ */
+
+:root {
+	color-scheme: light dark;
+
+	/* Surfaces and text */
+	--bg: light-dark(#f6f3ee, #1b1a18); /* page background, warm off-white / charcoal */
+	--surface: light-dark(#fffdf9, #252320); /* cards, inputs, bubbles */
+	--text: light-dark(#1f1d1a, #efebe4);
+	--muted: light-dark(#6f6a62, #a39d93); /* secondary text, inactive nav */
+	--line: light-dark(#e4ded3, #3a3732); /* 1px borders, dividers, empty tracks */
+
+	/* Meaningful colors: use for their meaning, never for decoration */
+	--accent: light-dark(#2f5d50, #7fb8a4); /* primary action, progress, "on track" */
+	--accent-text: light-dark(#f6f3ee, #13211c); /* text on --accent fills */
+	--warm: light-dark(#c9821f, #e9a23b); /* attention: over a limit, unsure, in progress */
+	--danger: light-dark(#a8473b, #e08a7a); /* errors, failed actions, destructive buttons */
+
+	/* Overlays */
+	--scrim: rgba(0, 0, 0, 0.45); /* behind sheets and modals */
+
+	/* Shape */
+	--radius: 14px; /* cards */
+	--radius-sm: 10px; /* inputs, inset panels */
+	--gutter: 16px;
+	--measure: 640px; /* max content width */
+	--measure-wide: none; /* list-detail pages use the whole window on tablet and desktop */
+	--sidebar: 280px; /* list pane width in list-detail pages */
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font: 16px/1.45 ui-rounded, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+	-webkit-font-smoothing: antialiased;
+	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+		env(safe-area-inset-left);
+}
+
+.muted {
+	color: var(--muted);
+}
+.error {
+	color: var(--danger);
+}
+
+button,
+.button {
+	font: inherit;
+	font-weight: 600;
+	border: 0;
+	border-radius: 999px;
+	padding: 0.7rem 1.3rem;
+	background: var(--accent);
+	color: var(--accent-text);
+	cursor: pointer;
+	text-decoration: none;
+	display: inline-block;
+}
+button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+button.secondary {
+	background: transparent;
+	color: var(--text);
+	border: 1px solid var(--line);
+}
+button.danger {
+	background: transparent;
+	color: var(--danger);
+	border: 1px solid var(--danger);
+}
+button.link {
+	background: none;
+	color: var(--muted);
+	padding: 0;
+	font-weight: 500;
+}
+
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	padding: 0.65rem 0.8rem;
+	min-width: 0;
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	padding: 1rem 1.1rem;
+}

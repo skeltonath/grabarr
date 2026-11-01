@@ -31,14 +31,16 @@ remotes:
     ssh_user: "preview"
     ssh_key_file: "data/no-such-key"
     watched_paths:
-      - remote_path: "/home/psychomanteum/downloads/completed/dp/"
+      - label: "Video"
+        remote_path: "/home/psychomanteum/downloads/completed/dp/"
         local_path: ""
         extensions: ["mkv", "mp4", "avi", "srt", "sub"]
         archive_extensions: ["rar", "zip"]
         exclude_patterns: ["(?i)\\.sample\\.", "(?i)sample\\."]
         auto_download: true
         recursive: true
-      - remote_path: "/home/psychomanteum/downloads/completed/books/"
+      - label: "Books"
+        remote_path: "/home/psychomanteum/downloads/completed/books/"
         local_path: "data/downloads/books/"
         extensions: ["epub", "m4b", "jpg"]
         archive_extensions: ["rar", "zip"]

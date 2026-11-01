@@ -38,7 +38,8 @@ remotes:
     ssh_user: "psychomanteum"
     ssh_key_file: "/config/grabarr_rsa"
     watched_paths:
-      - remote_path: "/home/psychomanteum/downloads/completed/dp/"
+      - label: "Video"
+        remote_path: "/home/psychomanteum/downloads/completed/dp/"
         local_path: ""
         extensions: ["mkv", "mp4", "avi", "srt", "sub"]
         archive_extensions: ["rar", "zip"]
@@ -47,7 +48,8 @@ remotes:
         recursive: true
       # Books (Shelfmark): categories dp-books / dp-audiobooks save under completed/books/.
       # Lands in /mnt/user/media/downloads/books/, which Shelfmark sees as /downloads/books.
-      - remote_path: "/home/psychomanteum/downloads/completed/books/"
+      - label: "Books"
+        remote_path: "/home/psychomanteum/downloads/completed/books/"
         local_path: "/unraid/user/media/downloads/books/"
         extensions: ["epub", "kepub", "mobi", "azw", "azw3", "pdf", "fb2", "cbz", "cbr", "cb7", "m4b", "m4a", "mp3", "flac", "opus", "ogg", "aac", "jpg", "png", "cue", "nfo"]
         archive_extensions: ["rar", "zip"]

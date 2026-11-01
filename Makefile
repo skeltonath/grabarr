@@ -21,14 +21,14 @@ NC=\033[0m # No Color
 
 .PHONY: help build run clean test test-verbose test-coverage test-race test-coverage-summary test-ci fmt vet deps gen-mocks gen-bruno
 .PHONY: docker-build docker-run docker-stop docker-logs docker-shell
-.PHONY: setup-config preview
+.PHONY: setup-config preview web web-stub dev-web
 
 # Default target
 all: fmt vet test build
 
 ## Development Targets
 
-build: ## Build the Go binary locally
+build: web ## Build the Go binary locally (with the web UI)
 	@echo "$(GREEN)Building ${BINARY_NAME}...$(NC)"
 	@CGO_ENABLED=0 go build ${LDFLAGS} -o ${BINARY_NAME} ./cmd/grabarr
 	@echo "$(GREEN)✓ Build complete: ${BINARY_NAME}$(NC)"
@@ -46,7 +46,7 @@ fmt: ## Format Go code
 	@go fmt ./...
 	@echo "$(GREEN)✓ Code formatted$(NC)"
 
-vet: ## Run go vet for static analysis
+vet: web-stub ## Run go vet for static analysis
 	@echo "$(GREEN)Running go vet...$(NC)"
 	@go vet ./...
 	@echo "$(GREEN)✓ Static analysis passed$(NC)"
@@ -67,21 +67,21 @@ gen-bruno: ## Generate Bruno API collection from code
 
 ## Testing Targets
 
-test: ## Run all tests
+test: web-stub ## Run all tests
 	@echo "$(GREEN)Running tests...$(NC)"
 	@go test ./...
 	@echo "$(GREEN)✓ All tests passed$(NC)"
 
-test-verbose: ## Run tests with verbose output
+test-verbose: web-stub ## Run tests with verbose output
 	@echo "$(GREEN)Running tests (verbose)...$(NC)"
 	@go test -v ./...
 
-test-race: ## Run tests with race detector
+test-race: web-stub ## Run tests with race detector
 	@echo "$(GREEN)Running tests with race detector...$(NC)"
 	@go test -race ./...
 	@echo "$(GREEN)✓ Tests passed with no race conditions$(NC)"
 
-test-coverage: ## Generate test coverage report (HTML) - excludes interfaces/mocks/testutil
+test-coverage: web-stub ## Generate test coverage report (HTML) - excludes interfaces/mocks/testutil
 	@echo "$(GREEN)Generating test coverage report...$(NC)"
 	@go test \
 		$$(go list ./internal/... | grep -v -e '/interfaces$$' -e '/mocks$$' -e '/testutil$$') \
@@ -90,7 +90,7 @@ test-coverage: ## Generate test coverage report (HTML) - excludes interfaces/moc
 	@echo "$(GREEN)✓ Coverage report generated: coverage.html$(NC)"
 	@go tool cover -func=coverage.out | grep total
 
-test-coverage-summary: ## Show test coverage percentage - excludes interfaces/mocks/testutil
+test-coverage-summary: web-stub ## Show test coverage percentage - excludes interfaces/mocks/testutil
 	@echo "$(GREEN)Generating coverage summary...$(NC)"
 	@go test \
 		$$(go list ./internal/... | grep -v -e '/interfaces$$' -e '/mocks$$' -e '/testutil$$') \
@@ -125,11 +125,23 @@ docker-shell: ## Open shell in running container
 	@echo "$(GREEN)Opening shell in ${DOCKER_IMAGE} container...$(NC)"
 	@docker exec -it grabarr /bin/sh
 
+## Web UI
+
+web: ## Build the SvelteKit UI into web/build (embedded in the binary)
+	cd web && npm ci --no-fund --no-audit && npm run build
+
+# go:embed needs web/build to exist; tests and vet don't need a real UI.
+web-stub:
+	@mkdir -p web/build && touch web/build/.keep
+
+dev-web: ## Vite dev server on :5173 with hot reload, proxying to `make preview` on :8080
+	cd web && npm run dev
+
 ## Preview
 
 # Local UI preview: fresh demo data (cmd/seed) served in preview mode, so nothing
 # touches the seedbox. Open http://localhost:8080/ (dev login signs you in).
-preview: ## Run grabarr on seeded demo data at http://localhost:8080
+preview: web ## Run grabarr on seeded demo data at http://localhost:8080
 	@mkdir -p data
 	go run ./cmd/seed -db data/preview.db -reset
 	GRABARR_CONFIG=config.preview.yaml go run ./cmd/grabarr
@@ -175,7 +187,7 @@ help: ## Show this help message
 	@echo "$(GREEN)Usage:$(NC) make [target]"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(build|run|preview|fmt|vet|gen-mocks):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(build|run|preview|web|dev-web|fmt|vet|gen-mocks):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Testing:$(NC)"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^test' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'

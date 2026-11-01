@@ -75,3 +75,7 @@ bruno/
 # Tool working directories
 .playwright-mcp/
 .superpowers/
+
+# SvelteKit
+web/node_modules/
+web/.svelte-kit/
