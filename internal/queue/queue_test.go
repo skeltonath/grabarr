@@ -612,6 +612,34 @@ func TestExecuteJob_PermanentError(t *testing.T) {
 	assert.Contains(t, updatedJob.ErrorMessage, "file not found")
 }
 
+// A torrent removed from the seedbox mid-copy cancels the job with a plain
+// message and sends no alert (the notifier mock fails the test if called).
+func TestExecuteJob_SourceGoneCancelsQuietly(t *testing.T) {
+	repo := testutil.SetupTestDB(t)
+	cfg := &config.Config{Jobs: config.JobsConfig{MaxConcurrent: 2}}
+	mockExecutor := mocks.NewMockJobExecutor(t)
+	mockNotifier := mocks.NewMockNotifier(t)
+	mockExecutor.EXPECT().Execute(mock.Anything, mock.Anything).
+		Return(&executor.PermanentError{Msg: "removed from the seedbox", Cause: errors.New("exit 24"), SourceGone: true}).
+		Once()
+
+	q := New(repo, cfg, mocks.NewMockGatekeeper(t), mockNotifier)
+	q.SetJobExecutor(mockExecutor)
+	queue := q.(*queue)
+	ctx := context.Background()
+	queue.schedulerCtx = ctx
+
+	job := testutil.CreateTestJob(func(j *models.Job) { j.Status = models.JobStatusQueued })
+	require.NoError(t, repo.CreateJob(job))
+	queue.executeJob(ctx, job)
+
+	updated, err := repo.GetJob(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.JobStatusCancelled, updated.Status)
+	assert.Equal(t, "Removed from the seedbox before the copy finished", updated.ErrorMessage)
+	assert.Equal(t, 0, updated.Retries)
+}
+
 func TestExecuteJob_RetryableError(t *testing.T) {
 	repo := testutil.SetupTestDB(t)
 	cfg := &config.Config{

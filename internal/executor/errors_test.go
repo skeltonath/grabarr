@@ -139,3 +139,39 @@ func TestClassifyRsyncError_NonExitError(t *testing.T) {
 	assert.False(t, IsPermanent(result))
 	assert.Equal(t, err, result)
 }
+
+// A torrent removed from the seedbox mid-copy is housekeeping: the job is
+// cancelled quietly instead of failing with an alert. Only the sender (seedbox)
+// side counts; a missing local folder is a real failure.
+func TestClassifyRsyncError_SourceGone(t *testing.T) {
+	exit24 := makeExitError(t, 24)
+	exit23 := makeExitError(t, 23)
+
+	tests := []struct {
+		name      string
+		err       error
+		gone      bool
+		permanent bool
+	}{
+		{"exit 24 vanished", fmt.Errorf("rsync transfer failed: %w", exit24), true, true},
+		{"exit 23 sender missing file", &rsync.TransferError{
+			Err:    fmt.Errorf("rsync transfer failed: %w", exit23),
+			Stderr: `rsync: [sender] link_stat "/home/u/downloads/completed/books/x.epub" failed: No such file or directory (2)`,
+		}, true, true},
+		{"exit 23 receiver missing folder", &rsync.TransferError{
+			Err:    fmt.Errorf("rsync transfer failed: %w", exit23),
+			Stderr: `rsync: [Receiver] mkdir "/unraid/user/media/downloads/x" failed: No such file or directory (2)`,
+		}, false, true},
+		{"exit 23 unrelated", &rsync.TransferError{
+			Err:    fmt.Errorf("rsync transfer failed: %w", exit23),
+			Stderr: "Broken pipe",
+		}, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifyRsyncError(tt.err)
+			assert.Equal(t, tt.gone, IsSourceGone(got))
+			assert.Equal(t, tt.permanent, IsPermanent(got))
+		})
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -100,9 +101,14 @@ func run() error {
 
 	// Initialize notifications
 	notifier := notifications.NewPushoverNotifier(cfg)
+	// Job failures go out as one digest per burst (a minute's quiet, at most
+	// five) rather than one alert per file.
+	failureAlerts := notifications.NewFailureDigest(notifier, time.Minute, 5*time.Minute,
+		strings.TrimSuffix(cfg.GetServer().BaseURL, "/")+"/jobs?status=failed")
+	defer failureAlerts.Flush()
 
 	// Initialize job queue
-	jobQueue := queue.New(repo, cfg, gk, notifier)
+	jobQueue := queue.New(repo, cfg, gk, failureAlerts)
 
 	// Initialize job executor (using rsync as default)
 	jobExecutor := executor.NewRsyncExecutor(cfg, gk, repo)

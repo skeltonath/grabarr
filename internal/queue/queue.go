@@ -519,7 +519,17 @@ func (q *queue) executeJob(ctx context.Context, job *models.Job) bool {
 		attempt.Status = models.JobStatusFailed
 		attempt.ErrorMessage = err.Error()
 
-		if executor.IsPermanent(err) {
+		if executor.IsSourceGone(err) {
+			// The torrent was removed from the seedbox mid-copy. Cancel quietly:
+			// one alert per file is how a deleted 59-file torrent flooded Pushover.
+			slog.Info("source removed from seedbox, cancelling job", "job_id", job.ID, "path", job.RemotePath)
+			attempt.Status = models.JobStatusCancelled
+			job.MarkCancelled()
+			job.ErrorMessage = "Removed from the seedbox before the copy finished"
+			if updateErr := q.repo.UpdateJob(job); updateErr != nil {
+				slog.Error("failed to mark job as cancelled", "job_id", job.ID, "error", updateErr)
+			}
+		} else if executor.IsPermanent(err) {
 			slog.Warn("job failed permanently, not retrying", "job_id", job.ID, "error", err)
 			job.MarkFailed(err.Error())
 			if updateErr := q.repo.UpdateJob(job); updateErr != nil {
