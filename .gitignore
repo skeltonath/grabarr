@@ -54,7 +54,8 @@ scripts/qbt-grabarr.env
 *.tar.gz
 
 # Configuration files with secrets
-config.yaml
+# Local dev config only; deploy/config.yaml is tracked
+/config.yaml
 rclone.conf
 
 # SSH keys

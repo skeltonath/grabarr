@@ -5,8 +5,6 @@
 BINARY_NAME=grabarr
 DOCKER_IMAGE=grabarr
 DOCKER_TAG=latest
-REMOTE_HOST=millions
-REMOTE_USER=root
 GO_VERSION=$(shell go version | cut -d' ' -f3)
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT=$(shell git rev-parse --short HEAD)
@@ -23,7 +21,7 @@ NC=\033[0m # No Color
 
 .PHONY: help build run clean test test-verbose test-coverage test-race test-coverage-summary test-ci fmt vet deps gen-mocks gen-bruno
 .PHONY: docker-build docker-run docker-stop docker-logs docker-shell
-.PHONY: deploy deploy-logs deploy-restart setup-config
+.PHONY: setup-config
 
 # Default target
 all: fmt vet test build
@@ -127,28 +125,6 @@ docker-shell: ## Open shell in running container
 	@echo "$(GREEN)Opening shell in ${DOCKER_IMAGE} container...$(NC)"
 	@docker exec -it grabarr /bin/sh
 
-## Deployment Targets
-
-deploy: docker-build ## Deploy to remote server (Unraid)
-	@echo "$(GREEN)Deploying to ${REMOTE_HOST}...$(NC)"
-	@echo "$(YELLOW)Copying config files to remote...$(NC)"
-	@scp docker-compose.yml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/apps/appdata/grabarr/
-	@scp config.yaml ${REMOTE_USER}@${REMOTE_HOST}:/mnt/apps/appdata/grabarr/
-	@echo "$(YELLOW)Transferring Docker image (this may take a few minutes)...$(NC)"
-	@docker save ${DOCKER_IMAGE}:${DOCKER_TAG} | gzip | ssh ${REMOTE_USER}@${REMOTE_HOST} "gunzip | docker load"
-	@echo "$(YELLOW)Starting service on remote...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/apps/appdata/grabarr && docker-compose up -d"
-	@echo "$(GREEN)✓ Deployment complete$(NC)"
-
-deploy-logs: ## View remote deployment logs
-	@echo "$(GREEN)Viewing logs from ${REMOTE_HOST}...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/apps/appdata/grabarr && docker-compose logs -f"
-
-deploy-restart: ## Restart remote service
-	@echo "$(GREEN)Restarting service on ${REMOTE_HOST}...$(NC)"
-	@ssh ${REMOTE_USER}@${REMOTE_HOST} "cd /mnt/apps/appdata/grabarr && docker-compose restart"
-	@echo "$(GREEN)✓ Service restarted$(NC)"
-
 ## Utility Targets
 
 clean: ## Clean build artifacts and temporary files
@@ -199,7 +175,7 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^docker-' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Deployment:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^deploy' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
+	@echo "  Push to main: Komodo rebuilds and redeploys on millions (see deploy/config.yaml)"
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(clean|deps|setup-config):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'

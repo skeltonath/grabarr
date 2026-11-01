@@ -7,16 +7,23 @@ services:
     mem_limit: 1g
     user: "99:100"  # Use Unraid nobody user
     volumes:
-      # Configuration and data persistence
-      - /mnt/apps/appdata/grabarr/config:/config
+      - ./deploy/config.yaml:/etc/grabarr/config.yaml:ro
+      - /mnt/apps/appdata/grabarr/config:/config   # SSH key (grabarr_rsa), not in git
       - /mnt/apps/appdata/grabarr/data:/data
 
       # Unraid mount points
       - /mnt/user:/unraid/user:rw        # Main array access
       - /mnt/cache:/unraid/cache:rw      # Cache drive access
 
-    env_file:
-      - .env  # Load environment variables from .env file
+    environment:
+      GRABARR_CONFIG: /etc/grabarr/config.yaml
+      TZ: ${TZ:-}
+      # Secrets: Komodo variables, written to .env by the stack's environment
+      # and expanded into deploy/config.yaml.
+      PUSHOVER_TOKEN: ${PUSHOVER_TOKEN:-}
+      PUSHOVER_USER: ${PUSHOVER_USER:-}
+      RADARR_API_KEY: ${RADARR_API_KEY:-}
+      SONARR_API_KEY: ${SONARR_API_KEY:-}
 
     # Logging
     logging:
