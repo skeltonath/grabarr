@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"grabarr/internal/archive"
-	"grabarr/internal/config"
-	"grabarr/internal/interfaces"
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/archive"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/models"
 )
 
 // ScannerRepo is the subset of repository operations the scanner needs.

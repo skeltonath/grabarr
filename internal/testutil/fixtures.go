@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/models"
 	"time"
 )
 

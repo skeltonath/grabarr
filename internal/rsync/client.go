@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/models"
 )
 
 // TransferError wraps a failed rsync exit error with the captured stderr output,

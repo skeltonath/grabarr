@@ -212,17 +212,9 @@ func loadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Expand environment variables
-	content := os.ExpandEnv(string(data))
-
-	var config Config
-	if err := yaml.Unmarshal([]byte(content), &config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	// Validate configuration
-	if err := config.validate(); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
+	config, err := parseConfig(data)
+	if err != nil {
+		return nil, err
 	}
 
 	// Ensure directories exist
@@ -232,6 +224,19 @@ func loadConfig(configPath string) (*Config, error) {
 
 	config.captureBaselineLocked()
 
+	return config, nil
+}
+
+// parseConfig expands environment variables, decodes strictly (an unknown or
+// misspelled key is an error rather than silently ignored) and validates.
+func parseConfig(data []byte) (*Config, error) {
+	var config Config
+	if err := yaml.UnmarshalWithOptions([]byte(os.ExpandEnv(string(data))), &config, yaml.DisallowUnknownField()); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	if err := config.validate(); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
 	return &config, nil
 }
 

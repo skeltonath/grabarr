@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	models "grabarr/internal/models"
+	models "github.com/skeltonath/grabarr/internal/models"
 
 	mock "github.com/stretchr/testify/mock"
 )

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"grabarr/internal/auth"
-	"grabarr/internal/config"
-	"grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/auth"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/repository"
 )
 
 const tokenUsage = `usage: grabarr token create NAME | list | revoke NAME

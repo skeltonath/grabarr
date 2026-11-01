@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"grabarr/internal/auth"
-	"grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/auth"
+	"github.com/skeltonath/grabarr/internal/repository"
 )
 
 func TestTokenCommand(t *testing.T) {

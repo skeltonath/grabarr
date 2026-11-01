@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"grabarr/internal/config"
-	"grabarr/internal/mocks"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/mocks"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,11 +31,11 @@ func withDashboardShell(t *testing.T, body string) {
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 }
 
-func newWebRouter(t *testing.T) *mux.Router {
+func newWebRouter(t *testing.T) chi.Router {
 	t.Helper()
 
 	handlers := NewHandlers(mocks.NewMockJobQueue(t), mocks.NewMockGatekeeper(t), &config.Config{}, nil, nil)
-	r := mux.NewRouter()
+	r := chi.NewRouter()
 	handlers.registerWebRoutes(r)
 	return r
 }

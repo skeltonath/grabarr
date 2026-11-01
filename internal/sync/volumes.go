@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"grabarr/internal/archive"
-	"grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/archive"
+	"github.com/skeltonath/grabarr/internal/config"
 )
 
 // ListArchiveVolumes returns the base filenames of every archive volume the

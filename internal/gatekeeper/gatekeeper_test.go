@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/config"
 )
 
 func createTestConfig() *config.Config {

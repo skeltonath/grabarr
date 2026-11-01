@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
 // spaRoutes are the client-side routes the web UI pushes onto the history
@@ -14,7 +14,7 @@ import (
 var spaRoutes = []string{"/", "/jobs", "/settings"}
 
 // registerWebRoutes sets up static file serving for the web UI
-func (h *Handlers) registerWebRoutes(r *mux.Router) {
+func (h *Handlers) registerWebRoutes(r chi.Router) {
 	// Determine web directory path
 	webDir := "web/static"
 	if _, err := os.Stat(webDir); os.IsNotExist(err) {
@@ -26,16 +26,16 @@ func (h *Handlers) registerWebRoutes(r *mux.Router) {
 
 	// Serve static assets (images, etc.)
 	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir(webDir)))
-	r.PathPrefix("/static/").Handler(staticHandler)
+	r.Handle("/static/*", staticHandler)
 
 	// Serve dashboard
 	for _, route := range spaRoutes {
-		r.HandleFunc(route, h.serveDashboard).Methods("GET")
+		r.Get(route, h.serveDashboard)
 		if route != "/" {
 			// "/jobs/" is the same page as "/jobs". Redirecting rather than
 			// 404ing keeps a hand-typed or shared URL working, and keeps one
 			// canonical address for the route.
-			r.HandleFunc(route+"/", redirectTo(route)).Methods("GET")
+			r.Get(route+"/", redirectTo(route))
 		}
 	}
 }

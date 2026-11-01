@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"net/http"
 
-	"grabarr/internal/config"
-	"grabarr/internal/interfaces"
-	"grabarr/internal/sync"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/sync"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handlers struct {
@@ -46,44 +46,42 @@ func NewHandlers(jobQueue interfaces.JobQueue, gatekeeper interfaces.Gatekeeper,
 	}
 }
 
-func (h *Handlers) RegisterRoutes(r *mux.Router) {
-	// Web UI routes (serve before API to avoid conflicts)
+func (h *Handlers) RegisterRoutes(r chi.Router) {
 	h.registerWebRoutes(r)
 
-	api := r.PathPrefix("/api/v1").Subrouter()
+	r.Route("/api/v1", func(api chi.Router) {
+		api.Use(corsMiddleware)
+		api.Use(loggingMiddleware)
+		api.Use(jsonContentTypeMiddleware)
 
-	// Job management endpoints
-	api.HandleFunc("/jobs", h.CreateJob).Methods("POST")
-	api.HandleFunc("/jobs", h.GetJobs).Methods("GET")
-	api.HandleFunc("/jobs/{id:[0-9]+}", h.GetJob).Methods("GET")
-	api.HandleFunc("/jobs/{id:[0-9]+}", h.DeleteJob).Methods("DELETE")
-	api.HandleFunc("/jobs/{id:[0-9]+}/cancel", h.CancelJob).Methods("POST")
-	api.HandleFunc("/jobs/{id:[0-9]+}/retry", h.RetryJob).Methods("POST")
-	api.HandleFunc("/jobs/summary", h.GetJobSummary).Methods("GET")
+		// Job management endpoints
+		api.Post("/jobs", h.CreateJob)
+		api.Get("/jobs", h.GetJobs)
+		api.Get("/jobs/summary", h.GetJobSummary)
+		api.Get("/jobs/{id:[0-9]+}", h.GetJob)
+		api.Delete("/jobs/{id:[0-9]+}", h.DeleteJob)
+		api.Post("/jobs/{id:[0-9]+}/cancel", h.CancelJob)
+		api.Post("/jobs/{id:[0-9]+}/retry", h.RetryJob)
 
-	// Remote files (seedbox scanner) endpoints
-	api.HandleFunc("/remote-files", h.ListRemoteFiles).Methods("GET")
-	api.HandleFunc("/remote-files/tree", h.GetRemoteFileTree).Methods("GET")
-	api.HandleFunc("/remote-files/queue-folder", h.QueueFolder).Methods("POST")
-	api.HandleFunc("/remote-files/{id:[0-9]+}/queue", h.QueueRemoteFile).Methods("POST")
-	api.HandleFunc("/remote-files/{id:[0-9]+}/ignore", h.IgnoreRemoteFile).Methods("POST")
-	api.HandleFunc("/remote-files/{id:[0-9]+}/restore", h.RestoreRemoteFile).Methods("POST")
-	api.HandleFunc("/sync/scan", h.TriggerScan).Methods("POST")
-	api.HandleFunc("/sync/status", h.GetSyncStatus).Methods("GET")
+		// Remote files (seedbox scanner) endpoints
+		api.Get("/remote-files", h.ListRemoteFiles)
+		api.Get("/remote-files/tree", h.GetRemoteFileTree)
+		api.Post("/remote-files/queue-folder", h.QueueFolder)
+		api.Post("/remote-files/{id:[0-9]+}/queue", h.QueueRemoteFile)
+		api.Post("/remote-files/{id:[0-9]+}/ignore", h.IgnoreRemoteFile)
+		api.Post("/remote-files/{id:[0-9]+}/restore", h.RestoreRemoteFile)
+		api.Post("/sync/scan", h.TriggerScan)
+		api.Get("/sync/status", h.GetSyncStatus)
 
-	// Runtime settings endpoints
-	api.HandleFunc("/settings", h.GetSettings).Methods("GET")
-	api.HandleFunc("/settings", h.UpdateSettings).Methods("PATCH")
+		// Runtime settings endpoints
+		api.Get("/settings", h.GetSettings)
+		api.Patch("/settings", h.UpdateSettings)
 
-	// System endpoints
-	api.HandleFunc("/health", h.HealthCheck).Methods("GET")
-	api.HandleFunc("/metrics", h.GetMetrics).Methods("GET")
-	api.HandleFunc("/status", h.GetStatus).Methods("GET")
-
-	// Add CORS middleware
-	api.Use(corsMiddleware)
-	api.Use(loggingMiddleware)
-	api.Use(jsonContentTypeMiddleware)
+		// System endpoints
+		api.Get("/health", h.HealthCheck)
+		api.Get("/metrics", h.GetMetrics)
+		api.Get("/status", h.GetStatus)
+	})
 }
 
 func (h *Handlers) writeSuccess(w http.ResponseWriter, statusCode int, data interface{}, message string) {

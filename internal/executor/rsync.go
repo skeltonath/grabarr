@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"grabarr/internal/config"
-	"grabarr/internal/interfaces"
-	"grabarr/internal/models"
-	"grabarr/internal/rsync"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/rsync"
 )
 
 type RsyncExecutor struct {

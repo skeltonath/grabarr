@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"grabarr/internal/config"
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/models"
 )
 
 type PushoverNotifier struct {
@@ -175,7 +175,7 @@ func (p *PushoverNotifier) sendNotification(req pushoverRequest) error {
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("User-Agent", "grabarr/1.0")
+	httpReq.Header.Set("User-Agent", "github.com/skeltonath/grabarr/1.0")
 
 	slog.Debug("sending pushover notification",
 		"title", req.Title,

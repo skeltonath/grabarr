@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"grabarr/internal/config"
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/models"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +39,7 @@ func createMockPushoverServer(t *testing.T, expectedToken, expectedUser string, 
 
 		// Verify headers
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-		assert.Equal(t, "grabarr/1.0", r.Header.Get("User-Agent"))
+		assert.Equal(t, "github.com/skeltonath/grabarr/1.0", r.Header.Get("User-Agent"))
 
 		// Parse request body
 		body, err := io.ReadAll(r.Body)

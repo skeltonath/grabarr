@@ -10,12 +10,12 @@ import (
 
 	"path/filepath"
 
-	"grabarr/internal/archive"
-	"grabarr/internal/config"
-	"grabarr/internal/executor"
-	"grabarr/internal/interfaces"
-	"grabarr/internal/models"
-	"grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/archive"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/executor"
+	"github.com/skeltonath/grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/repository"
 )
 
 type queue struct {

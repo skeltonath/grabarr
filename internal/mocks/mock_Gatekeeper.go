@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	interfaces "grabarr/internal/interfaces"
+	interfaces "github.com/skeltonath/grabarr/internal/interfaces"
 
 	mock "github.com/stretchr/testify/mock"
 )

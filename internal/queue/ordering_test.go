@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"grabarr/internal/config"
-	"grabarr/internal/interfaces"
-	"grabarr/internal/mocks"
-	"grabarr/internal/models"
-	"grabarr/internal/repository"
-	"grabarr/internal/testutil"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/mocks"
+	"github.com/skeltonath/grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

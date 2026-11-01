@@ -3,7 +3,7 @@ disable-version-string: true
 resolve-type-alias: false
 issue-845-fix: true
 packages:
-  grabarr/internal/interfaces:
+  github.com/skeltonath/grabarr/internal/interfaces:
     config:
       dir: "internal/mocks"
       outpkg: mocks

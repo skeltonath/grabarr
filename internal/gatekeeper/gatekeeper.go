@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"grabarr/internal/config"
-	"grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/interfaces"
 
 	"golang.org/x/sys/unix"
 )

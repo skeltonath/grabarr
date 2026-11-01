@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"grabarr/internal/config"
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/models"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
 // RemoteFileRepo is the repository interface for remote files.
@@ -87,7 +87,7 @@ func (h *Handlers) ListRemoteFiles(w http.ResponseWriter, r *http.Request) {
 
 // QueueRemoteFile creates a download job for the given remote file.
 func (h *Handlers) QueueRemoteFile(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(mux.Vars(r)["id"])
+	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid file ID", err)
 		return
@@ -138,7 +138,7 @@ func (h *Handlers) QueueRemoteFile(w http.ResponseWriter, r *http.Request) {
 
 // IgnoreRemoteFile marks a remote file as ignored.
 func (h *Handlers) IgnoreRemoteFile(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(mux.Vars(r)["id"])
+	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid file ID", err)
 		return
@@ -154,7 +154,7 @@ func (h *Handlers) IgnoreRemoteFile(w http.ResponseWriter, r *http.Request) {
 
 // RestoreRemoteFile restores an ignored file back to on_seedbox.
 func (h *Handlers) RestoreRemoteFile(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(mux.Vars(r)["id"])
+	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid file ID", err)
 		return

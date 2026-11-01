@@ -30,7 +30,7 @@ all: fmt vet test build
 
 build: ## Build the Go binary locally
 	@echo "$(GREEN)Building ${BINARY_NAME}...$(NC)"
-	@CGO_ENABLED=1 go build ${LDFLAGS} -o ${BINARY_NAME} ./cmd/grabarr
+	@CGO_ENABLED=0 go build ${LDFLAGS} -o ${BINARY_NAME} ./cmd/grabarr
 	@echo "$(GREEN)✓ Build complete: ${BINARY_NAME}$(NC)"
 
 run: build ## Run the application locally (requires config.yaml)

@@ -5,10 +5,10 @@ import (
 	"sync"
 	"testing"
 
-	"grabarr/internal/config"
-	"grabarr/internal/mocks"
-	"grabarr/internal/models"
-	"grabarr/internal/testutil"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/mocks"
+	"github.com/skeltonath/grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

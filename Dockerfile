@@ -1,8 +1,8 @@
 FROM golang:1.27-alpine AS builder
 
-# gcc/musl-dev for go-sqlite3 (CGO); make/g++ to build unrar, which Alpine
-# doesn't package
-RUN apk add --no-cache gcc musl-dev make g++ curl && \
+# make/g++ to build unrar, which Alpine doesn't package. Grabarr itself is
+# pure Go (modernc sqlite), so it builds with CGO off.
+RUN apk add --no-cache make g++ curl && \
     curl -fL -o /tmp/unrarsrc.tar.gz https://www.rarlab.com/rar/unrarsrc-7.1.3.tar.gz && \
     tar xzf /tmp/unrarsrc.tar.gz -C /tmp && \
     make -C /tmp/unrar -f makefile && \
@@ -12,7 +12,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" \
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" \
         -o /out/grabarr ./cmd/grabarr
 
 # Grabarr shells out to rsync/ssh (copies, scans) and unrar/7z (extraction),

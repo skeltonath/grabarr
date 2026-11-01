@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS api_tokens;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS remote_files;
+DROP TABLE IF EXISTS system_config;
+DROP TABLE IF EXISTS job_attempts;
+DROP TABLE IF EXISTS jobs;

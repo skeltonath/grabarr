@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/repository"
 )
 
 // SetupTestDB creates a throwaway SQLite database for testing.

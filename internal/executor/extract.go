@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"grabarr/internal/archive"
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/archive"
+	"github.com/skeltonath/grabarr/internal/models"
 )
 
 // extractRunner runs the extraction tool for archivePath, writing output into

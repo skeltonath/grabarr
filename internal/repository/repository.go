@@ -2,26 +2,23 @@ package repository
 
 import (
 	"database/sql"
-	"embed"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/models"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
-
-//go:embed schema.sql
-var schemaFS embed.FS
 
 type Repository struct {
 	db *sql.DB
 }
 
 func New(dbPath string) (*Repository, error) {
-	db, err := sql.Open("sqlite3", fmt.Sprintf("%s?_journal_mode=WAL&_timeout=5000&_cache_size=2000", dbPath))
+	db, err := sql.Open("sqlite", buildDSN(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -30,58 +27,37 @@ func New(dbPath string) (*Repository, error) {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
 
-	repo := &Repository{db: db}
-
-	if err := repo.initSchema(); err != nil {
+	if err := db.Ping(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	return repo, nil
+	applied, err := migrateUp(db)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to migrate database: %w", err)
+	}
+	if applied > 0 {
+		slog.Info("database migrated", "applied", applied)
+	}
+
+	return &Repository{db: db}, nil
+}
+
+// buildDSN sets the pragmas on every pooled connection (modernc applies
+// _pragma per connection). _time_format=sqlite stores time.Time as
+// "2006-01-02 15:04:05.999999999-07:00", the format mattn/go-sqlite3 wrote, so
+// rows written before the driver change still compare and sort correctly.
+func buildDSN(path string) string {
+	v := url.Values{}
+	v.Add("_pragma", "busy_timeout(5000)")
+	v.Add("_pragma", "journal_mode(WAL)")
+	v.Set("_time_format", "sqlite")
+	return fmt.Sprintf("file:%s?%s", path, v.Encode())
 }
 
 func (r *Repository) Close() error {
 	return r.db.Close()
-}
-
-func (r *Repository) initSchema() error {
-	schemaSQL, err := schemaFS.ReadFile("schema.sql")
-	if err != nil {
-		return fmt.Errorf("failed to read schema file: %w", err)
-	}
-
-	_, err = r.db.Exec(string(schemaSQL))
-	if err != nil {
-		return fmt.Errorf("failed to execute schema: %w", err)
-	}
-
-	// Run migrations for existing databases
-	if err := r.runMigrations(); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	return nil
-}
-
-// runMigrations applies database migrations for schema changes
-func (r *Repository) runMigrations() error {
-	// Migration 1: Add download_config column to jobs table
-	var hasJobsDownloadConfig bool
-	row := r.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name='download_config'")
-	if err := row.Scan(&hasJobsDownloadConfig); err != nil {
-		return fmt.Errorf("failed to check for download_config column in jobs: %w", err)
-	}
-
-	if !hasJobsDownloadConfig {
-		slog.Info("migrating database: adding download_config column to jobs table")
-		_, err := r.db.Exec("ALTER TABLE jobs ADD COLUMN download_config TEXT")
-		if err != nil {
-			return fmt.Errorf("failed to add download_config column to jobs: %w", err)
-		}
-		slog.Info("migration complete: download_config column added to jobs table")
-	}
-
-	return nil
 }
 
 // Job operations
@@ -89,13 +65,13 @@ func (r *Repository) CreateJob(job *models.Job) error {
 	query := `
 		INSERT INTO jobs (
 			name, remote_path, local_path, status, priority, max_retries,
-			progress, metadata, download_config, file_size
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			progress, metadata, file_size
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.Exec(query,
 		job.Name, job.RemotePath, job.LocalPath, job.Status, job.Priority,
-		job.MaxRetries, job.Progress, job.Metadata, job.DownloadConfig, job.FileSize)
+		job.MaxRetries, job.Progress, job.Metadata, job.FileSize)
 	if err != nil {
 		return fmt.Errorf("failed to create job: %w", err)
 	}
@@ -115,7 +91,7 @@ func (r *Repository) CreateJob(job *models.Job) error {
 func (r *Repository) GetJob(id int64) (*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
-			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
+			   error_message, progress, metadata, created_at, updated_at, started_at,
 			   completed_at, file_size, transferred_bytes, transfer_speed
 		FROM jobs WHERE id = ?
 	`
@@ -123,12 +99,11 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 	var job models.Job
 	var errorMessage sql.NullString
 	var startedAt, completedAt sql.NullTime
-	var downloadConfig sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&job.ID, &job.Name, &job.RemotePath, &job.LocalPath, &job.Status,
 		&job.Priority, &job.Retries, &job.MaxRetries, &errorMessage,
-		&job.Progress, &job.Metadata, &downloadConfig, &job.CreatedAt, &job.UpdatedAt,
+		&job.Progress, &job.Metadata, &job.CreatedAt, &job.UpdatedAt,
 		&startedAt, &completedAt, &job.FileSize, &job.TransferredBytes,
 		&job.TransferSpeed)
 	if err != nil {
@@ -140,14 +115,6 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 
 	if errorMessage.Valid {
 		job.ErrorMessage = errorMessage.String
-	}
-	if downloadConfig.Valid && downloadConfig.String != "" {
-		// Download config is stored as JSON, use the Scan method
-		job.DownloadConfig = &models.DownloadConfig{}
-		if err := job.DownloadConfig.Scan(downloadConfig.String); err != nil {
-			slog.Warn("failed to parse download_config, ignoring", "job_id", id, "error", err)
-			job.DownloadConfig = nil
-		}
 	}
 	if startedAt.Valid {
 		job.StartedAt = &startedAt.Time
@@ -162,7 +129,7 @@ func (r *Repository) GetJob(id int64) (*models.Job, error) {
 func (r *Repository) GetJobs(filter models.JobFilter) ([]*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
-			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
+			   error_message, progress, metadata, created_at, updated_at, started_at,
 			   completed_at, file_size, transferred_bytes, transfer_speed
 		FROM jobs
 	`
@@ -275,7 +242,7 @@ func (r *Repository) CountJobs(filter models.JobFilter) (int, error) {
 func (r *Repository) GetJobsByArchiveGroup(group string) ([]*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
-			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
+			   error_message, progress, metadata, created_at, updated_at, started_at,
 			   completed_at, file_size, transferred_bytes, transfer_speed
 		FROM jobs
 		WHERE JSON_EXTRACT(metadata, '$.extra_fields.archive_group') = ?
@@ -299,12 +266,11 @@ func scanJobRows(rows *sql.Rows) ([]*models.Job, error) {
 		var job models.Job
 		var errorMessage sql.NullString
 		var startedAt, completedAt sql.NullTime
-		var downloadConfig sql.NullString
 
 		err := rows.Scan(
 			&job.ID, &job.Name, &job.RemotePath, &job.LocalPath, &job.Status,
 			&job.Priority, &job.Retries, &job.MaxRetries, &errorMessage,
-			&job.Progress, &job.Metadata, &downloadConfig, &job.CreatedAt, &job.UpdatedAt,
+			&job.Progress, &job.Metadata, &job.CreatedAt, &job.UpdatedAt,
 			&startedAt, &completedAt, &job.FileSize, &job.TransferredBytes,
 			&job.TransferSpeed)
 		if err != nil {
@@ -313,13 +279,6 @@ func scanJobRows(rows *sql.Rows) ([]*models.Job, error) {
 
 		if errorMessage.Valid {
 			job.ErrorMessage = errorMessage.String
-		}
-		if downloadConfig.Valid && downloadConfig.String != "" {
-			job.DownloadConfig = &models.DownloadConfig{}
-			if err := job.DownloadConfig.Scan(downloadConfig.String); err != nil {
-				slog.Warn("failed to parse download_config, ignoring", "job_id", job.ID, "error", err)
-				job.DownloadConfig = nil
-			}
 		}
 		if startedAt.Valid {
 			job.StartedAt = &startedAt.Time
@@ -348,7 +307,7 @@ func scanJobRows(rows *sql.Rows) ([]*models.Job, error) {
 func (r *Repository) GetSchedulableJobs(limit int) ([]*models.Job, error) {
 	query := `
 		SELECT id, name, remote_path, local_path, status, priority, retries, max_retries,
-			   error_message, progress, metadata, download_config, created_at, updated_at, started_at,
+			   error_message, progress, metadata, created_at, updated_at, started_at,
 			   completed_at, file_size, transferred_bytes, transfer_speed
 		FROM jobs
 		WHERE status IN ('queued', 'pending')

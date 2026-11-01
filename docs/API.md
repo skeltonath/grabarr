@@ -47,10 +47,6 @@ Create a new download job.
   "metadata": {
     "category": "movies",
     "torrent_name": "Movie.2024.1080p"
-  },
-  "download_config": {
-    "bw_limit": "50M",
-    "transfers": 4
   }
 }
 ```
@@ -65,17 +61,6 @@ Create a new download job.
 | `file_size` | int64 | No | Size in bytes (enables gatekeeper checks) |
 | `priority` | int | No | Job priority (higher = runs first, default: 5) |
 | `metadata` | object | No | Custom metadata (category, torrent_name, etc.) |
-| `download_config` | object | No | Per-job transfer settings |
-
-**Download Config Options:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `bw_limit` | string | Overall bandwidth limit (e.g., "50M") |
-| `bw_limit_file` | string | Per-file bandwidth limit |
-| `transfers` | int | Number of parallel transfers |
-| `checkers` | int | Number of simultaneous check operations |
-| `multi_thread_streams` | int | Concurrent streams per file |
 
 **Example:**
 

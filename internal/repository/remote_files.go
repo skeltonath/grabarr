@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/models"
 )
 
 // UpsertRemoteFile inserts or updates a remote file record.

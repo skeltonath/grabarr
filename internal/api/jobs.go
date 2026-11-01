@@ -9,20 +9,19 @@ import (
 	"strings"
 	"time"
 
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/models"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
 type CreateJobRequest struct {
-	Name           string                 `json:"name"`
-	RemotePath     string                 `json:"remote_path"`
-	LocalPath      string                 `json:"local_path"`
-	Priority       int                    `json:"priority,omitempty"`
-	MaxRetries     int                    `json:"max_retries,omitempty"`
-	FileSize       int64                  `json:"file_size,omitempty"`
-	Metadata       models.JobMetadata     `json:"metadata,omitempty"`
-	DownloadConfig *models.DownloadConfig `json:"download_config,omitempty"`
+	Name       string             `json:"name"`
+	RemotePath string             `json:"remote_path"`
+	LocalPath  string             `json:"local_path"`
+	Priority   int                `json:"priority,omitempty"`
+	MaxRetries int                `json:"max_retries,omitempty"`
+	FileSize   int64              `json:"file_size,omitempty"`
+	Metadata   models.JobMetadata `json:"metadata,omitempty"`
 }
 
 func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
@@ -74,15 +73,14 @@ func (h *Handlers) CreateJob(w http.ResponseWriter, r *http.Request) {
 
 	// Create job model
 	job := &models.Job{
-		Name:           req.Name,
-		RemotePath:     req.RemotePath,
-		LocalPath:      fullLocalPath,
-		Priority:       req.Priority,
-		MaxRetries:     req.MaxRetries,
-		FileSize:       req.FileSize,
-		Metadata:       req.Metadata,
-		DownloadConfig: req.DownloadConfig,
-		Status:         models.JobStatusQueued,
+		Name:       req.Name,
+		RemotePath: req.RemotePath,
+		LocalPath:  fullLocalPath,
+		Priority:   req.Priority,
+		MaxRetries: req.MaxRetries,
+		FileSize:   req.FileSize,
+		Metadata:   req.Metadata,
+		Status:     models.JobStatusQueued,
 		Progress: models.JobProgress{
 			LastUpdateTime: time.Now(),
 		},
@@ -207,8 +205,7 @@ func (h *Handlers) GetJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetJob(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid job ID", err)
 		return
@@ -224,8 +221,7 @@ func (h *Handlers) GetJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) DeleteJob(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid job ID", err)
 		return
@@ -240,8 +236,7 @@ func (h *Handlers) DeleteJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) CancelJob(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid job ID", err)
 		return
@@ -256,8 +251,7 @@ func (h *Handlers) CancelJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) RetryJob(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseInt(vars["id"], 10, 64)
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		h.writeError(w, http.StatusBadRequest, "Invalid job ID", err)
 		return

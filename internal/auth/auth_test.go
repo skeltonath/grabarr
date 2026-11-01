@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"grabarr/internal/config"
-	"grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/repository"
 )
 
 // newTestServer returns grabarr's auth wiring around a stub app, backed by a
@@ -30,9 +30,9 @@ func newTestServer(t *testing.T) (http.Handler, *repository.Repository) {
 		baseURL: "http://localhost:8080",
 		now:     time.Now,
 	}
-	r := mux.NewRouter()
+	r := chi.NewRouter()
 	svc.RegisterRoutes(r)
-	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
 		p, _ := PrincipalFrom(r.Context())
 		_, _ = w.Write([]byte("app:" + p.String()))
 	})
@@ -137,7 +137,7 @@ func TestDevLoginOffByDefault(t *testing.T) {
 	svc := &Service{store: repo, cfg: config.AuthConfig{
 		OIDC: config.OIDCConfig{Issuer: "https://id.example", ClientID: "c", ClientSecret: "s"},
 	}, now: time.Now}
-	r := mux.NewRouter()
+	r := chi.NewRouter()
 	svc.RegisterRoutes(r)
 
 	w := do(svc.Middleware(r), "GET", "/auth/dev-login?name=x", nil)

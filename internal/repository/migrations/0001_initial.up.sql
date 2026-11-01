@@ -1,3 +1,7 @@
+-- The schema as it stood before golang-migrate (identical to production's
+-- grabarr.db on 2026-11-01). Everything is IF NOT EXISTS / OR IGNORE, so a
+-- database created before migrations adopts this version without changes.
+
 -- Migration note for existing databases:
 -- If upgrading from a version with estimated_size, run:
 -- ALTER TABLE jobs RENAME COLUMN estimated_size TO file_size;

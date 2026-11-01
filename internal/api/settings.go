@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/config"
 )
 
 // SettingsResponse is the payload for the settings page. The descriptors carry

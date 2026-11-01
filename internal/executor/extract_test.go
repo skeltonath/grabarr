@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"grabarr/internal/archive"
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/archive"
+	"github.com/skeltonath/grabarr/internal/models"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

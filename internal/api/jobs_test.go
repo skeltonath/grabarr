@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"grabarr/internal/config"
-	"grabarr/internal/interfaces"
-	"grabarr/internal/mocks"
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/mocks"
+	"github.com/skeltonath/grabarr/internal/models"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -392,7 +393,7 @@ func TestGetJob_Success(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/123", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	req = withURLParam(req, "id", "123")
 	rec := httptest.NewRecorder()
 
 	handlers.GetJob(rec, req)
@@ -413,7 +414,7 @@ func TestGetJob_InvalidID(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/invalid", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
+	req = withURLParam(req, "id", "invalid")
 	rec := httptest.NewRecorder()
 
 	handlers.GetJob(rec, req)
@@ -441,7 +442,7 @@ func TestGetJob_NotFound(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/jobs/999", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "999"})
+	req = withURLParam(req, "id", "999")
 	rec := httptest.NewRecorder()
 
 	handlers.GetJob(rec, req)
@@ -463,7 +464,7 @@ func TestDeleteJob_Success(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/jobs/123", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	req = withURLParam(req, "id", "123")
 	rec := httptest.NewRecorder()
 
 	handlers.DeleteJob(rec, req)
@@ -491,7 +492,7 @@ func TestCancelJob_Success(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/cancel", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	req = withURLParam(req, "id", "123")
 	rec := httptest.NewRecorder()
 
 	handlers.CancelJob(rec, req)
@@ -519,7 +520,7 @@ func TestCancelJob_Error(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/cancel", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	req = withURLParam(req, "id", "123")
 	rec := httptest.NewRecorder()
 
 	handlers.CancelJob(rec, req)
@@ -541,7 +542,7 @@ func TestRetryJob_Success(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	req = withURLParam(req, "id", "123")
 	rec := httptest.NewRecorder()
 
 	handlers.RetryJob(rec, req)
@@ -563,7 +564,7 @@ func TestRetryJob_InvalidJobID(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/invalid/retry", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
+	req = withURLParam(req, "id", "invalid")
 	rec := httptest.NewRecorder()
 
 	handlers.RetryJob(rec, req)
@@ -585,7 +586,7 @@ func TestRetryJob_NotFailed(t *testing.T) {
 	handlers := NewHandlers(mockQueue, mockGatekeeper, cfg, nil, nil)
 
 	req := httptest.NewRequest("POST", "/api/v1/jobs/123/retry", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": "123"})
+	req = withURLParam(req, "id", "123")
 	rec := httptest.NewRecorder()
 
 	handlers.RetryJob(rec, req)
@@ -713,4 +714,11 @@ func TestGetJobs_Sorting(t *testing.T) {
 			assert.Equal(t, tt.wantCode, rec.Code)
 		})
 	}
+}
+
+// withURLParam sets a chi route parameter, as the router would.
+func withURLParam(r *http.Request, key, value string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add(key, value)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }

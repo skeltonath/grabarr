@@ -461,3 +461,17 @@ media_managers:
 	assert.Equal(t, 30*time.Second, cfg.GetMediaManagers().Debounce,
 		"an unset debounce should fall back to a sane default")
 }
+
+func TestParseConfig_RejectsUnknownKeys(t *testing.T) {
+	_, err := parseConfig([]byte(`
+auth:
+  dev_login: true
+server:
+  port: 8080
+jobs:
+  max_concurrent: 1
+  max_concurent: 3
+`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max_concurent", "a typo must not be silently ignored")
+}

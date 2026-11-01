@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"grabarr/internal/rsync"
+	"github.com/skeltonath/grabarr/internal/rsync"
 )
 
 // PermanentError signals that retrying will not help — the job should fail immediately.

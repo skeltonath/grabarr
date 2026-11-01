@@ -10,19 +10,19 @@ import (
 	"syscall"
 	"time"
 
-	"grabarr/internal/api"
-	"grabarr/internal/arr"
-	"grabarr/internal/auth"
-	"grabarr/internal/config"
-	"grabarr/internal/executor"
-	"grabarr/internal/gatekeeper"
-	"grabarr/internal/interfaces"
-	"grabarr/internal/notifications"
-	"grabarr/internal/queue"
-	"grabarr/internal/repository"
-	internalsync "grabarr/internal/sync"
+	"github.com/skeltonath/grabarr/internal/api"
+	"github.com/skeltonath/grabarr/internal/arr"
+	"github.com/skeltonath/grabarr/internal/auth"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/executor"
+	"github.com/skeltonath/grabarr/internal/gatekeeper"
+	"github.com/skeltonath/grabarr/internal/interfaces"
+	"github.com/skeltonath/grabarr/internal/notifications"
+	"github.com/skeltonath/grabarr/internal/queue"
+	"github.com/skeltonath/grabarr/internal/repository"
+	internalsync "github.com/skeltonath/grabarr/internal/sync"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {
@@ -149,7 +149,7 @@ func run() error {
 	scanner.Start(ctx)
 
 	// Setup HTTP server
-	router := mux.NewRouter()
+	router := chi.NewRouter()
 
 	// Everything but the health check needs a Pocket ID session or an API token.
 	authService := auth.New(repo, cfg)

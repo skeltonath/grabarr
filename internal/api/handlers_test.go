@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"grabarr/internal/config"
-	"grabarr/internal/mocks"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/mocks"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

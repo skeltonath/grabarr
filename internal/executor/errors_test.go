@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"grabarr/internal/rsync"
+	"github.com/skeltonath/grabarr/internal/rsync"
 )
 
 func TestIsPermanent(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/config"
 )
 
 func TestFilterVolumesForGroup(t *testing.T) {

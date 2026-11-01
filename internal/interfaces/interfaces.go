@@ -3,7 +3,7 @@ package interfaces
 import (
 	"context"
 
-	"grabarr/internal/models"
+	"github.com/skeltonath/grabarr/internal/models"
 )
 
 // JobQueue manages the job queue, scheduling, and execution

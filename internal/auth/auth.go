@@ -20,11 +20,11 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/oauth2"
 
-	"grabarr/internal/config"
-	"grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/repository"
 )
 
 const (
@@ -149,13 +149,13 @@ func (s *Service) authenticate(r *http.Request) (Principal, error) {
 }
 
 // RegisterRoutes mounts the sign-in flow under /auth.
-func (s *Service) RegisterRoutes(r *mux.Router) {
-	r.HandleFunc("/auth/login", s.handleLogin).Methods("GET")
-	r.HandleFunc("/auth/callback", s.handleCallback).Methods("GET")
-	r.HandleFunc("/auth/logout", s.handleLogout).Methods("POST")
-	r.HandleFunc("/auth/me", s.handleMe).Methods("GET")
+func (s *Service) RegisterRoutes(r chi.Router) {
+	r.Get("/auth/login", s.handleLogin)
+	r.Get("/auth/callback", s.handleCallback)
+	r.Post("/auth/logout", s.handleLogout)
+	r.Get("/auth/me", s.handleMe)
 	if s.cfg.DevLogin {
-		r.HandleFunc("/auth/dev-login", s.handleDevLogin).Methods("GET")
+		r.Get("/auth/dev-login", s.handleDevLogin)
 	}
 }
 

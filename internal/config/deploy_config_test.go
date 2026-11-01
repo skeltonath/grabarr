@@ -20,9 +20,8 @@ func TestDeployConfig(t *testing.T) {
 	data, err := os.ReadFile("../../deploy/config.yaml")
 	require.NoError(t, err)
 
-	var cfg Config
-	require.NoError(t, yaml.Unmarshal([]byte(os.ExpandEnv(string(data))), &cfg))
-	require.NoError(t, cfg.validate())
+	cfg, err := parseConfig(data)
+	require.NoError(t, err, "strict: an unknown key in deploy/config.yaml fails here")
 
 	require.Len(t, cfg.Remotes, 1)
 	assert.Equal(t, "/config/grabarr_rsa", cfg.Remotes[0].SSHKeyFile,

@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"grabarr/internal/brunogen"
+	"github.com/skeltonath/grabarr/internal/brunogen"
 )
 
 func main() {

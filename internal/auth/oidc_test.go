@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"grabarr/internal/config"
-	"grabarr/internal/repository"
+	"github.com/skeltonath/grabarr/internal/config"
+	"github.com/skeltonath/grabarr/internal/repository"
 )
 
 // fakeIssuer is just enough of an OIDC provider for the code flow: discovery,
@@ -87,9 +87,9 @@ func TestOIDCSignIn(t *testing.T) {
 		secure:  true,
 		now:     time.Now,
 	}
-	r := mux.NewRouter()
+	r := chi.NewRouter()
 	svc.RegisterRoutes(r)
-	r.HandleFunc("/api/v1/jobs", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/api/v1/jobs", func(w http.ResponseWriter, r *http.Request) {
 		p, _ := PrincipalFrom(r.Context())
 		_, _ = w.Write([]byte(p.String()))
 	})
@@ -151,7 +151,7 @@ func TestOIDCProviderDown(t *testing.T) {
 	svc := &Service{store: repo, now: time.Now, cfg: config.AuthConfig{OIDC: config.OIDCConfig{
 		Issuer: "http://127.0.0.1:1", ClientID: "grabarr", ClientSecret: "s",
 	}}}
-	r := mux.NewRouter()
+	r := chi.NewRouter()
 	svc.RegisterRoutes(r)
 
 	w := do(svc.Middleware(r), "GET", "/auth/login", nil)
