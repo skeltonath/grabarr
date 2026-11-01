@@ -5,8 +5,16 @@ Complete API documentation for Grabarr's REST API.
 ## Base URL
 
 ```
-http://your-server:8080/api/v1
+https://grabarr.internal.dppeppel.me/api/v1
 ```
+
+Every endpoint except `GET /health` needs a Pocket ID session cookie (the web UI) or an API token. Scripts send a token as a bearer header:
+
+```bash
+curl -H "Authorization: Bearer $GRABARR_TOKEN" https://grabarr.internal.dppeppel.me/api/v1/jobs
+```
+
+Create one with `docker exec grabarr /app/grabarr token create NAME` (printed once; `token list` and `token revoke NAME` manage them). Without a session or token the API answers `401 {"success":false,"error":"unauthorized"}`.
 
 ## Response Format
 
@@ -65,7 +73,7 @@ Create a new download job.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs \
+curl -X POST https://grabarr.internal.dppeppel.me/api/v1/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Movie.2024.1080p.mkv",
@@ -86,7 +94,7 @@ Retrieve details for a specific job.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/jobs/1
+curl https://grabarr.internal.dppeppel.me/api/v1/jobs/1
 ```
 
 **Response:**
@@ -134,16 +142,16 @@ List jobs with filtering, sorting, and pagination.
 |-----------|------|-------------|---------|
 | `status` | string | Filter by status (running, completed, failed, queued, pending, cancelled) | All statuses |
 | `category` | string | Filter by metadata category | All categories |
-| `torrent_name` | string | Filter by torrent name | All torrents |
 | `limit` | int | Results per page | 50 |
 | `offset` | int | Starting position | 0 |
 | `sort_by` | string | Sort field (id, name, status, priority, file_size, created_at, updated_at, started_at, completed_at). Anything else is rejected with 400. | created_at |
 | `sort_order` | string | Sort direction (asc, desc) | desc |
+| `active_first` | bool | `true` lists running and starting (pending) jobs first, the rest in the requested order. The web UI's Jobs page uses it. | false |
 
 **Example:**
 
 ```bash
-curl "http://localhost:8080/api/v1/jobs?status=running&category=movies&limit=20&offset=0&sort_by=created_at&sort_order=desc"
+curl "https://grabarr.internal.dppeppel.me/api/v1/jobs?status=running&category=movies&limit=20&offset=0&sort_by=created_at&sort_order=desc"
 ```
 
 **Response:**
@@ -182,7 +190,7 @@ Get aggregate statistics for all jobs.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/jobs/summary
+curl https://grabarr.internal.dppeppel.me/api/v1/jobs/summary
 ```
 
 **Response:**
@@ -210,7 +218,7 @@ Retry a failed job. Resets the job to queued status with full retry attempts.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs/1/retry
+curl -X POST https://grabarr.internal.dppeppel.me/api/v1/jobs/1/retry
 ```
 
 **Response:**
@@ -231,7 +239,7 @@ Cancel a running or queued job.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/jobs/1/cancel
+curl -X POST https://grabarr.internal.dppeppel.me/api/v1/jobs/1/cancel
 ```
 
 **Response:**
@@ -252,7 +260,7 @@ Permanently delete a job from the database.
 **Example:**
 
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/jobs/1
+curl -X DELETE https://grabarr.internal.dppeppel.me/api/v1/jobs/1
 ```
 
 **Response:**
@@ -275,7 +283,7 @@ Check service health and readiness.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/health
+curl https://grabarr.internal.dppeppel.me/api/v1/health
 ```
 
 **Response:**
@@ -299,7 +307,7 @@ Get detailed system status including gatekeeper resource information.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/status
+curl https://grabarr.internal.dppeppel.me/api/v1/status
 ```
 
 **Response:**
@@ -337,7 +345,7 @@ Get comprehensive system metrics.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/metrics
+curl https://grabarr.internal.dppeppel.me/api/v1/metrics
 ```
 
 **Response:**
@@ -391,7 +399,7 @@ specifies, and enough metadata (kind, unit, bounds) to build a form.
 **Example:**
 
 ```bash
-curl http://localhost:8080/api/v1/settings
+curl https://grabarr.internal.dppeppel.me/api/v1/settings
 ```
 
 **Response:**
@@ -457,7 +465,7 @@ Durations accept either a number of seconds (`900`) or a Go duration string
 **Example:**
 
 ```bash
-curl -X PATCH http://localhost:8080/api/v1/settings \
+curl -X PATCH https://grabarr.internal.dppeppel.me/api/v1/settings \
   -H "Content-Type: application/json" \
   -d '{"jobs.max_concurrent": 8}'
 ```
@@ -494,4 +502,4 @@ Currently, there is no rate limiting on the API. Use responsibly.
 
 ## Authentication
 
-Currently, there is no authentication required. Consider using a reverse proxy (nginx, Caddy) with authentication if exposing to the internet, or use Cloudflare Access as shown in the qBittorrent integration.
+See [Base URL](#base-url): a Pocket ID session or a bearer API token on everything but `/health`. The sign-in flow itself lives under `/auth/` (`/auth/login`, `/auth/callback`, `POST /auth/logout`, `/auth/me`).

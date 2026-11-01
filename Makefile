@@ -21,7 +21,7 @@ NC=\033[0m # No Color
 
 .PHONY: help build run clean test test-verbose test-coverage test-race test-coverage-summary test-ci fmt vet deps gen-mocks gen-bruno
 .PHONY: docker-build docker-run docker-stop docker-logs docker-shell
-.PHONY: setup-config preview web web-stub dev-web
+.PHONY: preview web web-stub dev-web
 
 # Default target
 all: fmt vet test build
@@ -35,7 +35,7 @@ build: web ## Build the Go binary locally (with the web UI)
 
 run: build ## Run the application locally (requires config.yaml)
 	@if [ ! -f config.yaml ]; then \
-		echo "$(RED)✗ config.yaml not found. Run 'make setup-config' first$(NC)"; \
+		echo "$(RED)✗ config.yaml not found. Try 'make preview' for a local run on demo data$(NC)"; \
 		exit 1; \
 	fi
 	@echo "$(GREEN)Starting ${BINARY_NAME}...$(NC)"
@@ -162,22 +162,6 @@ deps: ## Download and verify dependencies
 	@go mod tidy
 	@echo "$(GREEN)✓ Dependencies updated$(NC)"
 
-setup-config: ## Copy example configs to working configs
-	@echo "$(GREEN)Setting up configuration files...$(NC)"
-	@if [ ! -f config.yaml ]; then \
-		cp config.example.yaml config.yaml; \
-		echo "$(YELLOW)→ Created config.yaml from example$(NC)"; \
-	else \
-		echo "$(YELLOW)→ config.yaml already exists$(NC)"; \
-	fi
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "$(YELLOW)→ Created .env from example$(NC)"; \
-		echo "$(RED)⚠ Don't forget to edit .env with your credentials!$(NC)"; \
-	else \
-		echo "$(YELLOW)→ .env already exists$(NC)"; \
-	fi
-
 ## Help
 
 help: ## Show this help message
@@ -199,7 +183,7 @@ help: ## Show this help message
 	@echo "  Push to main: Komodo rebuilds and redeploys on millions (see deploy/config.yaml)"
 	@echo ""
 	@echo "$(GREEN)Utilities:$(NC)"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(clean|deps|setup-config):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '^(clean|deps):' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Build Info:$(NC)"
 	@echo "  Go Version: $(GO_VERSION)"

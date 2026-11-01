@@ -1,119 +1,51 @@
-# Claude Development Notes
+# Grabarr: notes for Claude
 
-## Project Overview
-Grabarr - Go-based download management service for managing downloads from remote seedboxes via rclone.
+## Project
+Copies finished downloads from the Whatbox seedbox to the NAS (millions). Every few minutes it scans watched folders on the seedbox over SSH, queues a job per new file, copies with rsync under a bandwidth and disk-space gatekeeper, extracts archives, tells Radarr/Sonarr when a file lands, and alerts on failures via Pushover. A SvelteKit web app shows files, jobs and settings.
 
-## Key Infrastructure
-- **Development Machine**: Local macOS with Docker
-- **Seedbox**: Whatbox (SSH key authentication)
-  - SSH: `ssh whatbox`
-  - Script location: `~/bin/qbt-grabarr.sh` (source in `scripts/qbt-grabarr.sh`)
-  - qBittorrent "Run on completion" command: `~/bin/qbt-grabarr.sh "%N" "%Z" "%L" "%F"`
-- **Production Server**: Unraid server at `millions`
-  - SSH: `millions`
-  - Container user: 99:100 (nobody:users)
-  - Paths (Host -> Container):
-    - Config: `/mnt/apps/appdata/grabarr/config/` -> `/config/`
-    - Data: `/mnt/apps/appdata/grabarr/data/` -> `/data/`
-    - Downloads: `/mnt/user/media/downloads/` -> `/unraid/user/media/downloads/`
-    - Cache: `/mnt/cache/` -> `/unraid/cache/`
+## Task tracking: Kan
+Work is tracked on the Kan board **"Grabarr"** at https://tasks.dppeppel.me (board `zvce5q4bgsf5`, labels P1/P2, `ui`, `books`, `bug`, `standards`), through the `kan` MCP server's tools.
+- Lists: To-Do `pswbz0nkgvxw`, Doing `cvr86iosw8ua`, Done `qo2vq8p5hwj3`. A card is the source of truth for its scope and its "Done =" check.
+- Move a card to Doing when you start it, comment when you deploy and when it's verified, then move it to Done. Add cards for new scope (not TODO files).
 
-## Development Workflow
-1. Develop and test locally
-2. Build container: `docker build --platform linux/amd64 -t grabarr:latest .` (IMPORTANT: Use amd64 for unraid)
-3. Save: `docker save grabarr:latest | gzip > grabarr-latest.tar.gz`
-4. Transfer: `scp grabarr-latest.tar.gz root@millions:/mnt/user/tmp/` (Use /mnt/user/tmp for large files)
-5. Load on unraid: `ssh root@millions "docker load < /mnt/user/tmp/grabarr-latest.tar.gz"`
-6. Deploy using docker-compose:
-   ```bash
-   # Copy files to unraid appdata directory first (config goes in config subdirectory!)
-   scp grabarr_rsa root@millions:/mnt/apps/appdata/grabarr/config/grabarr_rsa
-   ssh root@millions "chmod 600 /mnt/apps/appdata/grabarr/config/grabarr_rsa && chown 99:100 /mnt/apps/appdata/grabarr/config/grabarr_rsa"
-   scp config.yaml root@millions:/mnt/apps/appdata/grabarr/config/
-   scp rclone.conf root@millions:/mnt/apps/appdata/grabarr/config/
-   scp docker-compose.yml root@millions:/mnt/apps/appdata/grabarr/
+## Wiki
+The running app is documented on the Outline page **Media › Acquisition › Grabarr** (https://wiki.dppeppel.me/doc/grabarr-DLDkKuwwox); the seedbox side (qBittorrent, cleanup) is on **Downloads & seedbox**. Update the Grabarr page in the same task as any change to how grabarr runs (deploy, config, URL, auth, secrets, schedule), and add a line to its `## Change log`.
 
-   # Deploy
-   ssh root@millions "cd /mnt/apps/appdata/grabarr && docker-compose up -d"
-   ```
+## Layout
+- `cmd/grabarr`: main; also `grabarr healthcheck` (container healthcheck) and `grabarr token create|list|revoke` (API tokens)
+- `cmd/seed`: builds `data/preview.db` with demo data for `make preview`
+- `internal/config`: YAML with `${ENV}` expansion, loaded strictly (unknown keys fail). `settings.go` is the runtime-settings registry (overrides stored in the DB, editable from the UI)
+- `internal/repository`: SQLite (modernc) with embedded golang-migrate migrations in `migrations/NNNN_name.{up,down}.sql`; `0001` is the pre-migrate schema, so never edit it
+- `internal/api`: chi routes (`handlers.go`; `TestRouteTable` pins them), JSON envelope `{success, data, error, pagination}`; `web.go` serves the embedded SPA
+- `internal/auth`: Pocket ID OIDC, cookie sessions, bearer API tokens (SHA-256 hashes), dev login
+- `internal/queue`, `internal/executor` (rsync, extraction), `internal/gatekeeper`, `internal/sync` (the seedbox scanner), `internal/arr` (Radarr/Sonarr), `internal/notifications` (Pushover)
+- `web/`: SvelteKit SPA (Svelte 5 runes, plain JS); `web/embed.go` embeds `web/build`
+- `deploy/config.yaml`: the production config (in git, no secret values); `config.preview.yaml`: local preview
+- `docs/`: API, CONFIGURATION and GATEKEEPER references
 
-## Critical Docker Notes
-- **ALWAYS** build for `--platform linux/amd64` (unraid is x86_64, not ARM)
-- **ALWAYS** use `image: grabarr:latest` in docker-compose.yml (NOT `build: .`)
-- **Transfer large files** to `/mnt/user/tmp/` not `/tmp` (small root filesystem)
-- **Add .dockerignore** to prevent including *.tar.gz files in build context
+## Conventions
+- Matches the other Go apps (scryarr, foodtrack): chi, modernc sqlite, golang-migrate, slog, testify. The runtime image is Alpine, not distroless, because grabarr shells out to rsync, ssh, unrar and 7z.
+- Schema changes are new migrations; take a `.backup` of production's `grabarr.db` before deploying one.
+- Config fields must be used in code the moment they're added; update `deploy/config.yaml`, `config.preview.yaml` and the structs together. Secrets are `${VARS}` from Komodo variables, listed in the `docker-compose.yml` environment (a test checks they match).
+- Store tokens only as SHA-256 hashes; secrets never go in URLs or logs.
+- Add table-driven tests for new code and run `make test-ci` (format, vet, tests) before committing. Mock external services (mockery mocks in `internal/mocks`).
+- SQLite keeps `synchronous=NORMAL` and `busy_timeout` per connection (`buildDSN`); FULL made scans slow enough to time out progress writes on millions.
 
-## Git Workflow
-- Feature branches for development
-- Merge to main when complete
-- Always commit related changes together
+## UI changes: get approval before building and deploying
+UI follows the house-style skill (~/.claude/skills/house-style); web/src/lib/house.css is a vendored copy of its tokens.css: don't edit it here, change the canonical file and re-copy. Use tokens by meaning and never hardcode colors in components.
+1. **Mock first.** Before writing real code for a visible change, show a phone-sized mockup (and desktop: David uses grabarr a lot on desktop) and wait for a yes. Skip this only for small tweaks.
+2. **Preview locally.** `make preview` (Go API plus built UI on :8080, seeded demo data, dev login) and `make dev-web` (hot reload on :5173); the `preview` and `preview-web` launch configs start them in the browser pane. Check 375px and desktop, light and dark. The Go server has no hot reload: restart `preview` after Go changes.
+3. **Deploy only after he approves.**
 
-## Testing Workflow
-- **ALWAYS** add unit tests when adding new features
-- **ALWAYS** update tests when modifying existing code
-- **ALWAYS** run tests before committing: `make test` or `make test-ci`
-- Aim for 70%+ coverage on new code
-- Use table-driven tests for multiple scenarios
-- Mock external dependencies (HTTP, database, etc.)
-- See `TESTING.md` for detailed testing documentation
+Extend `cmd/seed` when a feature needs data to look realistic.
 
-### Pre-Commit Checklist
-```bash
-make fmt           # Format code
-make vet           # Static analysis
-make test          # Run all tests
-# OR use the combined command:
-make test-ci       # Does all of the above
-```
+## Deploy
+- Merge to `main`: Komodo rebuilds the image on millions and restarts the container within about 5 minutes. Don't build or copy images by hand, and don't touch the container in the Unraid Docker UI.
+- millions is x86_64; the Dockerfile builds the UI in a Node stage and a static (CGO-off) Go binary.
+- The stack entry and secrets are in `~/projects/nas` (`komodo/resources/stacks.toml`) and Komodo variables. The SSH key stays in `/mnt/apps/appdata/grabarr/config/` on millions.
+- The container sees `/mnt/user` and `/mnt/cache` as `/unraid/user` and `/unraid/cache`; it runs as 99:100 on the `media` network with no host ports.
+- Check a deploy with `docker logs grabarr` on millions and the API with the token in `~/.config/grabarr/token`.
 
-### Testing Commands
-```bash
-make test                    # Run all tests
-make test-verbose            # Run tests with verbose output
-make test-race               # Run tests with race detector
-make test-coverage           # Generate HTML coverage report
-make test-coverage-summary   # Show coverage percentage
-make test-ci                 # Run all pre-commit checks
-```
-
-## Config Management Rules
-- **NEVER** add config fields that aren't immediately used in code
-- When adding config fields, update config.yaml and the Go structs simultaneously
-- Only one config file (config.yaml) to avoid sync issues
-
-## API Testing
-```bash
-# Create job
-curl -X POST http://millions:8080/api/v1/jobs \
-  -H "Content-Type: application/json" \
-  -d '{"name": "test", "remote_path": "/path/to/file", "metadata": {"category": "movies"}}'
-
-# Check status
-curl http://millions:8080/api/v1/jobs
-curl http://millions:8080/api/v1/status
-```
-
-## Common Troubleshooting
-- Container startup failures: Check config.yaml for missing fields
-- File permission issues: Ensure 99:100 ownership in container
-- Web UI shows "web UI not built": run `make web` (the Dockerfile builds it in a Node stage)
-
-## Key Dependencies
-- rsync (for file transfers with SSH key authentication)
-- SQLite (embedded database)
-- Go 1.21+
-
-## Environment Variables
-- `PUSHOVER_TOKEN`, `PUSHOVER_USER` (optional, for Pushover notifications)
-- `GRABARR_CONFIG` (optional, config file path override)
-- `TZ` (optional, timezone setting, e.g., America/Los_Angeles)
-
-## Configuration Files
-- `config.yaml` - Main application configuration
-- `rclone.conf` - RClone configuration with seedbox credentials (no templating)
-- `TODO.md` - Development tasks and feature requests (add TODOs here, not in CLAUDE.md)
-## Web UI
-- SvelteKit SPA (Svelte 5, plain JS) in `web/`, built to `web/build` and embedded in the binary (`web/embed.go`, served by `internal/api/web.go`).
-- UI follows the house-style skill (~/.claude/skills/house-style); web/src/lib/house.css is a vendored copy.
-- Mock first (phone width, dark theme), then preview locally, then deploy.
-- Local: `make preview` (Go API + built UI on :8080, seeded demo data, dev login), and `make dev-web` for hot reload on :5173. The `preview` and `preview-web` configs in `.claude/launch.json` start them in the browser pane.
+## Scripts
+- `scripts/retry-failed-jobs.sh`, `scripts/create-orphaned-jobs.sh`: API maintenance; need `GRABARR_TOKEN`
+- `scripts/sonarr-cleanup-downloads.sh`: Sonarr's post-import cleanup of the downloads folder (`test-sonarr-cleanup.sh` tests it)

@@ -18,11 +18,6 @@
 
 set -euo pipefail
 
-# Load environment variables from config file if it exists
-if [[ -f ~/bin/qbt-grabarr.env ]]; then
-    source ~/bin/qbt-grabarr.env
-fi
-
 # Validate required environment variables
 if [[ -z "${GRABARR_API_URL:-}" ]]; then
     echo "Error: GRABARR_API_URL environment variable is required"
@@ -42,7 +37,7 @@ SEEDBOX_BASE_PATH="${SEEDBOX_BASE_PATH:-/home/psychomanteum/downloads/completed/
 CATEGORY="${CATEGORY:-dp-movies}"
 DRY_RUN="${DRY_RUN:-false}"
 
-# Supported video extensions (same as qbt-grabarr.sh)
+# Supported video extensions
 VIDEO_EXTENSIONS="mkv mp4 avi mov wmv flv webm m4v mpg mpeg ts m2ts"
 
 echo "=== Grabarr Orphaned Jobs Creator ==="

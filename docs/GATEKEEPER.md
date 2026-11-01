@@ -152,7 +152,7 @@ gatekeeper:
 
 **Notes**:
 - Only works if `file_size` provided in job creation
-- qBittorrent webhook script includes file sizes automatically
+- Jobs queued by the seedbox scan carry the file size from the scan
 - Recommended to leave enabled
 
 ## Job States and Flow
@@ -436,4 +436,3 @@ Use the `/api/v1/metrics` endpoint to:
 
 - [Configuration Reference](CONFIGURATION.md) - Full config options
 - [API Reference](API.md) - Monitoring endpoints
-- [Deployment Guide](DEPLOYMENT.md) - Performance tuning
