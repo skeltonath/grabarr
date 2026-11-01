@@ -20,7 +20,7 @@ echo "Fetching failed jobs updated since ${SINCE}..."
 # Fetch up to 1000 failed jobs and filter by updated_at
 FAILED_IDS=$(curl -sf "${AUTH[@]}" "${BASE_URL}/jobs?status=failed&limit=1000" | \
   jq -r --arg since "$SINCE" \
-  '.data[] | select(.updated_at >= $since) | .id')
+  '(.data // [])[] | select(.updated_at >= $since) | .id')
 
 COUNT=$(echo "$FAILED_IDS" | grep -c '[0-9]' || true)
 
