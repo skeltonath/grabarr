@@ -48,10 +48,16 @@ func New(dbPath string) (*Repository, error) {
 // _pragma per connection). _time_format=sqlite stores time.Time as
 // "2006-01-02 15:04:05.999999999-07:00", the format mattn/go-sqlite3 wrote, so
 // rows written before the driver change still compare and sort correctly.
+//
+// synchronous(NORMAL) is what mattn's build defaulted to in WAL mode
+// (SQLITE_DEFAULT_WAL_SYNCHRONOUS=1); modernc defaults to FULL, an fsync per
+// commit. On millions that made a scan's few hundred upserts hold the write
+// lock long enough for progress updates to time out with SQLITE_BUSY.
 func buildDSN(path string) string {
 	v := url.Values{}
 	v.Add("_pragma", "busy_timeout(5000)")
 	v.Add("_pragma", "journal_mode(WAL)")
+	v.Add("_pragma", "synchronous(NORMAL)")
 	v.Set("_time_format", "sqlite")
 	return fmt.Sprintf("file:%s?%s", path, v.Encode())
 }

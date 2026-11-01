@@ -79,3 +79,28 @@ func TestMigrate_AdoptsPreMigrationDatabase(t *testing.T) {
 	_, err = repo.GetJob(1)
 	assert.NoError(t, err)
 }
+
+// Every pooled connection gets the same pragmas; they're per connection, so a
+// pool that missed one would behave differently depending on which conn ran.
+func TestConnectionPragmas(t *testing.T) {
+	repo := setupTestRepo(t)
+	ctx := t.Context()
+	var conns []*sql.Conn
+	for i := 0; i < 3; i++ {
+		conn, err := repo.db.Conn(ctx)
+		require.NoError(t, err)
+		conns = append(conns, conn)
+
+		var busy, synchronous int
+		var journal string
+		require.NoError(t, conn.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&busy))
+		require.NoError(t, conn.QueryRowContext(ctx, "PRAGMA synchronous").Scan(&synchronous))
+		require.NoError(t, conn.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journal))
+		assert.Equal(t, 5000, busy)
+		assert.Equal(t, 1, synchronous, "NORMAL, as mattn's build used in WAL mode")
+		assert.Equal(t, "wal", journal)
+	}
+	for _, c := range conns {
+		require.NoError(t, c.Close())
+	}
+}
